@@ -1,0 +1,54 @@
+シール検出はエッジ処理でZNNCがいいらしい
+スケール変換これでよくない？ → rs2_deproject_pixel_to_point()
+
+照明変化に堅牢なテンプレートマッチング https://ohta-lab.inf.gunma-u.ac.jp/ailwiki/index.php?%E3%82%A8%E3%83%83%E3%82%B8%E7%94%BB%E5%83%8F%E3%82%92%E7%94%A8%E3%81%84%E3%81%9F%E7%85%A7%E6%98%8E%E5%A4%89%E5%8C%96%E3%81%AB%E5%A0%85%E7%89%A2%E3%81%AA%E3%83%86%E3%83%B3%E3%83%97%E3%83%AC%E3%83%BC%E3%83%88%E3%83%9E%E3%83%83%E3%83%81%E3%83%B3%E3%82%B0
+
+シールなしの計測
+・シールに頼らないスケール変換
+・点群による下顎モデル作成？要調査
+
+pixel値にfloat入れたいけどintになってるから補間 https://anchoco.me/python-math-floor-ceil/  https://www.higashisalary.com/entry/python-map-data-interpolation  https://www.tekutechlabo.com/2022/11/python-interpolation.html
+
+外れ値検出：
+https://datachemeng.com/wp-content/uploads/outlierdetection.pdf
+https://mimikousi.com/python-outlier/
+
+J2  theta_camない方が自然 ← カメラ型か傾いている＋顔がカメラの方向を向いているため
+A2
+B2  途中で輪郭がmkgに移ってる
+    C2  途中のブレがひどい ← 動かした際に目とmkgのフレームが重なっていることが原因 元動画11秒あたり
+    D2  シール検出×
+E2
+    F2  シール検出×
+    G2  シール貼ってない
+    H2  シール貼ってない
+I2  5秒経つ前に運動開始しているため始点と終点が合わない
+
+realsenseデータシート file:///C:/Users/zutom/Downloads/Intel-RealSense-D400-Series-Datasheet-September-2023.pdf
+p.19にdepthの計測方向記載
+
+K7エバリュエーションシステム原理調査  使っているscan機能はscan8
+装置の8つのセンサーと口内に取り付ける1つの磁気マーカー（1.4オンス約40g）により測定
+往路と復路で表示する色が違う https://youtu.be/5aq19kXvIv0?si=x7iC5LxmbVu-qEiJ
+
+保険適用：https://www.hospital.or.jp/site/news/file/4576476523.pdf
+特許：https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/4765345
+商品紹介：   https://www.myotronics.com/k7x
+            http://www.americandentalwebsites.com/forclients/forms/DrAdatto.com/K7Brochure.pdf
+MKG軸？論文 https://www.jstage.jst.go.jp/article/jjaoh/29/1/29_15/_pdf/-char/en
+
+FH平面の算出(花王) https://patentimages.storage.googleapis.com/f0/d0/39/98edf4ee6fd1d8/JP5687532B2.pdf
+
+[外れ]
+・https://onlinelibrary.wiley.com/doi/epdf/10.1111/jopr.12212  装置使っただけで原理説明なし
+
+調べたいこと
+・dlibではなくOpneFaceを使用する利点
+・新規性ホントにある？
+
+咀嚼動作の解析
+    RGB-D使ってるっぽい  https://link.springer.com/chapter/10.1007/978-3-030-27928-8_112
+    イヤーカフ型装置でやってみた    https://www.jstage.jst.go.jp/article/jpr/65/3/65_JPR_D_20_00032/_pdf
+
+ナソヘキサグラフ：file:///C:/Users/zutom/Downloads/gifushika311_1924_2004.pdf
+ああ
