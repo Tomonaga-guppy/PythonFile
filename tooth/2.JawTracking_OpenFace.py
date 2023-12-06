@@ -9,8 +9,8 @@ import sys
 import random
 
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
 # if len(sys.argv) > 1:
 #     root_dir = sys.argv[1]
@@ -27,7 +27,7 @@ ply = True
 # ply = False
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*/RGB_image')
+    pattern = os.path.join(root_dir, '*J2*/RGB_image')
     RGB_dirs = glob.glob(pattern, recursive=True)
     # print('mp4files=',RGB_dirs)
     for i,RGB_dir in enumerate(RGB_dirs):
@@ -114,7 +114,7 @@ def OpenFace(root_dir):
             mask2_x=int(float(OpenFace_result[frame_count][59]))    #54x
             mask2_y=int(float(OpenFace_result[frame_count][81]))    #8y
 
-            
+
             seal_position, imgcopy, ratio, template_shape = SealDetection(height, width, imgcopy, mask1_x, mask2_x, mask1_y, mask2_y ,frame_count)
 
             cv2.circle(imgcopy, (seal_position[0],seal_position[1]), 1, (255, 120, 255), -1)
@@ -158,23 +158,26 @@ def OpenFace(root_dir):
             if ply:
                 # if frame_count == 519:  #最大開口時
                 # if frame_count == 150:
-                if frame_count % 30 == 0 :
+                if frame_count == 1:
+                # if frame_count % 30 == 0 :
                     xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                     xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                     ypix_max = int(max([float(OpenFace_result[frame_count][i+73]) for i in range(68)]))
                     ypix_min = int(min([float(OpenFace_result[frame_count][i+73]) for i in range(68)]))
-                    
-                    
+
+
                     # print([OpenFace_result[frame_count][i+73] for i in range(68)])
                     # print(max([OpenFace_result[frame_count][i+73] for i in range(68)]))
                     pix_list.append([xpix_min, xpix_max, ypix_min, ypix_max])
-                    
-                    point_num = 100000
+
+                    point_num = 50000
                     ply_list  = []
                     try:
                         for i in range(point_num):
-                            xpix = random.randint(xpix_min-100, xpix_max+100)
-                            ypix = random.randint(ypix_min-50, ypix_max+50)
+                            xpix = random.randint(xpix_min, xpix_max)
+                            ypix = random.randint(ypix_min, ypix_max)
+                            # xpix = random.randint(xpix_min-100, xpix_max+100)
+                            # ypix = random.randint(ypix_min-50, ypix_max+50)
                             x = float(xpix * xpixel_scale)
                             y = float(ypix * ypixel_scale)
                             depthi = img_depth[int(ypix),int(xpix)] #整数型
@@ -248,7 +251,7 @@ def OpenFace(root_dir):
             ply_path = dir_path + "plycam"
             if not os.path.exists(ply_path):
                 os.mkdir(ply_path)
-                
+
             for i in range(ply_list_all.shape[0]):
                 frame_count = (i+1) * 30
                 # frame_count = 519
@@ -270,11 +273,8 @@ def OpenFace(root_dir):
                     ply_file.write(header_face)
                     for vertex in ply_list2_all[i,:,:]:
                         ply_file.write(" ".join(map(str, vertex)) + "\n")
-                
-                
                 # ply_list3_all = np.array(ply_list3_all)
                 # print(f"list3 = {ply_list3_all.shape}")
-                
                 # # PLYファイルに書き込む
                 # with open(dir_path + f"plycam/pixel_cloud{frame_count}.ply", "w") as ply_file:
                 #     ply_file.write(header_pix)

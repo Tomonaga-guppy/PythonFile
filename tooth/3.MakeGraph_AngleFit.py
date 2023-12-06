@@ -9,8 +9,8 @@ import sys
 import csv
 import pandas as pd
 
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
 
 # if len(sys.argv) > 1:
 #     root_dir = sys.argv[1]
@@ -18,7 +18,7 @@ root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_
 #     print("ディレクトリパスが指定されていません。")
 #     sys.exit()
 
-caliblation_time = 2
+caliblation_time = 4
 
 global theta_x_co, theta_y, theta_z
 # theta_co_x = np.deg2rad(-15)
@@ -29,7 +29,7 @@ key = "kk"  #咬頭嵌合位
 # key = "max"  #最大最小
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*/result.npy')
+    pattern = os.path.join(root_dir, '*E2*/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
     best_correction_angle_list = []
@@ -50,7 +50,7 @@ def MakeGraph(root_dir, fps):
         # if id == "20230807_G2" or id == "20230831_H2" or id == "20230807_D2" or id == "20230807_F2" or id == '20230721_C2' :
             continue
 
-        mkg_xa, mkg_xb, mkg_y, mkg_z = 0, 0, 0, 0, 0
+        mkg_xa, mkg_xb, mkg_y, mkg_z = 0, 0, 0, 0
         mkg_result_path = os.path.join(root_dir,"mkg_result.csv")
         # CSVファイルを読み込みモードで開く
         with open(mkg_result_path, 'r', newline='') as file:
@@ -95,7 +95,7 @@ def MakeGraph(root_dir, fps):
         if not os.path.exists(try_path):
             os.mkdir(try_path)
 
-        for theta_co_x in range(-60,20+1,5):  #順番に補正を試す
+        for theta_co_x in range(-40,0+1,5):  #順番に補正を試す
             # theta_z = np.deg2rad(theta_co_x)
             theta_co_x = np.deg2rad(theta_co_x)
 
@@ -217,37 +217,37 @@ def MakeGraph(root_dir, fps):
                     path = dir_path + "XYZ_localdata.npy"
                     # np.save(path,XYZdata)
                     # print('XYZ_localdata is saved')
-                    
-                    
+
+
                     data = {'x': XL_x_seal,
                             'y': XL_y_seal,
                             'z': XL_z_seal}
 
                     df = pd.DataFrame(data)
 
-                    #グラフ開始，終了frameの決定
-                    start_frame = 0
-                    for fnum in range(df.shape[0]):
-                        if XL_x_seal[fnum] - XL_x_seal[fnum+10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum+10] > 1.5:
-                            start_frame = fnum
-                            # print(XL_x_seal[fnum])
-                            # print(XL_x_seal[fnum+10])
-                            # print(f"XL_x_seal[fnum+10] - XL_x_seal[fnum] = {XL_x_seal[fnum+10] - XL_x_seal[fnum]}")
-                            break
+                    # #グラフ開始，終了frameの決定
+                    # start_frame = 0
+                    # for fnum in range(df.shape[0]):
+                    #     if XL_x_seal[fnum] - XL_x_seal[fnum+10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum+10] > 1.5:
+                    #         start_frame = fnum
+                    #         # print(XL_x_seal[fnum])
+                    #         # print(XL_x_seal[fnum+10])
+                    #         # print(f"XL_x_seal[fnum+10] - XL_x_seal[fnum] = {XL_x_seal[fnum+10] - XL_x_seal[fnum]}")
+                    #         break
 
-                    end_frame = df.shape[0]
-                    for fnum in range(df.shape[0]-1,0,-1):
-                        # if XL_x_seal[fnum] - XL_x_seal[fnum-10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
-                        if XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
-                        # if fnum > start_frame and XL_y_seal[fnum-30] - XL_y_seal[fnum] < -1 and abs(XL_y_seal[fnum]-XL_y_seal[start_frame]) < 2:
-                            # print(XL_x_seal[fnum])
-                            # print(XL_x_seal[fnum+10])
-                            end_frame = fnum
-                            break
+                    # end_frame = df.shape[0]
+                    # for fnum in range(df.shape[0]-1,0,-1):
+                    #     # if XL_x_seal[fnum] - XL_x_seal[fnum-10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
+                    #     if XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
+                    #     # if fnum > start_frame and XL_y_seal[fnum-30] - XL_y_seal[fnum] < -1 and abs(XL_y_seal[fnum]-XL_y_seal[start_frame]) < 2:
+                    #         # print(XL_x_seal[fnum])
+                    #         # print(XL_x_seal[fnum+10])
+                    #         end_frame = fnum
+                    #         break
 
-                    df = df[start_frame:end_frame]  #初期位置以前のデータは削除
-                    # print(start_frame,end_frame)
-                    df = df.reset_index(drop=True)  #indexを0からにリセット
+                    # df = df[start_frame:end_frame]  #初期位置以前のデータは削除
+                    # # print(start_frame,end_frame)
+                    # df = df.reset_index(drop=True)  #indexを0からにリセット
                     data_num = df.shape[0]
                     df_sg = pd.DataFrame(index=df.index)
                     # 各列データを平滑化して、結果をdf_sgに格納
@@ -260,8 +260,8 @@ def MakeGraph(root_dir, fps):
                     XL_x_seal_SG = df_sg['x']
                     XL_y_seal_SG = df_sg['y']
                     XL_z_seal_SG = df_sg['z']
-        
-        
+
+
                     # #https://datachemeng.com/wp-content/uploads/preprocessspectratimeseriesdata.pdf
                     # window_length = 11
                     # polyorder = 2
@@ -330,11 +330,11 @@ def MakeGraph(root_dir, fps):
                     # colors = cmap(normalize(frame_count))
                     normalize = plt.Normalize(1, data_num-1)
                     colors = cmap(normalize(range(data_num-1)))
-                    
+
                     ax1.plot(XL_x_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
                     ax1.scatter(XL_x_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
                     ax1.scatter(XL_x_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
-                    
+
                     # Create a colorbar
                     cbar = fig.colorbar(ScalarMappable(norm=normalize, cmap=cmap), ax=ax1)
                     cbar.set_label('frame', fontsize=10)

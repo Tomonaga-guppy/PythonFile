@@ -12,8 +12,8 @@ from matplotlib.backends.backend_pdf import PdfPages #pdfで保存する
 import trimesh
 
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
 # if len(sys.argv) > 1:
 #     root_dir = sys.argv[1]
@@ -21,7 +21,7 @@ root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_
 #     print("ディレクトリパスが指定されていません。")
 #     sys.exit()
 
-caliblation_time = 2
+caliblation_time = 5
 
 #グラフの背景を設定
 # transp = True  #透過
@@ -36,10 +36,10 @@ transp = False  #不透過
 global theta_co_x, theta_co_y, theta_co_z
 theta_co_y = np.deg2rad(0)
 theta_co_z = np.deg2rad(0)
-theta_co_x = np.deg2rad(0)
+theta_co_x = np.deg2rad(-60)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*/result.npy')
+    pattern = os.path.join(root_dir, '*J2*/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -179,7 +179,7 @@ def MakeGraph(root_dir, fps):
                     X.append(XX[0])
                     Y.append(XX[1])
                     Z.append(XX[2])
-                                    
+
 
                 if os.path.isfile(dir_path + f"plycam/random_cloud{count}.ply"):
                     random_ply_path = dir_path + f"plycam/random_cloud{count}.ply"
@@ -196,12 +196,12 @@ def MakeGraph(root_dir, fps):
                         xl = np.linalg.inv(A_Cam_Nose) @ xg
                         xl = A_rotate @ xl
                         XL.append([xl[0],xl[1],xl[2]])
-                    
+
                     XL = np.array(XL)
                     ply_path = dir_path + "ply"
                     if not os.path.exists(ply_path):
                         os.mkdir(ply_path)
-                    
+
                     # PLYファイルに書き込む
                     header = f"ply\nformat ascii 1.0\nelement vertex {len(mesh.vertices)}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
                     with open(dir_path + f"ply/random_cloud{count}.ply", "w") as ply_file:
@@ -225,12 +225,12 @@ def MakeGraph(root_dir, fps):
                         xl = np.linalg.inv(A_Cam_Nose) @ xg
                         xl = A_rotate @ xl
                         XL.append([xl[0],xl[1],xl[2]])
-                    
+
                     XL = np.array(XL)
                     ply_path = dir_path + "ply"
                     if not os.path.exists(ply_path):
                         os.mkdir(ply_path)
-                    
+
                     # PLYファイルに書き込む
                     header = f"ply\nformat ascii 1.0\nelement vertex {len(mesh.vertices)}\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
                     with open(dir_path + f"ply/face_cloud{count}.ply", "w") as ply_file:
@@ -238,7 +238,7 @@ def MakeGraph(root_dir, fps):
                         for vertex in range(len(mesh.vertices)):
                             vertex = list(map(str, XL[vertex,:]))
                             ply_file.write(" ".join(vertex) + "\n")
-                            
+
 
 
 
@@ -263,34 +263,34 @@ def MakeGraph(root_dir, fps):
                 'z': XL_z_seal}
 
         df = pd.DataFrame(data)
-        
-        # dfのyが最小を取る時のindexを取得
-        min_y_index = df['y'].idxmin() + caliblation_time*30
-        print(f"min_y_index = {min_y_index}")
-        
-        #グラフ開始，終了frameの決定
-        start_frame = 0
-        for fnum in range(df.shape[0]):
-            if XL_x_seal[fnum] - XL_x_seal[fnum+10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum+10] > 1.5:
-                start_frame = fnum
-                # print(XL_x_seal[fnum])
-                # print(XL_x_seal[fnum+10])
-                # print(f"XL_x_seal[fnum+10] - XL_x_seal[fnum] = {XL_x_seal[fnum+10] - XL_x_seal[fnum]}")
-                break
 
-        end_frame = df.shape[0]
-        for fnum in range(df.shape[0]-1,0,-1):
-            # if XL_x_seal[fnum] - XL_x_seal[fnum-10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
-            if XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
-            # if fnum > start_frame and XL_y_seal[fnum-30] - XL_y_seal[fnum] < -1 and abs(XL_y_seal[fnum]-XL_y_seal[start_frame]) < 2:
-                # print(XL_x_seal[fnum])
-                # print(XL_x_seal[fnum+10])
-                end_frame = fnum
-                break
+        # # dfのyが最小を取る時のindexを取得
+        # min_y_index = df['y'].idxmin() + caliblation_time*30
+        # print(f"min_y_index = {min_y_index}")
 
-        df = df[start_frame:end_frame]  #初期位置以前のデータは削除
-        print(start_frame,end_frame)
-        df = df.reset_index(drop=True)  #indexを0からにリセット
+        # #グラフ開始，終了frameの決定
+        # start_frame = 0
+        # for fnum in range(df.shape[0]):
+        #     if XL_x_seal[fnum] - XL_x_seal[fnum+10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum+10] > 1.5:
+        #         start_frame = fnum
+        #         # print(XL_x_seal[fnum])
+        #         # print(XL_x_seal[fnum+10])
+        #         # print(f"XL_x_seal[fnum+10] - XL_x_seal[fnum] = {XL_x_seal[fnum+10] - XL_x_seal[fnum]}")
+        #         break
+
+        # end_frame = df.shape[0]
+        # for fnum in range(df.shape[0]-1,0,-1):
+        #     # if XL_x_seal[fnum] - XL_x_seal[fnum-10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
+        #     if XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
+        #     # if fnum > start_frame and XL_y_seal[fnum-30] - XL_y_seal[fnum] < -1 and abs(XL_y_seal[fnum]-XL_y_seal[start_frame]) < 2:
+        #         # print(XL_x_seal[fnum])
+        #         # print(XL_x_seal[fnum+10])
+        #         end_frame = fnum
+        #         break
+
+        # df = df[start_frame:end_frame]  #初期位置以前のデータは削除
+        # print(start_frame,end_frame)
+        # df = df.reset_index(drop=True)  #indexを0からにリセット
         data_num = df.shape[0]
         df_sg = pd.DataFrame(index=df.index)
         # 各列データを平滑化して、結果をdf_sgに格納
@@ -304,8 +304,10 @@ def MakeGraph(root_dir, fps):
         XL_y_seal_SG = df_sg['y']
         XL_z_seal_SG = df_sg['z']
 
+        # print(f"XL_x_seal_SG[0], XL_y_seal_SG[0], XL_z_seal_SG[0] = {XL_x_seal_SG[0], XL_y_seal_SG[0], XL_z_seal_SG[0]}")
+        # print(f"MKG = {XL_x_seal_SG[519]-3.7} {XL_y_seal_SG[519]-32.5} {XL_z_seal_SG[519]-28.8}")
 
-        print(f"data_num = {df.shape[0]}")
+        # print(f"data_num = {df.shape[0]}")
 
         # 散布図,線を描画
         fig = plt.figure(figsize=(12, 5))
@@ -337,7 +339,6 @@ def MakeGraph(root_dir, fps):
 
         ax1.scatter(XL_x_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
         ax1.scatter(XL_x_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
-
 
         # Create a colorbar
         cbar = fig.colorbar(ScalarMappable(norm=normalize, cmap=cmap), ax=ax1)

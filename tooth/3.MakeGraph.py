@@ -10,8 +10,8 @@ import csv
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages #pdfで保存する
 
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
 # if len(sys.argv) > 1:
 #     root_dir = sys.argv[1]
@@ -37,7 +37,7 @@ theta_co_z = np.deg2rad(0)
 theta_co_x = np.deg2rad(0)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*/result.npy')
+    pattern = os.path.join(root_dir, '*a1*/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -198,35 +198,35 @@ def MakeGraph(root_dir, fps):
                 'z': XL_z_seal}
 
         df = pd.DataFrame(data)
-        
-        # dfのyが最小を取る時のindexを取得
-        min_y_index = df['y'].idxmin() + caliblation_time*30
-        print(f"min_y_index = {min_y_index}")
-        # print(f"df.shape = {df.shape}")
-        
-        #グラフ開始，終了frameの決定
-        start_frame = 0
-        for fnum in range(df.shape[0]):
-            if XL_x_seal[fnum] - XL_x_seal[fnum+10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum+10] > 1.5:
-                start_frame = fnum
-                # print(XL_x_seal[fnum])
-                # print(XL_x_seal[fnum+10])
-                # print(f"XL_x_seal[fnum+10] - XL_x_seal[fnum] = {XL_x_seal[fnum+10] - XL_x_seal[fnum]}")
-                break
 
-        end_frame = df.shape[0]
-        for fnum in range(df.shape[0]-1,0,-1):
-            # if XL_x_seal[fnum] - XL_x_seal[fnum-10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
-            if XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
-            # if fnum > start_frame and XL_y_seal[fnum-30] - XL_y_seal[fnum] < -1 and abs(XL_y_seal[fnum]-XL_y_seal[start_frame]) < 2:
-                # print(XL_x_seal[fnum])
-                # print(XL_x_seal[fnum+10])
-                end_frame = fnum
-                break
+        # # dfのyが最小を取る時のindexを取得
+        # min_y_index = df['y'].idxmin() + caliblation_time*30
+        # print(f"min_y_index = {min_y_index}")
+        # # print(f"df.shape = {df.shape}")
 
-        df = df[start_frame:end_frame]  #初期位置以前のデータは削除
-        print(f"start_frame,end_frame = {start_frame,end_frame}")
-        df = df.reset_index(drop=True)  #indexを0からにリセット
+        # #グラフ開始，終了frameの決定
+        # start_frame = 0
+        # for fnum in range(df.shape[0]):
+        #     if XL_x_seal[fnum] - XL_x_seal[fnum+10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum+10] > 1.5:
+        #         start_frame = fnum
+        #         # print(XL_x_seal[fnum])
+        #         # print(XL_x_seal[fnum+10])
+        #         # print(f"XL_x_seal[fnum+10] - XL_x_seal[fnum] = {XL_x_seal[fnum+10] - XL_x_seal[fnum]}")
+        #         break
+
+        # end_frame = df.shape[0]
+        # for fnum in range(df.shape[0]-1,0,-1):
+        #     # if XL_x_seal[fnum] - XL_x_seal[fnum-10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
+        #     if XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
+        #     # if fnum > start_frame and XL_y_seal[fnum-30] - XL_y_seal[fnum] < -1 and abs(XL_y_seal[fnum]-XL_y_seal[start_frame]) < 2:
+        #         # print(XL_x_seal[fnum])
+        #         # print(XL_x_seal[fnum+10])
+        #         end_frame = fnum
+        #         break
+
+        # df = df[start_frame:end_frame]  #初期位置以前のデータは削除
+        # print(f"start_frame,end_frame = {start_frame,end_frame}")
+        # df = df.reset_index(drop=True)  #indexを0からにリセット
         data_num = df.shape[0]
         df_sg = pd.DataFrame(index=df.index)
         # 各列データを平滑化して、結果をdf_sgに格納
@@ -236,6 +236,9 @@ def MakeGraph(root_dir, fps):
         for col in df.columns:
             df_sg[col] = savgol_filter(df[col], window_length=window_length, polyorder=polyorder)
 
+        # XL_x_seal_SG = df['x']
+        # XL_y_seal_SG = df['y']
+        # XL_z_seal_SG = df['z']
         XL_x_seal_SG = df_sg['x']
         XL_y_seal_SG = df_sg['y']
         XL_z_seal_SG = df_sg['z']
@@ -318,7 +321,7 @@ def MakeGraph(root_dir, fps):
         c = min(XL_y_seal_SG)- XL_y_seal_SG[0]
         d = min(XL_z_seal_SG)- XL_z_seal_SG[0]
 
-        print(f"RS a,b,c,d = {a:.1f}, {b:.1f}, {c:.1f}, {d:.1f}")
+        print(f"RS a,b,c,d = {a:.2f}, {b:.2f}, {c:.2f}, {d:.2f}")
 
         id = os.path.basename(os.path.dirname(dir_path))
         mkg_a, mkg_b, mkg_c, mkg_d = 0, 0, 0, 0
@@ -335,7 +338,7 @@ def MakeGraph(root_dir, fps):
                         mkg_c = float(mkg_result[i][3])
                         mkg_d = float(mkg_result[i][4])
                         print(f"mkg a,b,c,d = {mkg_a}, {mkg_b}, {mkg_c}, {mkg_d}")
-                        print(f"error a,b,c,d = {a-mkg_a:.1f}, {b-mkg_b:.1f}, {c-mkg_c:.1f}, {d-mkg_d:.1f}")
+                        print(f"error a,b,c,d = {a-mkg_a:.2f}, {b-mkg_b:.2f}, {c-mkg_c:.2f}, {d-mkg_d:.2f}")
         except:
             pass
 
