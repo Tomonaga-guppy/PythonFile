@@ -36,7 +36,7 @@ transp = False  #不透過
 global theta_co_x, theta_co_y, theta_co_z
 theta_co_y = np.deg2rad(0)
 theta_co_z = np.deg2rad(0)
-theta_co_x = np.deg2rad(-60)
+theta_co_x = np.deg2rad(-120)
 
 def MakeGraph(root_dir, fps):
     pattern = os.path.join(root_dir, '*J2*/result.npy')
