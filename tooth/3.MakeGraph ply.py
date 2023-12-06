@@ -180,7 +180,8 @@ def MakeGraph(root_dir, fps):
                     Y.append(XX[1])
                     Z.append(XX[2])
 
-
+                # # if count == 122 or count == 240 or count == 161:  #a1最大開口時
+                # if count == 311 or count == 466 or count == 519:  #b1最大開口時
                 if os.path.isfile(dir_path + f"plycam/random_cloud{count}.ply"):
                     random_ply_path = dir_path + f"plycam/random_cloud{count}.ply"
                     print(random_ply_path)
@@ -210,7 +211,8 @@ def MakeGraph(root_dir, fps):
                             vertex = list(map(str, XL[vertex,:])) + list(map(str, map(int, color_of_vertices[vertex,:])))
                             ply_file.write(" ".join(vertex) + "\n")
 
-
+                # # if count == 122 or count == 240 or count == 161:  #a1最大開口時
+                # if count == 311 or count == 466 or count == 519:  #b1最大開口時
                 if os.path.isfile(dir_path + f"plycam/face_cloud{count}.ply"):
                     random_ply_path = dir_path + f"plycam/face_cloud{count}.ply"
                     print(random_ply_path)
