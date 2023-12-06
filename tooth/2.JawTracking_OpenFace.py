@@ -273,8 +273,11 @@ def OpenFace(root_dir):
                     ply_file.write(header_face)
                     for vertex in ply_list2_all[i,:,:]:
                         ply_file.write(" ".join(map(str, vertex)) + "\n")
+
+
                 # ply_list3_all = np.array(ply_list3_all)
                 # print(f"list3 = {ply_list3_all.shape}")
+
                 # # PLYファイルに書き込む
                 # with open(dir_path + f"plycam/pixel_cloud{frame_count}.ply", "w") as ply_file:
                 #     ply_file.write(header_pix)
