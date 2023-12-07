@@ -12,8 +12,8 @@ from matplotlib.backends.backend_pdf import PdfPages #pdfで保存する
 import trimesh
 
 
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
 # if len(sys.argv) > 1:
 #     root_dir = sys.argv[1]
@@ -27,19 +27,13 @@ caliblation_time = 5
 # transp = True  #透過
 transp = False  #不透過
 
-#カメラ座標系 RealSensed435i https://www.intelrealsense.com/how-to-getting-imu-data-from-d435i-and-t265/  https://watako-lab.com/2019/02/15/3axis_acc/
-# norm = 9.245
-# a_x = 0.226
-# a_y = -8.247
-# a_z = 4.168
-
 global theta_co_x, theta_co_y, theta_co_z
 theta_co_y = np.deg2rad(0)
 theta_co_z = np.deg2rad(0)
-theta_co_x = np.deg2rad(-120)
+theta_co_x = np.deg2rad(0)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*J2*/result.npy')
+    pattern = os.path.join(root_dir, '*b1*/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -166,8 +160,6 @@ def MakeGraph(root_dir, fps):
                 XL_x_seal.append(XL_seal[0])
                 XL_y_seal.append(XL_seal[1])
                 XL_z_seal.append(XL_seal[2])
-                frame_count.append(count)
-                count = count + 1
 
                 for id in range(aa.shape[1]):
                     Xid = np.array([aa[frame_number][id][1], aa[frame_number][id][2], aa[frame_number][id][3],1])
@@ -182,8 +174,8 @@ def MakeGraph(root_dir, fps):
 
                 # # if count == 122 or count == 240 or count == 161:  #a1最大開口時
                 # if count == 311 or count == 466 or count == 519:  #b1最大開口時
-                if os.path.isfile(dir_path + f"plycam/random_cloud{count}.ply"):
-                    random_ply_path = dir_path + f"plycam/random_cloud{count}.ply"
+                if os.path.isfile(dir_path + f"plycam/random_cloud{count+caliblation_time*30}.ply"):
+                    random_ply_path = dir_path + f"plycam/random_cloud{count+caliblation_time*30}.ply"
                     print(random_ply_path)
                     # PLYファイルを読み込む
                     mesh = trimesh.load_mesh(random_ply_path)
@@ -205,16 +197,14 @@ def MakeGraph(root_dir, fps):
 
                     # PLYファイルに書き込む
                     header = f"ply\nformat ascii 1.0\nelement vertex {len(mesh.vertices)}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
-                    with open(dir_path + f"ply/random_cloud{count}.ply", "w") as ply_file:
+                    with open(dir_path + f"ply/random_cloud{count+caliblation_time*30}.ply", "w") as ply_file:
                         ply_file.write(header)
                         for vertex in range(len(mesh.vertices)):
                             vertex = list(map(str, XL[vertex,:])) + list(map(str, map(int, color_of_vertices[vertex,:])))
                             ply_file.write(" ".join(vertex) + "\n")
 
-                # # if count == 122 or count == 240 or count == 161:  #a1最大開口時
-                # if count == 311 or count == 466 or count == 519:  #b1最大開口時
-                if os.path.isfile(dir_path + f"plycam/face_cloud{count}.ply"):
-                    random_ply_path = dir_path + f"plycam/face_cloud{count}.ply"
+                if os.path.isfile(dir_path + f"plycam/face_cloud{count+caliblation_time*30}.ply"):
+                    random_ply_path = dir_path + f"plycam/face_cloud{count+caliblation_time*30}.ply"
                     print(random_ply_path)
                     # PLYファイルを読み込む
                     mesh = trimesh.load_mesh(random_ply_path)
@@ -235,11 +225,16 @@ def MakeGraph(root_dir, fps):
 
                     # PLYファイルに書き込む
                     header = f"ply\nformat ascii 1.0\nelement vertex {len(mesh.vertices)}\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
-                    with open(dir_path + f"ply/face_cloud{count}.ply", "w") as ply_file:
+                    with open(dir_path + f"ply/face_cloud{count+caliblation_time*30}.ply", "w") as ply_file:
                         ply_file.write(header)
                         for vertex in range(len(mesh.vertices)):
                             vertex = list(map(str, XL[vertex,:]))
                             ply_file.write(" ".join(vertex) + "\n")
+
+
+                #フレーム数の収納，更新
+                frame_count.append(count)
+                count = count + 1
 
 
 

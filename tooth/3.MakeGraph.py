@@ -10,7 +10,8 @@ import csv
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages #pdfで保存する
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
 # if len(sys.argv) > 1:
@@ -19,7 +20,7 @@ root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_
 #     print("ディレクトリパスが指定されていません。")
 #     sys.exit()
 
-caliblation_time = 2
+caliblation_time = 5
 
 #グラフの背景を設定
 # transp = True  #透過
@@ -37,7 +38,7 @@ theta_co_z = np.deg2rad(0)
 theta_co_x = np.deg2rad(0)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*a1*/result.npy')
+    pattern = os.path.join(root_dir, '*/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 

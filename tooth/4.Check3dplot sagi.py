@@ -7,10 +7,11 @@ import mpl_toolkits.mplot3d.art3d as art3d
 import os
 import glob
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
-npy_paths = glob.glob(os.path.join(root_dir,"*a1*/XYZ_localdata.npy"))
+npy_paths = glob.glob(os.path.join(root_dir,"1/XYZ_localdata.npy"))
 
 
 for i, npy_path in enumerate(npy_paths):

@@ -9,8 +9,9 @@ import sys
 import random
 
 
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
 # if len(sys.argv) > 1:
 #     root_dir = sys.argv[1]
@@ -27,7 +28,7 @@ ply = True
 # ply = False
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*J2*/RGB_image')
+    pattern = os.path.join(root_dir, '1*/RGB_image')
     RGB_dirs = glob.glob(pattern, recursive=True)
     # print('mp4files=',RGB_dirs)
     for i,RGB_dir in enumerate(RGB_dirs):
@@ -91,9 +92,9 @@ def OpenFace(root_dir):
 
         ply_list_all = []
         ply_list2_all = []
-        ply_list3_all = []
 
         pix_list = []
+        save_frame_count = []
 
         while True:
 
@@ -154,12 +155,10 @@ def OpenFace(root_dir):
 
 
             seal_depth_list.append([seal_z])
-
             if ply:
                 # if frame_count == 519:  #最大開口時
-                # if frame_count == 150:
-                if frame_count == 1:
-                # if frame_count % 30 == 0 :
+                if frame_count % 30 == 0 or frame_count == 519:
+                    save_frame_count.append(frame_count)
                     xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                     xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                     ypix_max = int(max([float(OpenFace_result[frame_count][i+73]) for i in range(68)]))
@@ -170,7 +169,7 @@ def OpenFace(root_dir):
                     # print(max([OpenFace_result[frame_count][i+73] for i in range(68)]))
                     pix_list.append([xpix_min, xpix_max, ypix_min, ypix_max])
 
-                    point_num = 50000
+                    point_num = 200000
                     ply_list  = []
                     try:
                         for i in range(point_num):
@@ -189,7 +188,6 @@ def OpenFace(root_dir):
                         break  #OpenFaceの解析したframe数と合わなくなったら終了
                     ply_list_all.append(ply_list)
 
-
                     ply_list2 = []
                     try:
                         for i in range(68):
@@ -198,27 +196,10 @@ def OpenFace(root_dir):
                             depthi = img_depth[int(float(OpenFace_result[frame_count][i+73])),int(float(OpenFace_result[frame_count][i+5]))] #整数型
                             z = depthi * depth_scale
                             ply_list2.append([x,y,z])
+                        ply_list2.append([seal_x,seal_y,seal_z])  #シールの座標を追加
                     except IndexError:
                         break  #OpenFaceの解析したframe数と合わなくなったら終了
                     ply_list2_all.append(ply_list2)
-
-                    #
-                    # ply_list3 = []
-                    # try:
-                    #     for xpix in range(1280):
-                    #         for ypix in range(720):
-                    #             x = xpix
-                    #             y = ypix
-                    #             depthi = img_depth[y,x] #整数型
-                    #             z = depthi * depth_scale
-                    #             color = (img[ypix,xpix])
-                    #             color = color[::-1]
-                    #             ply_list3.append([x,y,z,color[0],color[1],color[2]])
-                    # except IndexError:
-                    #     break  #OpenFaceの解析したframe数と合わなくなったら終了
-                    # ply_list3_all.append(ply_list3)
-
-
 
 
 
@@ -253,13 +234,10 @@ def OpenFace(root_dir):
                 os.mkdir(ply_path)
 
             for i in range(ply_list_all.shape[0]):
-                frame_count = (i+1) * 30
-                # frame_count = 519
-                # frame_count = 150
+                frame_count = save_frame_count[i]
                 # PLYファイルのヘッダを書き込む
                 header = f"ply\nformat ascii 1.0\nelement vertex {point_num}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
-                header_face = f"ply\nformat ascii 1.0\nelement vertex 68\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
-                header_pix = f"ply\nformat ascii 1.0\nelement vertex {1280*720}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
+                header_face = f"ply\nformat ascii 1.0\nelement vertex 69\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
 
                 # PLYファイルに書き込む
                 with open(dir_path + f"plycam/random_cloud{frame_count}.ply", "w") as ply_file:
@@ -273,18 +251,6 @@ def OpenFace(root_dir):
                     ply_file.write(header_face)
                     for vertex in ply_list2_all[i,:,:]:
                         ply_file.write(" ".join(map(str, vertex)) + "\n")
-
-
-                # ply_list3_all = np.array(ply_list3_all)
-                # print(f"list3 = {ply_list3_all.shape}")
-
-                # # PLYファイルに書き込む
-                # with open(dir_path + f"plycam/pixel_cloud{frame_count}.ply", "w") as ply_file:
-                #     ply_file.write(header_pix)
-                #     for vertex in ply_list3_all[i,:,:]:
-                #         vertex = list(map(str, vertex[:3])) + list(map(str, map(int, vertex[3:])))
-                #         ply_file.write(" ".join(vertex) + "\n")
-
 
 
 
@@ -374,7 +340,7 @@ def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_co
                 w_result = w
                 h_result = h
 
-        imgcopy = cv2.rectangle(imgcopy, (mask1_x,mask1_y), (mask2_x,mask2_y), (255, 255, 255), 3)
+        # imgcopy = cv2.rectangle(imgcopy, (mask1_x,mask1_y), (mask2_x,mask2_y), (255, 255, 255), 3)
         imgcopy = cv2.rectangle(imgcopy, maxLoc, (maxLoc[0] + w_result, maxLoc[1] + h_result), (255, 255, 255), 3)
 
     elif frame_count != 1:
@@ -384,7 +350,7 @@ def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_co
         # 最も類似度が高い位置を取得する。
         minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
 
-        imgcopy = cv2.rectangle(imgcopy, (mask1_x,mask1_y), (mask2_x,mask2_y), (255, 255, 255), 3)
+        # imgcopy = cv2.rectangle(imgcopy, (mask1_x,mask1_y), (mask2_x,mask2_y), (255, 255, 255), 3)
         imgcopy = cv2.rectangle(imgcopy, maxLoc, (maxLoc[0] + w_result, maxLoc[1] + h_result), (255, 255, 255), 3)
 
     print(f"frame = {frame_count}, maxval = {maxVal}, rot_angle = {rot_angle}, ratio = {ratio}")
