@@ -9,7 +9,7 @@ import sys
 import csv
 
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17/scale"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
 # if len(sys.argv) > 1:

@@ -10,8 +10,8 @@ import random
 import pyrealsense2 as rs
 
 
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17/scale"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
 seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
@@ -19,16 +19,12 @@ seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_temp
 #depth_scale = mm/depth_data
 depth_scale = 1.0000000474974513
 
-ply = True
-# ply = False
+ply = False  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*b1*/RGB_image')  #RGB_imageがあるディレクトリを検索
+    pattern = os.path.join(root_dir, '*a1/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
-    bags = glob.glob(os.path.join(root_dir, '*b1.bag'), recursive=True)  #bagファイルを検索
     for i,RGB_dir in enumerate(RGB_dirs):
-        bagfile = bags[i]
-
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
         dir_path = os.path.dirname(RGB_dir) + '/'
         video_out_path = dir_path + 'SealDetection.mp4'
@@ -36,9 +32,13 @@ def OpenFace(root_dir):
         #mkgの結果を取得
         id = os.path.basename(os.path.dirname(dir_path))
         print(f"ID {id}")
-        if id == "20230807_G2" or id == "20230831_H2" or id == "20230807_D2" or id == "20230807_F2" or id == '20230721_C2' :
-            continue
+        #idに大文字が含まれている場合は処理をスキップ
+        # if id.islower() == False:
+        #     continue
 
+        #root_dirの2つ前のディレクトリパスを取得
+        bagfile = os.path.dirname(os.path.dirname(dir_path)) + '/'+ id + '.bag'
+        print(f"bagfile = {bagfile}")
 
         accel_path = os.path.join(dir_path,"accel_data.npy")
         accel = np.load(accel_path, allow_pickle=True) #[frame][x,y,z]
@@ -225,14 +225,32 @@ def OpenFace(root_dir):
                 writer.write(imgcopy)
 
         finally:
-            print(f"ply_list2_all.shape = {np.array(ply_list2_all).shape}")
             writer.release()
             NumpyList = np.array(List)
             path = dir_path + "result.npy"
             np.save(path,NumpyList)
             #作製したnumpy配列は[フレーム数-1[landmark number[number, x, y, z]]]
 
+
+            #まばたき検出
+            #EAR（目のアスペクト比閾値）決定
+            ear_list = []
+            blink_frame_list = []
+            for frame in range(1,151): #最初の150フレームで閾値を決定
+                ear = BlinkDetection(OpenFace_result,frame)
+                ear_list.append(ear)
+            ear_threshold = np.median(ear_list)
+
+            #閾値より小さければまばたきと判定
+            for frame in range(1,frame_count): #まばたきをしているフレームをリストに追加
+                ear = BlinkDetection(OpenFace_result,frame)
+                if ear < ear_threshold:
+                    blink_frame_list.append(frame)
+            print(f"blink_frame_list = {blink_frame_list}")
+            print(f"blink frame = {len(blink_frame_list)}")
+
             if ply:
+                # print(f"ply_list2_all.shape = {np.array(ply_list2_all).shape}")
                 ply_list_all = np.array(ply_list_all)
                 ply_list2_all = np.array(ply_list2_all)
 
@@ -359,5 +377,16 @@ def rotate_template(temp, angle):
     #画像に対してアフィン変換を行う
     rot_image = cv2.warpAffine(temp, trans, (width, height))
     return rot_image
+
+def BlinkDetection(OpenFace_result,frame):
+    point_pixel = []
+    for point in range(36,42):
+        point_pixel.append([float(OpenFace_result[frame][point+5]), float(OpenFace_result[frame][point+73])])
+    point_pixel = np.array(point_pixel)
+    ver1 =  np.linalg.norm(point_pixel[1]-point_pixel[5])
+    ver2 = np.linalg.norm(point_pixel[2]-point_pixel[4])
+    hor = np.linalg.norm(point_pixel[0]-point_pixel[3])
+    ear = ver1+ver2/(2*hor)
+    return ear
 
 OpenFace(root_dir)
