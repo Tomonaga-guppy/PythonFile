@@ -1,5 +1,5 @@
 スケール変換これでよくない？ → rs2_deproject_pixel_to_point()
-1. RGB,Depth取得
+1. RGB,Depth取得  できれば2と一緒にしたい
 2. 特徴点検出，スケール変換，world座標格納
 3. 座標変換，プロット図
 4. アニメーション
