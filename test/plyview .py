@@ -1,62 +1,67 @@
 import trimesh
 import matplotlib.pyplot as plt
+import numpy as np
+import glob
+import os
 
-# ply_path1 = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_11_17\20231117_b1\ply\face_cloud30.ply"
-# # ply_path2 = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_11_17\20231117_b1\plycam\face_cloud30.ply"
-# # PLYファイルを読み込む
-# mesh1 = trimesh.load_mesh(ply_path1)
-# # mesh2 = trimesh.load_mesh(ply_path2)
-# # min_y_row = mesh.vertices[mesh.vertices[:, 1].argmin()]
+root_dir = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale"
+dir_paths = glob.glob(os.path.join(root_dir,"*a1*/OpenFace.avi"))
 
-# # 読み込んだ点群を色付きでmatplotlibで可視化
-# fig = plt.figure()
-# ax = fig.add_subplot(111, projection='3d')
-# ax.scatter(mesh1.vertices[:,0], mesh1.vertices[:,1], mesh1.vertices[:,2], c='r', s=1, label='mesh')
-# ax.scatter(0,0,0, c='b', s=10)
-# # ax.scatter(mesh2.vertices[:,0], mesh2.vertices[:,1], mesh2.vertices[:,2], c='b', s=1, label='cam_mesh')
-# ax.set_xlabel('X-axis')
-# ax.set_ylabel('Y-axis')
-# ax.set_zlabel('Z-axis')
-# plt.legend()
-# plt.show()
+for i,dir_path in enumerate(dir_paths):
+    dir_path = os.path.dirname(dir_path)
+    # if os.path.isfile(dir_path + r"\ply\random_cloud150.ply") == False or os.path.isfile(dir_path + r"\ply\random_cloud512.ply") == False :
+    #     print(f'{dir_path}にはplyファイルがありません.')
+    #     continue
+    ply_path = dir_path + r"\ply\random_cloud60.ply"
+    ply_path2 = dir_path + r"\ply\random_cloud291.ply"
+    print(f"{i+1}/{len(dir_paths)}: {dir_path}")
+    mesh = trimesh.load_mesh(ply_path)  # PLYファイルを読み込む
+    mesh2 = trimesh.load_mesh(ply_path2)  # PLYファイルを読み込む
+    colors = np.array(mesh.visual.vertex_colors)/255  #meshから色の情報を取得
+    colors2 = np.array(mesh2.visual.vertex_colors)/255  #meshから色の情報を取得
+    # 読み込んだ点群を色付きでmatplotlibで可視化
+    fig = plt.figure()
+    ax = fig.add_subplot(1,2,1)
+    ax.scatter(mesh.vertices[:,2], mesh.vertices[:,1], c=colors, s=1)
+    ax.set_xlabel('Z-axis', fontsize=15)
+    ax.set_ylabel('Y-axis', fontsize=15)
+    #グリッドを表示
+    ax.grid()
+    #x,y軸に少し薄めの黒で線を引く
+    ax.axhline(0, color='black', alpha=0.4)
+    ax.axvline(0, color='black', alpha=0.4)
+    #描画範囲設定
+    ax.set_xlim(-100,100)
+    ax.set_ylim(-150,50)
+    #アスペクト比を1:1に
+    ax.set_aspect('equal', adjustable='box')
 
 
+    ax2 = fig.add_subplot(1,2,2)
+    ax2.scatter(mesh2.vertices[:,2], mesh2.vertices[:,1], c=colors2, s=1)
+    ax2.set_xlabel('Z-axis', fontsize=15)
+    ax2.set_ylabel('Y-axis', fontsize=15)
+    #グリッドを表示
+    ax2.grid()
+    #x,y軸に少し薄めの黒で線を引く
+    ax2.axhline(0, color='black', alpha=0.4)
+    ax2.axvline(0, color='black', alpha=0.4)
+    #描画範囲設定
+    ax2.set_xlim(-100,100)
+    ax2.set_ylim(-150,50)
+    #アスペクト比を1:1に
+    ax2.set_aspect('equal', adjustable='box')
 
-ply_pathp = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_09_000\20230606_J2\ply\random_cloud30_p.ply"
-ply_pathp2 = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_09_000\20230606_J2\ply\random_cloud30_p2.ply"
-ply_path0 = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_09_000\20230606_J2\ply\random_cloud30_0.ply"
-ply_path68_0 = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_09_000\20230606_J2\ply\face_cloud30_0.ply"
-ply_pathm = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_09_000\20230606_J2\ply\random_cloud30_m.ply"
-ply_pathm2 = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_09_000\20230606_J2\ply\random_cloud30_m2.ply"
-meshp = trimesh.load_mesh(ply_pathp)
-meshp2 = trimesh.load_mesh(ply_pathp2)
-mesh0 = trimesh.load_mesh(ply_path0)
-mesh68_0 = trimesh.load_mesh(ply_path68_0)
-meshm = trimesh.load_mesh(ply_pathm)
-meshm2 = trimesh.load_mesh(ply_pathm2)
-colorsp = meshp.visual.vertex_colors
-colorsp2 = meshp.visual.vertex_colors
-colors0 = mesh0.visual.vertex_colors
-colorsm = meshm.visual.vertex_colors
-colorsm2 = meshm.visual.vertex_colors
-fig = plt.figure()
-ax = fig.add_subplot(1,1,1)
-# ax.scatter(meshp2.vertices[:,2], meshp2.vertices[:,1], c=colorsp/255, s=0.1, alpha=0.1)
-# ax.scatter(meshp.vertices[:,2], meshp.vertices[:,1], c=colorsp/255, s=0.1, alpha=0.1)
-ax.scatter(mesh0.vertices[:,2], mesh0.vertices[:,1], c=colors0/255, s=0.1)
-ax.scatter(mesh68_0.vertices[:,2], mesh68_0.vertices[:,1], c="r", s=30)
-# ax.scatter(meshm.vertices[:,2], meshm.vertices[:,1], c=colorsm/255, s=0.1, alpha=0.1)
-# ax.scatter(meshm2.vertices[:,2], meshm2.vertices[:,1], c=colorsm/255, s=0.1, alpha=0.1)
-ax.scatter
-ax.set_aspect('equal')
-ax.set_xlim(-100,100)
-ax.set_ylim(-150,50)
-ax.set_xlabel('Z-axis')
-ax.set_ylabel('Y-axis')
-ax.invert_xaxis()
-ax.grid()
-#x,y軸に少し薄めの黒で線を引く
-ax.axhline(0, color='black', alpha=0.2)
-ax.axvline(0, color='black', alpha=0.2)
-plt.legend()
-plt.show()
+    ply_face_path = dir_path + r"\ply\face_cloud60.ply"
+    ply_face_path2 = dir_path + r"\ply\face_cloud291.ply"
+    mesh_face = trimesh.load_mesh(ply_face_path)  # PLYファイルを読み込む
+    mesh_face2 = trimesh.load_mesh(ply_face_path2)  # PLYファイルを読み込む
+    print(f"before_open_seal_x,y,z= {mesh_face[68,:]}")
+    print(f"open_seal_x,y,z= {mesh_face2[68,:]}")
+    seal_disp_z = mesh_face2[68,2] - mesh_face[68,2]
+    seal_disp_y = mesh_face2[68,1] - mesh_face[68,1]
+    print(f"seal_disp_z = {seal_disp_z}, seal_disp_y = {seal_disp_y}")
+
+    plt.savefig(dir_path + "/scale.png")
+    plt.tight_layout()
+    plt.show()
