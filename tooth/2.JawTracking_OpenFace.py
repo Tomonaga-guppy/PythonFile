@@ -7,30 +7,23 @@ import cv2
 import numpy as np
 import sys
 import random
+import pyrealsense2 as rs
 
 
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
-
-# if len(sys.argv) > 1:
-#     root_dir = sys.argv[1]
-# else:
-#     print("ディレクトリパスが指定されていません。")
-#     sys.exit()
 
 seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
 
 #depth_scale = mm/depth_data
 depth_scale = 1.0000000474974513
 
-ply = True
-# ply = False
+ply = True  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '1*/RGB_image')
+    pattern = os.path.join(root_dir, '*a1*/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
-    # print('mp4files=',RGB_dirs)
     for i,RGB_dir in enumerate(RGB_dirs):
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
         dir_path = os.path.dirname(RGB_dir) + '/'
@@ -39,9 +32,13 @@ def OpenFace(root_dir):
         #mkgの結果を取得
         id = os.path.basename(os.path.dirname(dir_path))
         print(f"ID {id}")
-        if id == "20230807_G2" or id == "20230831_H2" or id == "20230807_D2" or id == "20230807_F2" or id == '20230721_C2' :
-            continue
+        #idに大文字が含まれている場合は処理をスキップ
+        # if id.islower() == False:
+        #     continue
 
+        #root_dirの2つ前のディレクトリパスを取得
+        bagfile = os.path.dirname(os.path.dirname(dir_path)) + '/'+ id + '.bag'
+        print(f"bagfile = {bagfile}")
 
         accel_path = os.path.join(dir_path,"accel_data.npy")
         accel = np.load(accel_path, allow_pickle=True) #[frame][x,y,z]
@@ -85,10 +82,7 @@ def OpenFace(root_dir):
         fourcc = cv2.VideoWriter_fourcc('m','p','4','v')
         writer = cv2.VideoWriter(video_out_path,fourcc, fps, (width, height))
 
-        frame_count = 1
         List=[]
-
-        seal_depth_list = []
 
         ply_list_all = []
         ply_list2_all = []
@@ -96,184 +90,194 @@ def OpenFace(root_dir):
         pix_list = []
         save_frame_count = []
 
-        while True:
 
-            # img_depth (y,x) = (720, 1280)
-            img_path = dir_path + "RGB_image/{:04d}.png".format(frame_count)
-            img_depth_path = dir_path + "Depth_image/{:04d}.png".format(frame_count)
+        error_bagfiles = []  #読み取れなかったbagファイル記録用
+        config = rs.config()
+        config.enable_device_from_file(bagfile)
 
-            if os.path.isfile(img_path) == False or os.path.isfile(img_depth_path)== False:
-                break
+        pipeline = rs.pipeline()
+        try:
+            profile = pipeline.start(config)
+        except RuntimeError:
+            error_bagfiles.append(bagfile)
+            continue
 
-            img = cv2.imread(img_path)
-            imgcopy = img.copy()
-            img_depth = cv2.imread(img_depth_path, cv2.IMREAD_ANYDEPTH)
+        # create Align Object
+        align_to = rs.stream.color
+        align = rs.align(align_to)
 
-            # シールを見つける処理 参照点 48, 54のx, 8のy   シール検出の範囲指定のためintのまま処理
-            mask1_x=int(float(OpenFace_result[frame_count][53]))    #48x
-            mask1_y=int(float(OpenFace_result[frame_count][121]))    #48y
-            mask2_x=int(float(OpenFace_result[frame_count][59]))    #54x
-            mask2_y=int(float(OpenFace_result[frame_count][81]))    #8y
+        device = profile.get_device()
+        playback = device.as_playback()
+        playback.set_real_time(False)  #リアルタイム再生をオフにするとフレームごとに処理が終わるまで待機してくれる
+
+        # hole_filling_filterのパラメータ
+        hole_filling = rs.hole_filling_filter(2)
+
+        try:
+            pre_time = 0
+            frame_count = 1
+            while True:
+                frames = pipeline.wait_for_frames()
+
+                aligned_frames = align.process(frames)
+                color_frame = aligned_frames.get_color_frame()
+                color_image = np.asanyarray(color_frame.get_data())
+                color_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR)
+
+                depth_frame = aligned_frames.get_depth_frame()
+                filter_frame = hole_filling.process(depth_frame)
+                result_frame = filter_frame.as_depth_frame()
+
+                cur_time = playback.get_position()  #再生時間の取得 単位はナノ秒
+
+                if cur_time < pre_time:  #前フレームより再生時間が進んでいなかったら終了
+                    break
+
+                #内部パラメータの取得（色情報）
+                color_intr = rs.video_stream_profile(profile.get_stream(rs.stream.color)).get_intrinsics()
+
+                img = color_image.copy()
+                imgcopy = img.copy()
+
+                try:
+                    # シールを見つける処理 参照点 48, 54のx, 8のy   シール検出の範囲指定のためintのまま処理
+                    mask1_x=int(float(OpenFace_result[frame_count][53]))    #48x
+                    mask1_y=int(float(OpenFace_result[frame_count][121]))    #48y
+                    mask2_x=int(float(OpenFace_result[frame_count][59]))    #54x
+                    mask2_y=int(float(OpenFace_result[frame_count][81]))    #8y
+                except IndexError:
+
+                    break  #OpenFaceの解析したframe数と合わなくなったら終了
 
 
-            seal_position, imgcopy, ratio, template_shape = SealDetection(height, width, imgcopy, mask1_x, mask2_x, mask1_y, mask2_y ,frame_count)
+                seal_position, imgcopy, ratio, template_shape = SealDetection(height, width, imgcopy, mask1_x, mask2_x, mask1_y, mask2_y ,frame_count)
 
-            cv2.circle(imgcopy, (seal_position[0],seal_position[1]), 1, (255, 120, 255), -1)
-            seal_x_pixel = seal_position[0]
-            seal_y_pixel = seal_position[1]
+                cv2.circle(imgcopy, (seal_position[0],seal_position[1]), 1, (255, 120, 255), -1)
+                seal_x_pixel = seal_position[0]
+                seal_y_pixel = seal_position[1]
+                seal_z = result_frame.get_distance(seal_x_pixel, seal_y_pixel)
+                seal_position = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [seal_x_pixel,seal_y_pixel], seal_z))*1000  #pixel座標を(m→)mm座標に変換
+                seal_x, seal_y, seal_z = seal_position[0], seal_position[1], seal_position[2]*depth_scale
 
-
-            #シールの情報から単位換算 (pixel）
-            xpixel = template_shape[0]
-            ypixel = template_shape[1] * np.cos(theta_camera)  #顔自体が傾いていることを考慮しないといけない
-            xpixel_scale = 15 / (xpixel*ratio/100)
-            ypixel_scale = 15 / (ypixel*ratio/100)
-            seal_x = seal_x_pixel * xpixel_scale
-            seal_y = seal_y_pixel * ypixel_scale
-
-
-
-            # シールの奥行 depthから計算
-            depth68 = img_depth[seal_y_pixel,seal_x_pixel]
-            seal_z = depth68 * depth_scale
-
-            # OpenFace座標格納(mm)
-            landmark_List=[]
-            try:
+                # OpenFace座標格納(mm)
+                landmark_List=[]
                 for i in range(68):
-                    x = float(OpenFace_result[frame_count][i+5]) * xpixel_scale
-                    y = float(OpenFace_result[frame_count][i+73]) * ypixel_scale
-                    depthi = img_depth[int(float(OpenFace_result[frame_count][i+73])),int(float(OpenFace_result[frame_count][i+5]))] #整数型
-                    z = depthi * depth_scale
+                    xpix = int(float(OpenFace_result[frame_count][i+5]))
+                    ypix = int(float(OpenFace_result[frame_count][i+73]))
+                    z = result_frame.get_distance(xpix, ypix)
+                    point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
+                    x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
                     landmark_List.append([i,x,y,z])
-            except IndexError:
-                break  #OpenFaceの解析したframe数と合わなくなったら終了
 
 
+                if ply:
+                    if frame_count == 60 or frame_count == 291 or frame_count == 155:
+                    # if frame_count == 150 or frame_count == 512 or frame_count == 513 or frame_count==511 or frame_count == 510 or frame_count == 514 or frame_count==515:
+                        if os.path.isfile(dir_path + f"plycam/random_cloud{frame_count}.ply"):
+                            pass
+                    # if frame_count == 150:
+                        save_frame_count.append(frame_count)
+                        xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
+                        xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
+                        ypix_max = int(max([float(OpenFace_result[frame_count][i+73]) for i in range(68)]))
+                        ypix_min = int(min([float(OpenFace_result[frame_count][i+73]) for i in range(68)]))
+
+                        # print([OpenFace_result[frame_count][i+73] for i in range(68)])
+                        # print(max([OpenFace_result[frame_count][i+73] for i in range(68)]))
+                        pix_list.append([xpix_min, xpix_max, ypix_min, ypix_max])
+
+                        point_num = 200000
+                        ply_list  = []
+                        try:
+                            for i in range(point_num):
+                                xpix = random.randint(xpix_min, xpix_max)
+                                ypix = random.randint(ypix_min, ypix_max)
+                                # xpix = random.randint(xpix_min-100, xpix_max+100)
+                                # ypix = random.randint(ypix_min-50, ypix_max+50)
+                                z = result_frame.get_distance(xpix, ypix)
+                                point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
+                                x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
+                                color = (img[ypix,xpix])
+                                color = color[::-1]
+                                ply_list.append([x,y,z,color[0],color[1],color[2]])
+                        except IndexError:
+                            break  #OpenFaceの解析したframe数と合わなくなったら終了
+                        ply_list_all.append(ply_list)
+
+                        ply_list2 = []
+                        try:
+                            for i in range(68):
+                                xpix = int(float(OpenFace_result[frame_count][i+5]))
+                                ypix = int(float(OpenFace_result[frame_count][i+73]))
+
+                                z = result_frame.get_distance(xpix, ypix)
+                                point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
+                                x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
+                                ply_list2.append([x,y,z])
+                            ply_list2.append([seal_x,seal_y,seal_z])  #シールの座標を追加
+                        except IndexError:
+                            break  #OpenFaceの解析したframe数と合わなくなったら終了
+                        ply_list2_all.append(ply_list2)
+
+                landmark_List.append([68,seal_x,seal_y,seal_z])
+                cv2.circle(imgcopy, (int(seal_x_pixel),int(seal_y_pixel)), 5, (255, 0, 255), -1)    #整数型
+                List.append(landmark_List)
+
+                frame_count +=1
+                writer.write(imgcopy)
+
+        finally:
+            writer.release()
+            NumpyList = np.array(List)
+            path = dir_path + "result.npy"
+            np.save(path,NumpyList)
+            #作製したnumpy配列は[フレーム数-1[landmark number[number, x, y, z]]]
 
 
+            # #まばたき検出
+            # #EAR（目のアスペクト比閾値）決定
+            # ear_list = []
+            # blink_frame_list = []
+            # for frame in range(1,151): #最初の150フレームで閾値を決定
+            #     ear = BlinkDetection(OpenFace_result,frame)
+            #     ear_list.append(ear)
+            # ear_threshold = np.median(ear_list)
 
+            # #閾値より小さければまばたきと判定
+            # for frame in range(1,frame_count): #まばたきをしているフレームをリストに追加
+            #     ear = BlinkDetection(OpenFace_result,frame)
+            #     if ear < ear_threshold:
+            #         blink_frame_list.append(frame)
+            # print(f"blink_frame_list = {blink_frame_list}")
+            # print(f"blink frame = {len(blink_frame_list)}")
 
-            seal_depth_list.append([seal_z])
             if ply:
-                # if frame_count == 519:  #最大開口時
-                if frame_count % 30 == 0 or frame_count == 519:
-                    save_frame_count.append(frame_count)
-                    xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
-                    xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
-                    ypix_max = int(max([float(OpenFace_result[frame_count][i+73]) for i in range(68)]))
-                    ypix_min = int(min([float(OpenFace_result[frame_count][i+73]) for i in range(68)]))
+                # print(f"ply_list2_all.shape = {np.array(ply_list2_all).shape}")
+                ply_list_all = np.array(ply_list_all)
+                ply_list2_all = np.array(ply_list2_all)
 
+                ply_path = dir_path + "plycam"
+                if not os.path.exists(ply_path):
+                    os.mkdir(ply_path)
 
-                    # print([OpenFace_result[frame_count][i+73] for i in range(68)])
-                    # print(max([OpenFace_result[frame_count][i+73] for i in range(68)]))
-                    pix_list.append([xpix_min, xpix_max, ypix_min, ypix_max])
+                for i in range(ply_list_all.shape[0]):
+                    frame_count = save_frame_count[i]
+                    # PLYファイルのヘッダを書き込む
+                    header = f"ply\nformat ascii 1.0\nelement vertex {point_num}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
+                    header_face = f"ply\nformat ascii 1.0\nelement vertex 69\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
 
-                    point_num = 200000
-                    ply_list  = []
-                    try:
-                        for i in range(point_num):
-                            xpix = random.randint(xpix_min, xpix_max)
-                            ypix = random.randint(ypix_min, ypix_max)
-                            # xpix = random.randint(xpix_min-100, xpix_max+100)
-                            # ypix = random.randint(ypix_min-50, ypix_max+50)
-                            x = float(xpix * xpixel_scale)
-                            y = float(ypix * ypixel_scale)
-                            depthi = img_depth[int(ypix),int(xpix)] #整数型
-                            z = depthi * depth_scale
-                            color = (img[ypix,xpix])
-                            color = color[::-1]
-                            ply_list.append([x,y,z,color[0],color[1],color[2]])
-                    except IndexError:
-                        break  #OpenFaceの解析したframe数と合わなくなったら終了
-                    ply_list_all.append(ply_list)
+                    # PLYファイルに書き込む
+                    with open(dir_path + f"plycam/random_cloud{frame_count}.ply", "w") as ply_file:
+                        ply_file.write(header)
+                        for vertex in ply_list_all[i,:,:]:
+                            vertex = list(map(str, vertex[:3])) + list(map(str, map(int, vertex[3:])))
+                            ply_file.write(" ".join(vertex) + "\n")
 
-                    ply_list2 = []
-                    try:
-                        for i in range(68):
-                            x = float(OpenFace_result[frame_count][i+5]) * xpixel_scale
-                            y = float(OpenFace_result[frame_count][i+73]) * ypixel_scale
-                            depthi = img_depth[int(float(OpenFace_result[frame_count][i+73])),int(float(OpenFace_result[frame_count][i+5]))] #整数型
-                            z = depthi * depth_scale
-                            ply_list2.append([x,y,z])
-                        ply_list2.append([seal_x,seal_y,seal_z])  #シールの座標を追加
-                    except IndexError:
-                        break  #OpenFaceの解析したframe数と合わなくなったら終了
-                    ply_list2_all.append(ply_list2)
-
-
-
-            landmark_List.append([68,seal_x,seal_y,seal_z])
-            cv2.circle(imgcopy, (int(seal_x_pixel),int(seal_y_pixel)), 5, (255, 0, 255), -1)    #整数型
-            List.append(landmark_List)
-
-            # print(frame_count)
-            frame_count +=1
-            # writer.write(img)
-            writer.write(imgcopy)
-
-        writer.release()
-        # print("Movie is saved in " + RGB_image)
-
-        NumpyList = np.array(List)
-        # print(f"np.shape(NumpyList) = {np.shape(NumpyList)}")
-        # print(f"NumpyList = {NumpyList}")
-        path = dir_path + "result.npy"
-        np.save(path,NumpyList)
-        #作製したnumpy配列は[フレーム数-1[landmark number[number, x, y, z]]]
-
-
-
-
-        if ply:
-            ply_list_all = np.array(ply_list_all)
-            ply_list2_all = np.array(ply_list2_all)
-
-            ply_path = dir_path + "plycam"
-            if not os.path.exists(ply_path):
-                os.mkdir(ply_path)
-
-            for i in range(ply_list_all.shape[0]):
-                frame_count = save_frame_count[i]
-                # PLYファイルのヘッダを書き込む
-                header = f"ply\nformat ascii 1.0\nelement vertex {point_num}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
-                header_face = f"ply\nformat ascii 1.0\nelement vertex 69\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
-
-                # PLYファイルに書き込む
-                with open(dir_path + f"plycam/random_cloud{frame_count}.ply", "w") as ply_file:
-                    ply_file.write(header)
-                    for vertex in ply_list_all[i,:,:]:
-                        vertex = list(map(str, vertex[:3])) + list(map(str, map(int, vertex[3:])))
-                        ply_file.write(" ".join(vertex) + "\n")
-
-                # PLYファイルに書き込む
-                with open(dir_path + f"plycam/face_cloud{frame_count}.ply", "w") as ply_file:
-                    ply_file.write(header_face)
-                    for vertex in ply_list2_all[i,:,:]:
-                        ply_file.write(" ".join(map(str, vertex)) + "\n")
-
-
-
-
-        # seal_depth_list = np.array(seal_depth_list)
-        # print(seal_depth_list.shape)
-        # import matplotlib.pyplot as plt
-        # # データの準備
-        # x = list(range(1, len(seal_depth_list) + 1))  # frame_count
-        # y = [item[0] for item in seal_depth_list]  # seal_z
-
-        # # グラフの作成
-        # plt.figure()
-        # plt.plot(x, y)
-
-        # # グラフのタイトルと軸ラベル
-        # plt.title('Seal Depth over Time from camera')
-        # plt.xlabel('Frame Count')
-        # plt.ylabel('Seal Z')
-        # # y軸を反転
-        # plt.gca().invert_yaxis()
-        # # グラフの表示
-        # plt.show()
+                    # PLYファイルに書き込む
+                    with open(dir_path + f"plycam/face_cloud{frame_count}.ply", "w") as ply_file:
+                        ply_file.write(header_face)
+                        for vertex in ply_list2_all[i,:,:]:
+                            ply_file.write(" ".join(map(str, vertex)) + "\n")
 
 # def SealDetection(height,width,img):
 def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_count):
@@ -375,5 +379,16 @@ def rotate_template(temp, angle):
     #画像に対してアフィン変換を行う
     rot_image = cv2.warpAffine(temp, trans, (width, height))
     return rot_image
+
+# def BlinkDetection(OpenFace_result,frame):
+    point_pixel = []
+    for point in range(36,42):
+        point_pixel.append([float(OpenFace_result[frame][point+5]), float(OpenFace_result[frame][point+73])])
+    point_pixel = np.array(point_pixel)
+    ver1 =  np.linalg.norm(point_pixel[1]-point_pixel[5])
+    ver2 = np.linalg.norm(point_pixel[2]-point_pixel[4])
+    hor = np.linalg.norm(point_pixel[0]-point_pixel[3])
+    ear = ver1+ver2/(2*hor)
+    return ear
 
 OpenFace(root_dir)
