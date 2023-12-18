@@ -9,28 +9,18 @@ import sys
 import csv
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages #pdfで保存する
+import trimesh
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
+
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
 
-# if len(sys.argv) > 1:
-#     root_dir = sys.argv[1]
-# else:
-#     print("ディレクトリパスが指定されていません。")
-#     sys.exit()
+caliblation_time = 2
 
-caliblation_time = 5
-
-#グラフの背景を設定
-# transp = True  #透過
-transp = False  #不透過
-
-#カメラ座標系 RealSensed435i https://www.intelrealsense.com/how-to-getting-imu-data-from-d435i-and-t265/  https://watako-lab.com/2019/02/15/3axis_acc/
-# norm = 9.245
-# a_x = 0.226
-# a_y = -8.247
-# a_z = 4.168
+ply_create = True #Trueがplyファイル作成
+transp = False  #Trueが背景透明
+ear = False  #Trueがblink_frame_npy（まばたき補正）を使用
 
 global theta_co_x, theta_co_y, theta_co_z
 theta_co_y = np.deg2rad(0)
@@ -38,7 +28,7 @@ theta_co_z = np.deg2rad(0)
 theta_co_x = np.deg2rad(0)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*/result.npy')
+    pattern = os.path.join(root_dir, '*a1*/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -63,6 +53,7 @@ def MakeGraph(root_dir, fps):
         Z = []
 
         for frame_number in range(aa.shape[0]):
+            # print(frame_number)
             #鼻先(30)、左右目(36,45)or左右鼻翼(31,35)の位置ベクトル
             bector_30 = np.array([aa[frame_number][30][1], aa[frame_number][30][2], aa[frame_number][30][3]])
             bector_36 = np.array([aa[frame_number][36][1], aa[frame_number][36][2], aa[frame_number][36][3]])
@@ -165,8 +156,9 @@ def MakeGraph(root_dir, fps):
                 XL_x_seal.append(XL_seal[0])
                 XL_y_seal.append(XL_seal[1])
                 XL_z_seal.append(XL_seal[2])
-                frame_count.append(count)
-                count = count + 1
+
+                # if XL_seal[2] + 43.153105694389495 < abs(0.01):
+                #     print(f"frame_number = {frame_number}, XL_seal[2] = {XL_seal[2]}")
 
                 for id in range(aa.shape[1]):
                     Xid = np.array([aa[frame_number][id][1], aa[frame_number][id][2], aa[frame_number][id][3],1])
@@ -179,10 +171,79 @@ def MakeGraph(root_dir, fps):
                     Y.append(XX[1])
                     Z.append(XX[2])
 
-        print('theta_nose [deg] = ', np.rad2deg(theta_nose))
-        print('theta_cam [deg] = ', np.rad2deg(theta_camera))
-        print('theta_co_x [deg] = ', np.rad2deg(theta_co_x))
-        print('theta_x [deg] = ', np.rad2deg(theta_x))
+                if ply_create == True:
+                    # if os.path.isfile(dir_path + f"ply/random_cloud{frame_number}.ply"):
+                    #     continue
+                    # # if count == 122 or count == 240 or count == 161:  #a1最大開口時
+                    # if count == 311 or count == 466 or count == 519:  #b1最大開口時
+                    # if frame_number == 150 or frame_number == 519:
+                    if os.path.isfile(dir_path + f"plycam/random_cloud{frame_number}.ply"):
+                        random_ply_path = dir_path + f"plycam/random_cloud{frame_number}.ply"
+                        print(random_ply_path)
+                        # PLYファイルを読み込む
+                        mesh = trimesh.load_mesh(random_ply_path)
+                        color_of_vertices = np.array(mesh.visual.vertex_colors[:,:3])
+                        x = np.array(mesh.vertices)[:,0]
+                        y = np.array(mesh.vertices)[:,1]
+                        z = np.array(mesh.vertices)[:,2]
+                        XL = []
+                        for vertices_num in range(len(mesh.vertices)):
+                            xg = np.array([x[vertices_num], y[vertices_num], z[vertices_num], 1])
+                            xl = np.linalg.inv(A_Cam_Nose) @ xg
+                            xl = A_rotate @ xl
+                            XL.append([xl[0],xl[1],xl[2]])
+
+                        XL = np.array(XL)
+                        ply_path = dir_path + "ply"
+                        if not os.path.exists(ply_path):
+                            os.mkdir(ply_path)
+
+                        # PLYファイルに書き込む
+                        header = f"ply\nformat ascii 1.0\nelement vertex {len(mesh.vertices)}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
+                        with open(dir_path + f"ply/random_cloud{frame_number}.ply", "w") as ply_file:
+                            ply_file.write(header)
+                            for vertex in range(len(mesh.vertices)):
+                                vertex = list(map(str, XL[vertex,:])) + list(map(str, map(int, color_of_vertices[vertex,:])))
+                                ply_file.write(" ".join(vertex) + "\n")
+
+                    if os.path.isfile(dir_path + f"plycam/face_cloud{frame_number}.ply"):
+                        random_ply_path = dir_path + f"plycam/face_cloud{frame_number}.ply"
+                        print(random_ply_path)
+                        # PLYファイルを読み込む
+                        mesh = trimesh.load_mesh(random_ply_path)
+                        x = np.array(mesh.vertices)[:,0]
+                        y = np.array(mesh.vertices)[:,1]
+                        z = np.array(mesh.vertices)[:,2]
+                        XL = []
+                        for vertices_num in range(len(mesh.vertices)):
+                            xg = np.array([x[vertices_num], y[vertices_num], z[vertices_num], 1])
+                            xl = np.linalg.inv(A_Cam_Nose) @ xg
+                            xl = A_rotate @ xl
+                            XL.append([xl[0],xl[1],xl[2]])
+
+                        XL = np.array(XL)
+                        ply_path = dir_path + "ply"
+                        if not os.path.exists(ply_path):
+                            os.mkdir(ply_path)
+
+                        # PLYファイルに書き込む
+                        header = f"ply\nformat ascii 1.0\nelement vertex {len(mesh.vertices)}\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
+                        with open(dir_path + f"ply/face_cloud{frame_number}.ply", "w") as ply_file:
+                            ply_file.write(header)
+                            for vertex in range(len(mesh.vertices)):
+                                vertex = list(map(str, XL[vertex,:]))
+                                ply_file.write(" ".join(vertex) + "\n")
+
+
+                #フレーム数の収納，更新
+                frame_count.append(count)
+                count = count + 1
+
+
+        # print('theta_nose [deg] = ', np.rad2deg(theta_nose))
+        # print('theta_cam [deg] = ', np.rad2deg(theta_camera))
+        # print('theta_co_x [deg] = ', np.rad2deg(theta_co_x))
+        # print('theta_x [deg] = ', np.rad2deg(theta_x))
 
         #ローカル座標のxyzをnpyファイルで保存
         X = np.array(X).reshape(((aa.shape[0]-caliblation_time*fps),aa.shape[1]))
@@ -193,17 +254,24 @@ def MakeGraph(root_dir, fps):
         np.save(path,XYZdata)
         # print('XYZ_localdata is saved')
 
-
         data = {'x': XL_x_seal,
                 'y': XL_y_seal,
                 'z': XL_z_seal}
 
         df = pd.DataFrame(data)
+        #dfの150行目を表示
 
-        # # dfのyが最小を取る時のindexを取得
-        # min_y_index = df['y'].idxmin() + caliblation_time*30
-        # print(f"min_y_index = {min_y_index}")
-        # # print(f"df.shape = {df.shape}")
+        if ear:
+            blink_frame_npy = np.load(dir_path + "blink_frame_list.npy") - caliblation_time*30
+            #blink_frame_npy内の要素前後6フレームを追加
+            for i in range(-1,1+1):
+                blink_frame_npy = np.append(blink_frame_npy, blink_frame_npy + i)
+            blink_frame_npy = blink_frame_npy[blink_frame_npy >= 0]  #calibrationtime調整後にblink_frame_npyの値が負の要素は削除
+            print(blink_frame_npy)
+            df.loc[blink_frame_npy, :] = np.nan
+            # print(df)
+            # df = df.interpolate(method='index')
+            df = df.interpolate(method='spline', order=1, limit_direction='both')
 
         # #グラフ開始，終了frameの決定
         # start_frame = 0
@@ -226,9 +294,8 @@ def MakeGraph(root_dir, fps):
         #         break
 
         # df = df[start_frame:end_frame]  #初期位置以前のデータは削除
-        # print(f"start_frame,end_frame = {start_frame,end_frame}")
+        # print(start_frame,end_frame)
         # df = df.reset_index(drop=True)  #indexを0からにリセット
-        data_num = df.shape[0]
         df_sg = pd.DataFrame(index=df.index)
         # 各列データを平滑化して、結果をdf_sgに格納
         #SG法   https://mimikousi.com/smoothing_savgol/
@@ -237,13 +304,24 @@ def MakeGraph(root_dir, fps):
         for col in df.columns:
             df_sg[col] = savgol_filter(df[col], window_length=window_length, polyorder=polyorder)
 
-        # XL_x_seal_SG = df['x']
-        # XL_y_seal_SG = df['y']
-        # XL_z_seal_SG = df['z']
+        data_num = df_sg.shape[0]
         XL_x_seal_SG = df_sg['x']
         XL_y_seal_SG = df_sg['y']
         XL_z_seal_SG = df_sg['z']
 
+
+        #XL_z_sealが最小を取る時のindexを取得
+        min_z_index = df['z'].idxmin() + caliblation_time*fps
+        print(f"min_z_index = {min_z_index}")
+        min_y_index = df['y'].idxmin() + caliblation_time*fps
+        print(f"min_y_index = {min_y_index}")
+
+        print(f"min(XL_z_seal), XL_z_seal[0] = {min(XL_z_seal)}, {XL_z_seal[0]}")
+        print(f"min(XL_z_seal_SG), XL_z_seal_SG[0] = {min(XL_z_seal_SG)}, {XL_z_seal_SG[0]}")
+
+
+        # print(f"XL_x_seal_SG[0], XL_y_seal_SG[0], XL_z_seal_SG[0] = {XL_x_seal_SG[0], XL_y_seal_SG[0], XL_z_seal_SG[0]}")
+        # print(f"MKG = {XL_x_seal_SG[519]-3.7} {XL_y_seal_SG[519]-32.5} {XL_z_seal_SG[519]-28.8}")
 
         # print(f"data_num = {df.shape[0]}")
 
@@ -268,16 +346,12 @@ def MakeGraph(root_dir, fps):
         normalize = plt.Normalize(1, data_num-1)
         colors = cmap(normalize(range(data_num-1)))
 
-        # ax1.scatter(XL_x_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 1.0)
-        # ax1.scatter(XL_x_seal_SG[66], XL_y_seal_SG[66], c=[(255/255,165/255,0)], s=200, marker="*")
-        # ax1.scatter(XL_x_seal_SG[236], XL_y_seal_SG[236], c=[(255/255,165/255,0)], s=50, marker="*")
-        # ax1.scatter(XL_x_seal_SG[284], XL_y_seal_SG[284], c=[(255/255,165/255,0)], s=200, marker="*")
+        if ear: ax1.scatter(XL_x_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
 
         ax1.plot(XL_x_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
 
         ax1.scatter(XL_x_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
         ax1.scatter(XL_x_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
-
 
         # Create a colorbar
         cbar = fig.colorbar(ScalarMappable(norm=normalize, cmap=cmap), ax=ax1)
@@ -299,13 +373,11 @@ def MakeGraph(root_dir, fps):
         ax2.invert_xaxis()
         ax2.set_aspect('equal', adjustable='box')
 
+
+        if ear: ax2.scatter(XL_z_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
+
         ax2.scatter(XL_z_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
         ax2.scatter(XL_z_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
-
-        # ax2.scatter(XL_z_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 1.0)
-        # ax2.scatter(XL_z_seal_SG[66], XL_y_seal_SG[66], c=[(255/255,165/255,0)], s=200, marker="*")
-        # ax2.scatter(XL_z_seal_SG[236], XL_y_seal_SG[236], c=[(255/255,165/255,0)], s=50, marker="*")
-        # ax2.scatter(XL_z_seal_SG[284], XL_y_seal_SG[284], c=[(255/255,165/255,0)], s=200, marker="*")
 
         ax2.plot(XL_z_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
 
@@ -321,8 +393,10 @@ def MakeGraph(root_dir, fps):
         b = max(XL_x_seal_SG)-XL_x_seal_SG[0]
         c = min(XL_y_seal_SG)- XL_y_seal_SG[0]
         d = min(XL_z_seal_SG)- XL_z_seal_SG[0]
+        print(f"RS a,b,c,d = {a:.1f}, {b:.1f}, {c:.1f}, {d:.1f}")
 
-        print(f"RS a,b,c,d = {a:.2f}, {b:.2f}, {c:.2f}, {d:.2f}")
+
+
 
         id = os.path.basename(os.path.dirname(dir_path))
         mkg_a, mkg_b, mkg_c, mkg_d = 0, 0, 0, 0
@@ -339,7 +413,7 @@ def MakeGraph(root_dir, fps):
                         mkg_c = float(mkg_result[i][3])
                         mkg_d = float(mkg_result[i][4])
                         print(f"mkg a,b,c,d = {mkg_a}, {mkg_b}, {mkg_c}, {mkg_d}")
-                        print(f"error a,b,c,d = {a-mkg_a:.2f}, {b-mkg_b:.2f}, {c-mkg_c:.2f}, {d-mkg_d:.2f}")
+                        print(f"error a,b,c,d = {a-mkg_a:.1f}, {b-mkg_b:.1f}, {c-mkg_c:.1f}, {d-mkg_d:.1f}")
         except:
             pass
 

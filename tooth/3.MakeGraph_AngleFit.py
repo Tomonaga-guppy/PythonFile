@@ -9,16 +9,10 @@ import sys
 import csv
 import pandas as pd
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
 
-# if len(sys.argv) > 1:
-#     root_dir = sys.argv[1]
-# else:
-#     print("ディレクトリパスが指定されていません。")
-#     sys.exit()
-
-caliblation_time = 4
+caliblation_time = 5
 
 global theta_x_co, theta_y, theta_z
 # theta_co_x = np.deg2rad(-15)
@@ -29,7 +23,7 @@ key = "kk"  #咬頭嵌合位
 # key = "max"  #最大最小
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*E2*/result.npy')
+    pattern = os.path.join(root_dir, '*J2*/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
     best_correction_angle_list = []
@@ -95,22 +89,19 @@ def MakeGraph(root_dir, fps):
         if not os.path.exists(try_path):
             os.mkdir(try_path)
 
-        for theta_co_x in range(-40,0+1,5):  #順番に補正を試す
-            # theta_z = np.deg2rad(theta_co_x)
-            theta_co_x = np.deg2rad(theta_co_x)
 
+
+        for theta_co_x in range(-40,0+1,5):  #順番に補正を試す
+            theta_co_x = np.deg2rad(theta_co_x)
             XL_x_seal = []
             XL_y_seal = []
             XL_z_seal = []
             frame_count = []
             count = 0
-
             theta_nose_sum = 0
             X = []
             Y = []
             Z = []
-
-
             for frame_number in range(aa.shape[0]):  #aa[0]はframe数
                 theta_camera =np.arccos(abs(accel[frame_number][1])/(np.sqrt(accel[frame_number][1]**2+accel[frame_number][2]**2)))
                 if frame_number < caliblation_time*fps:
