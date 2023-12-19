@@ -1,41 +1,32 @@
 import cv2
 import os
+import glob
+
+root_dir = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale"
 
 def save_frames(video_path, output_folder):
-    # Open the video file
     video = cv2.VideoCapture(video_path)
-
-    # Check if the video file was successfully opened
     if not video.isOpened():
         print("Error opening video file")
         return
-
-    # Read and save each frame
-    frame_count = 0
+    frame_count = 1
     while True:
-        # Read the next frame
         ret, frame = video.read()
-
-        # If there are no more frames, break out of the loop
         if not ret:
             break
-
-        # Save the frame as an image
-        output_path = f"{output_folder}/frame_{frame_count}.jpg"
+        output_path = f"{output_folder}/{str(frame_count).zfill(4)}.jpg"
+        cv2.putText(frame, str(frame_count), (100, 100), cv2.FONT_HERSHEY_PLAIN, 4, (0, 255, 0), 2, cv2.LINE_AA)
         cv2.imwrite(output_path, frame)
-
-        # Increment the frame count
         frame_count += 1
-
-    # Release the video file
     video.release()
 
-# Example usage
-video_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231218_d\SealDetection.mp4"
-output_folder = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231218_d\SealDetection"
+video_path = glob.glob(os.path.join(root_dir, "*d/SealDetection.mp4"))[0]
+dir_name = os.path.dirname(video_path)
+output_folder = os.path.join(dir_name, "SealDetection")
 
-# video_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231218_d\OpenFace.avi"
-# output_folder = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231218_d\OpenFace"
+# video_path = glob.glob(os.path.join(root_dir,"*d/OpenFace.avi"))[0]
+# dir_name = os.path.dirname(video_path)
+# output_folder = os.path.join(dir_name, "OpenFace")
 
 if os.path.exists(output_folder) == False:
     os.mkdir(output_folder)
