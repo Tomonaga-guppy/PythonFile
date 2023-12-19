@@ -31,8 +31,11 @@ def save_frames(video_path, output_folder):
     video.release()
 
 # Example usage
-video_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231218_d\OpenFace.avi"
-output_folder = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231218_d\OpenFace"
+video_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231218_d\SealDetection.mp4"
+output_folder = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231218_d\SealDetection"
+
+# video_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231218_d\OpenFace.avi"
+# output_folder = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231218_d\OpenFace"
 
 if os.path.exists(output_folder) == False:
     os.mkdir(output_folder)
