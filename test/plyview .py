@@ -5,15 +5,17 @@ import glob
 import os
 
 root_dir = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale"
-dir_paths = glob.glob(os.path.join(root_dir,"*a1*/OpenFace.avi"))
+dir_paths = glob.glob(os.path.join(root_dir,"*b1*/OpenFace.avi"))
 
 for i,dir_path in enumerate(dir_paths):
     dir_path = os.path.dirname(dir_path)
     # if os.path.isfile(dir_path + r"\ply\random_cloud150.ply") == False or os.path.isfile(dir_path + r"\ply\random_cloud512.ply") == False :
     #     print(f'{dir_path}にはplyファイルがありません.')
     #     continue
-    ply_path = dir_path + r"\ply\random_cloud60.ply"
-    ply_path2 = dir_path + r"\ply\random_cloud291.ply"
+    ply_path = dir_path + r"\ply\random_cloud150.ply"
+    ply_path2 = dir_path + r"\ply\random_cloud514.ply"
+    # ply_path = dir_path + r"\ply\random_cloud60.ply"
+    # ply_path2 = dir_path + r"\ply\random_cloud291.ply"
     print(f"{i+1}/{len(dir_paths)}: {dir_path}")
     mesh = trimesh.load_mesh(ply_path)  # PLYファイルを読み込む
     mesh2 = trimesh.load_mesh(ply_path2)  # PLYファイルを読み込む
@@ -52,8 +54,10 @@ for i,dir_path in enumerate(dir_paths):
     #アスペクト比を1:1に
     ax2.set_aspect('equal', adjustable='box')
 
-    ply_face_path = dir_path + r"\ply\face_cloud60.ply"
-    ply_face_path2 = dir_path + r"\ply\face_cloud291.ply"
+    ply_face_path = dir_path + r"\ply\face_cloud150.ply"
+    ply_face_path2 = dir_path + r"\ply\face_cloud514.ply"
+    # ply_face_path = dir_path + r"\ply\face_cloud60.ply"
+    # ply_face_path2 = dir_path + r"\ply\face_cloud291.ply"
     mesh_face = trimesh.load_mesh(ply_face_path)  # PLYファイルを読み込む
     mesh_face2 = trimesh.load_mesh(ply_face_path2)  # PLYファイルを読み込む
     print(f"before_open_seal_x,y,z= {mesh_face[68,:]}")
@@ -64,4 +68,4 @@ for i,dir_path in enumerate(dir_paths):
 
     plt.savefig(dir_path + "/scale.png")
     plt.tight_layout()
-    plt.show()
+    # plt.show()

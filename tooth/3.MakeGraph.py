@@ -16,10 +16,10 @@ root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
 
-caliblation_time = 2
+caliblation_time = 5
 
-ply_create = True #Trueがplyファイル作成
-transp = False  #Trueが背景透明
+ply_create = False #Trueがplyファイル作成
+transp = True  #Trueが背景透明
 ear = False  #Trueがblink_frame_npy（まばたき補正）を使用
 
 global theta_co_x, theta_co_y, theta_co_z
@@ -28,7 +28,7 @@ theta_co_z = np.deg2rad(0)
 theta_co_x = np.deg2rad(0)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*a1*/result.npy')
+    pattern = os.path.join(root_dir, '*d/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -44,22 +44,17 @@ def MakeGraph(root_dir, fps):
         XL_y_seal = []
         XL_z_seal = []
 
-        frame_count = []
-        count = 0
-
         theta_nose_sum = 0
         X = []
         Y = []
         Z = []
 
-        for frame_number in range(aa.shape[0]):
+        for frame_number in range(1,aa.shape[0]+1):
             # print(frame_number)
-            #鼻先(30)、左右目(36,45)or左右鼻翼(31,35)の位置ベクトル
-            bector_30 = np.array([aa[frame_number][30][1], aa[frame_number][30][2], aa[frame_number][30][3]])
-            bector_36 = np.array([aa[frame_number][36][1], aa[frame_number][36][2], aa[frame_number][36][3]])
-            bector_45 = np.array([aa[frame_number][45][1], aa[frame_number][45][2], aa[frame_number][45][3]])
-            bector_31 = np.array([aa[frame_number][31][1], aa[frame_number][31][2], aa[frame_number][31][3]])
-            bector_35 = np.array([aa[frame_number][35][1], aa[frame_number][35][2], aa[frame_number][35][3]])
+            #鼻先(30)、左右目(36,45)の位置ベクトル
+            bector_30 = np.array([aa[frame_number-1][30][1], aa[frame_number-1][30][2], aa[frame_number-1][30][3]])
+            bector_36 = np.array([aa[frame_number-1][36][1], aa[frame_number-1][36][2], aa[frame_number-1][36][3]])
+            bector_45 = np.array([aa[frame_number-1][45][1], aa[frame_number-1][45][2], aa[frame_number-1][45][3]])
 
             #e_x (36 → 45のベクトル)
             bector_x = bector_45 - bector_36
@@ -73,21 +68,7 @@ def MakeGraph(root_dir, fps):
             bector_Pposition = bector_y_nose + bector_30
             bector_y_nose2= np.array([bector_y_nose[0],bector_y_nose[1], 0])
 
-            #e_x (31 → 35のベクトル)
-            # bector_x = bector_35 - bector_31
-            # base_bector_x = bector_x / np.linalg.norm(bector_x)
-            # bector_30_31 = bector_31 - bector_30
-            # c = - (np.dot(bector_x,bector_30_31))/(np.linalg.norm(bector_x)**2)
-
-            #e_y
-            #bector_Xと30からbectorXに下した垂線の交点をPとした、30とPを結ぶベクトルがbector_y_nose
-            # bector_y_nose = bector_30_31 + c*bector_x
-            # bector_Pposition = [bector_y_nose[0]+aa[frame_number][30][1],bector_y_nose[1]+aa[frame_number][30][2],bector_y_nose[2]+aa[frame_number][30][3]]
-            # bector_y_nose2= np.array([bector_y_nose[0],bector_y_nose[1], 0])
-
             if frame_number < caliblation_time*fps:
-                # thetanose = float(np.arccos(np.dot(bector_y_nose,bector_y_nose2)/(np.linalg.norm(bector_y_nose)*np.linalg.norm(bector_y_nose2))))
-                # print(f"thetanose = {thetanose}")
                 theta_nose_sum += float(np.arccos(np.dot(bector_y_nose,bector_y_nose2)/(np.linalg.norm(bector_y_nose)*np.linalg.norm(bector_y_nose2))))
                 theta_nose = (theta_nose_sum/(caliblation_time*fps))
 
@@ -100,7 +81,6 @@ def MakeGraph(root_dir, fps):
                 # 点を反時計回りにtheta回転 = 軸を時計回りにtheta回転  ==   点は反時計回りが正、軸は時計回りが正
                 # https://qiita.com/suzuki-navi/items/60ef241b2dca499df794
                 theta_x =  -theta_nose  +theta_camera + theta_co_x
-                # theta_x =  -(theta_nose - theta_camera) + theta_co_x
 
                 #ベクトル変換https://eman-physics.net/math/linear08.html  グローバル座標とローカル座標https://programming-surgeon.com/script/coordinate-system/
                 R_Cam_Nose = np.array([base_bector_x,base_bector_y,base_bector_z]).T
@@ -137,7 +117,7 @@ def MakeGraph(root_dir, fps):
 
                 A_rotate = A_x @ demo @ demo  #行列掛け算
 
-                X_seal = np.array([aa[frame_number][68][1], aa[frame_number][68][2], aa[frame_number][68][3],1])
+                X_seal = np.array([aa[frame_number-1][68][1], aa[frame_number-1][68][2], aa[frame_number-1][68][3],1])
 
                 # XL_seal = np.dot(np.linalg.inv(A_rotate) ,X_seal)
                 # if frame_number == 150:
@@ -161,94 +141,83 @@ def MakeGraph(root_dir, fps):
                 #     print(f"frame_number = {frame_number}, XL_seal[2] = {XL_seal[2]}")
 
                 for id in range(aa.shape[1]):
-                    Xid = np.array([aa[frame_number][id][1], aa[frame_number][id][2], aa[frame_number][id][3],1])
-                    # XX = np.dot(np.linalg.inv(A_rotate),Xid)
-                    # XX = np.dot(np.linalg.inv(A_Cam_Nose),Xid)
+                    Xid = np.array([aa[frame_number-1][id][1], aa[frame_number-1][id][2], aa[frame_number-1][id][3],1])
                     XX = np.linalg.inv(A_Cam_Nose) @ Xid
                     XX = A_rotate @ XX
-                    # XX = np.dot(A_z @ A_y @ A_x @ np.linalg.inv(A_Cam_Nose),Xid)
                     X.append(XX[0])
                     Y.append(XX[1])
                     Z.append(XX[2])
 
                 if ply_create == True:
-                    # if os.path.isfile(dir_path + f"ply/random_cloud{frame_number}.ply"):
-                    #     continue
-                    # # if count == 122 or count == 240 or count == 161:  #a1最大開口時
-                    # if count == 311 or count == 466 or count == 519:  #b1最大開口時
-                    # if frame_number == 150 or frame_number == 519:
-                    if os.path.isfile(dir_path + f"plycam/random_cloud{frame_number}.ply"):
-                        random_ply_path = dir_path + f"plycam/random_cloud{frame_number}.ply"
-                        print(random_ply_path)
-                        # PLYファイルを読み込む
-                        mesh = trimesh.load_mesh(random_ply_path)
-                        color_of_vertices = np.array(mesh.visual.vertex_colors[:,:3])
-                        x = np.array(mesh.vertices)[:,0]
-                        y = np.array(mesh.vertices)[:,1]
-                        z = np.array(mesh.vertices)[:,2]
-                        XL = []
-                        for vertices_num in range(len(mesh.vertices)):
-                            xg = np.array([x[vertices_num], y[vertices_num], z[vertices_num], 1])
-                            xl = np.linalg.inv(A_Cam_Nose) @ xg
-                            xl = A_rotate @ xl
-                            XL.append([xl[0],xl[1],xl[2]])
+                    # # if frame_number == 122 or frame_number == 240 or frame_number == 161:  #a1最大開口時
+                    # if frame_number == 150 or frame_number == 514:  #b1
+                    if frame_number == 150:
+                        if os.path.isfile(dir_path + f"plycam/random_cloud{frame_number}.ply"):
+                            random_ply_path = dir_path + f"plycam/random_cloud{frame_number}.ply"
+                            print(random_ply_path)
+                            # PLYファイルを読み込む
+                            mesh = trimesh.load_mesh(random_ply_path)
+                            color_of_vertices = np.array(mesh.visual.vertex_colors[:,:3])
+                            x = np.array(mesh.vertices)[:,0]
+                            y = np.array(mesh.vertices)[:,1]
+                            z = np.array(mesh.vertices)[:,2]
+                            XL = []
+                            for vertices_num in range(len(mesh.vertices)):
+                                xg = np.array([x[vertices_num], y[vertices_num], z[vertices_num], 1])
+                                xl = np.linalg.inv(A_Cam_Nose) @ xg
+                                xl = A_rotate @ xl
+                                XL.append([xl[0],xl[1],xl[2]])
 
-                        XL = np.array(XL)
-                        ply_path = dir_path + "ply"
-                        if not os.path.exists(ply_path):
-                            os.mkdir(ply_path)
+                            XL = np.array(XL)
+                            ply_path = dir_path + "ply"
+                            if not os.path.exists(ply_path):
+                                os.mkdir(ply_path)
 
-                        # PLYファイルに書き込む
-                        header = f"ply\nformat ascii 1.0\nelement vertex {len(mesh.vertices)}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
-                        with open(dir_path + f"ply/random_cloud{frame_number}.ply", "w") as ply_file:
-                            ply_file.write(header)
-                            for vertex in range(len(mesh.vertices)):
-                                vertex = list(map(str, XL[vertex,:])) + list(map(str, map(int, color_of_vertices[vertex,:])))
-                                ply_file.write(" ".join(vertex) + "\n")
+                            # PLYファイルに書き込む
+                            header = f"ply\nformat ascii 1.0\nelement vertex {len(mesh.vertices)}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
+                            with open(dir_path + f"ply/random_cloud{frame_number}.ply", "w") as ply_file:
+                                ply_file.write(header)
+                                for vertex in range(len(mesh.vertices)):
+                                    vertex = list(map(str, XL[vertex,:])) + list(map(str, map(int, color_of_vertices[vertex,:])))
+                                    ply_file.write(" ".join(vertex) + "\n")
 
-                    if os.path.isfile(dir_path + f"plycam/face_cloud{frame_number}.ply"):
-                        random_ply_path = dir_path + f"plycam/face_cloud{frame_number}.ply"
-                        print(random_ply_path)
-                        # PLYファイルを読み込む
-                        mesh = trimesh.load_mesh(random_ply_path)
-                        x = np.array(mesh.vertices)[:,0]
-                        y = np.array(mesh.vertices)[:,1]
-                        z = np.array(mesh.vertices)[:,2]
-                        XL = []
-                        for vertices_num in range(len(mesh.vertices)):
-                            xg = np.array([x[vertices_num], y[vertices_num], z[vertices_num], 1])
-                            xl = np.linalg.inv(A_Cam_Nose) @ xg
-                            xl = A_rotate @ xl
-                            XL.append([xl[0],xl[1],xl[2]])
+                        if os.path.isfile(dir_path + f"plycam/face_cloud{frame_number}.ply"):
+                            random_ply_path = dir_path + f"plycam/face_cloud{frame_number}.ply"
+                            print(random_ply_path)
+                            # PLYファイルを読み込む
+                            mesh = trimesh.load_mesh(random_ply_path)
+                            x = np.array(mesh.vertices)[:,0]
+                            y = np.array(mesh.vertices)[:,1]
+                            z = np.array(mesh.vertices)[:,2]
+                            XL = []
+                            for vertices_num in range(len(mesh.vertices)):
+                                xg = np.array([x[vertices_num], y[vertices_num], z[vertices_num], 1])
+                                xl = np.linalg.inv(A_Cam_Nose) @ xg
+                                xl = A_rotate @ xl
+                                XL.append([xl[0],xl[1],xl[2]])
 
-                        XL = np.array(XL)
-                        ply_path = dir_path + "ply"
-                        if not os.path.exists(ply_path):
-                            os.mkdir(ply_path)
+                            XL = np.array(XL)
+                            ply_path = dir_path + "ply"
+                            if not os.path.exists(ply_path):
+                                os.mkdir(ply_path)
 
-                        # PLYファイルに書き込む
-                        header = f"ply\nformat ascii 1.0\nelement vertex {len(mesh.vertices)}\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
-                        with open(dir_path + f"ply/face_cloud{frame_number}.ply", "w") as ply_file:
-                            ply_file.write(header)
-                            for vertex in range(len(mesh.vertices)):
-                                vertex = list(map(str, XL[vertex,:]))
-                                ply_file.write(" ".join(vertex) + "\n")
+                            # PLYファイルに書き込む
+                            header = f"ply\nformat ascii 1.0\nelement vertex {len(mesh.vertices)}\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
+                            with open(dir_path + f"ply/face_cloud{frame_number}.ply", "w") as ply_file:
+                                ply_file.write(header)
+                                for vertex in range(len(mesh.vertices)):
+                                    vertex = list(map(str, XL[vertex,:]))
+                                    ply_file.write(" ".join(vertex) + "\n")
 
-
-                #フレーム数の収納，更新
-                frame_count.append(count)
-                count = count + 1
-
-
-        # print('theta_nose [deg] = ', np.rad2deg(theta_nose))
-        # print('theta_cam [deg] = ', np.rad2deg(theta_camera))
-        # print('theta_co_x [deg] = ', np.rad2deg(theta_co_x))
-        # print('theta_x [deg] = ', np.rad2deg(theta_x))
+        print('theta_nose [deg] = ', np.rad2deg(theta_nose))
+        print('theta_cam [deg] = ', np.rad2deg(theta_camera))
+        print('theta_co_x [deg] = ', np.rad2deg(theta_co_x))
+        print('theta_x [deg] = ', np.rad2deg(theta_x))
 
         #ローカル座標のxyzをnpyファイルで保存
-        X = np.array(X).reshape(((aa.shape[0]-caliblation_time*fps),aa.shape[1]))
-        Y = np.array(Y).reshape(((aa.shape[0]-caliblation_time*fps),aa.shape[1]))
-        Z = np.array(Z).reshape(((aa.shape[0]-caliblation_time*fps),aa.shape[1]))
+        X = np.array(X).reshape(((aa.shape[0]-(caliblation_time*fps-1)),aa.shape[1]))
+        Y = np.array(Y).reshape(((aa.shape[0]-(caliblation_time*fps-1)),aa.shape[1]))
+        Z = np.array(Z).reshape(((aa.shape[0]-(caliblation_time*fps-1)),aa.shape[1]))
         XYZdata = np.stack([X,Y,Z])
         path = dir_path + "XYZ_localdata.npy"
         np.save(path,XYZdata)
@@ -259,7 +228,7 @@ def MakeGraph(root_dir, fps):
                 'z': XL_z_seal}
 
         df = pd.DataFrame(data)
-        #dfの150行目を表示
+        df.index = df.index + 1  #indexを1からに
 
         if ear:
             blink_frame_npy = np.load(dir_path + "blink_frame_list.npy") - caliblation_time*30
@@ -269,8 +238,6 @@ def MakeGraph(root_dir, fps):
             blink_frame_npy = blink_frame_npy[blink_frame_npy >= 0]  #calibrationtime調整後にblink_frame_npyの値が負の要素は削除
             print(blink_frame_npy)
             df.loc[blink_frame_npy, :] = np.nan
-            # print(df)
-            # df = df.interpolate(method='index')
             df = df.interpolate(method='spline', order=1, limit_direction='both')
 
         # #グラフ開始，終了frameの決定
@@ -304,29 +271,32 @@ def MakeGraph(root_dir, fps):
         for col in df.columns:
             df_sg[col] = savgol_filter(df[col], window_length=window_length, polyorder=polyorder)
 
-        data_num = df_sg.shape[0]
         XL_x_seal_SG = df_sg['x']
         XL_y_seal_SG = df_sg['y']
         XL_z_seal_SG = df_sg['z']
 
 
-        #XL_z_sealが最小を取る時のindexを取得
-        min_z_index = df['z'].idxmin() + caliblation_time*fps
-        print(f"min_z_index = {min_z_index}")
-        min_y_index = df['y'].idxmin() + caliblation_time*fps
-        print(f"min_y_index = {min_y_index}")
+        # pd.set_option('display.max_rows', None)  #全ての行を表示
+        # print(XL_z_seal_SG)
+        # print(df_sg['z'])
 
-        print(f"min(XL_z_seal), XL_z_seal[0] = {min(XL_z_seal)}, {XL_z_seal[0]}")
-        print(f"min(XL_z_seal_SG), XL_z_seal_SG[0] = {min(XL_z_seal_SG)}, {XL_z_seal_SG[0]}")
+        print(f"min_z_index = {df['z'].idxmin()}, minz = {df.iloc[df['z'].idxmin()-1,2]}")  #df['z']が最小を取る時のindexを取得
+        print(f"df_z0 = {df.iloc[0,2]}")
+        print(f"zdif = {df.iloc[df['z'].idxmin()-1,2] - df.iloc[0,2]}")
 
 
-        # print(f"XL_x_seal_SG[0], XL_y_seal_SG[0], XL_z_seal_SG[0] = {XL_x_seal_SG[0], XL_y_seal_SG[0], XL_z_seal_SG[0]}")
-        # print(f"MKG = {XL_x_seal_SG[519]-3.7} {XL_y_seal_SG[519]-32.5} {XL_z_seal_SG[519]-28.8}")
+        # print(f"min_z_sg_index = {df_sg['z'].idxmin()}")  #df['z']が最小を取る時のindexを取得
+        # print(f"minz_sg = {df_sg.iloc[df_sg['z'].idxmin()-1,2]}")
+        # print(f"df_sg_z0 = {df_sg.iloc[0,2]}")
+        # print(f"z_sgdif = {df_sg.iloc[df_sg['z'].idxmin()-1,2] - df_sg.iloc[0,2]}")
 
+
+        data_num = df.shape[0]
         # print(f"data_num = {df.shape[0]}")
 
         # 散布図,線を描画
-        fig = plt.figure(figsize=(12, 5))
+        fig = plt.figure(figsize=(14, 5))
+        # fig = plt.figure(figsize=(20, 5))
         ax1 = fig.add_subplot(1,2,2)  #1行2列つくって右に配置
 
         ax1.set_xlabel('X [mm]',fontsize=15)
@@ -341,17 +311,16 @@ def MakeGraph(root_dir, fps):
 
         ax1.set_aspect('equal', adjustable='box')
 
-        # Create a color map based on time values
         cmap = plt.get_cmap('jet')
         normalize = plt.Normalize(1, data_num-1)
-        colors = cmap(normalize(range(data_num-1)))
+        colors = cmap(normalize(range(1,data_num-1)))
 
         if ear: ax1.scatter(XL_x_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
 
-        ax1.plot(XL_x_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
+        ax1.plot(XL_x_seal_SG[2:], XL_y_seal_SG[2:], alpha = 0.3)
 
-        ax1.scatter(XL_x_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
-        ax1.scatter(XL_x_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
+        ax1.scatter(XL_x_seal_SG[2:], XL_y_seal_SG[2:], c=colors, s=15, alpha = 0.7)
+        ax1.scatter(XL_x_seal_SG[1], XL_y_seal_SG[1], c=[(255/255,165/255,0)], s=200, marker="*")
 
         # Create a colorbar
         cbar = fig.colorbar(ScalarMappable(norm=normalize, cmap=cmap), ax=ax1)
@@ -376,10 +345,10 @@ def MakeGraph(root_dir, fps):
 
         if ear: ax2.scatter(XL_z_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
 
-        ax2.scatter(XL_z_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
-        ax2.scatter(XL_z_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
+        ax2.scatter(XL_z_seal_SG[2:], XL_y_seal_SG[2:], c=colors, s=15, alpha = 0.7)
+        ax2.scatter(XL_z_seal_SG[1], XL_y_seal_SG[1], c=[(255/255,165/255,0)], s=200, marker="*")
 
-        ax2.plot(XL_z_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
+        ax2.plot(XL_z_seal_SG[2:], XL_y_seal_SG[2:], alpha = 0.3)
 
         plt.tight_layout()  # グラフのレイアウトを調整
         if transp:
@@ -389,10 +358,13 @@ def MakeGraph(root_dir, fps):
             plt.savefig(dir_path + f"frontal&sagittal_theta[{int(np.rad2deg(theta_co_x))},{int(np.rad2deg(theta_co_y))},{int(np.rad2deg(theta_co_z))}].png", bbox_inches='tight', transparent=True)
             print(f"fig is saved in frontal&sagittal_theta[{int(np.rad2deg(theta_co_x))},{int(np.rad2deg(theta_co_y))},{int(np.rad2deg(theta_co_z))}].png")
 
-        a = min(XL_x_seal_SG)-XL_x_seal_SG[0]
-        b = max(XL_x_seal_SG)-XL_x_seal_SG[0]
-        c = min(XL_y_seal_SG)- XL_y_seal_SG[0]
-        d = min(XL_z_seal_SG)- XL_z_seal_SG[0]
+        a = min(XL_x_seal_SG)- XL_x_seal_SG[1]
+        b = max(XL_x_seal_SG)- XL_x_seal_SG[1]
+        c = min(XL_y_seal_SG)- XL_y_seal_SG[1]
+        d = min(XL_z_seal_SG)- XL_z_seal_SG[1]
+        # print(f"min(XL_z_seal_SG) = {min(XL_z_seal_SG)}")
+        # print(f"XL_z_seal_SG[1] = {XL_z_seal_SG[1]}")
+        # print(f"d = {d}")
         print(f"RS a,b,c,d = {a:.1f}, {b:.1f}, {c:.1f}, {d:.1f}")
 
 

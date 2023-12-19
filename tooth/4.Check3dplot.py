@@ -10,8 +10,7 @@ import glob
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
-npy_paths = glob.glob(os.path.join(root_dir,"*b1*/XYZ_localdata.npy"))
-
+npy_paths = glob.glob(os.path.join(root_dir,"*d/XYZ_localdata.npy"))
 
 for i, npy_path in enumerate(npy_paths):
     # ファイルから配列を読み込む dataは[axis][frame][id]の順で並んでいる

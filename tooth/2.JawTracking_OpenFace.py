@@ -19,10 +19,10 @@ seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_temp
 #depth_scale = mm/depth_data
 depth_scale = 1.0000000474974513
 
-ply = True  #plyファイルを作成するかどうか(Trueは作成する)
+ply = False  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*a1*/RGB_image')  #RGB_imageがあるディレクトリを検索
+    pattern = os.path.join(root_dir, '*[f]/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
     for i,RGB_dir in enumerate(RGB_dirs):
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
@@ -74,7 +74,6 @@ def OpenFace(root_dir):
             if os.path.exists(after_file):
                 os.remove(after_file)
             os.rename(before_file,after_file)
-
 
         # 動画を読み込む
         width, height = 1280, 720
@@ -171,11 +170,8 @@ def OpenFace(root_dir):
 
 
                 if ply:
-                    if frame_count == 60 or frame_count == 291 or frame_count == 155:
-                    # if frame_count == 150 or frame_count == 512 or frame_count == 513 or frame_count==511 or frame_count == 510 or frame_count == 514 or frame_count==515:
-                        if os.path.isfile(dir_path + f"plycam/random_cloud{frame_count}.ply"):
-                            pass
-                    # if frame_count == 150:
+                    # if frame_count == 60 or frame_count == 291 or frame_count == 155:
+                    if frame_count == 150 or frame_count == 514:
                         save_frame_count.append(frame_count)
                         xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                         xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
