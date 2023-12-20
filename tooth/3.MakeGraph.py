@@ -22,6 +22,7 @@ caliblation_time = 5
 ply_create = False #Trueがplyファイル作成
 transp = False  #Trueが背景透明
 ear = False  #Trueがblink_frame_npy（まばたき補正）を使用
+seal_3dplot = False  #Trueがシールの3D軌道作成
 
 global theta_co_x, theta_co_y, theta_co_z
 theta_co_y = np.deg2rad(0)
@@ -401,26 +402,27 @@ def MakeGraph(root_dir, fps):
         except:
             pass
 
-        #3次元プロット
-        fig = plt.gcf()
-        plt.close(fig)
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.set_xlabel('X [mm]',fontsize=15)
-        ax.set_ylabel('Z [mm]',fontsize=15)
-        ax.set_zlabel('Y [mm]',fontsize=15)
-        ax.scatter(XL_x_seal_SG[2:], XL_z_seal_SG[2:], XL_y_seal_SG[2:], c=colors, s=15, alpha = 0.7)
-        ax.scatter(XL_x_seal_SG[1], XL_z_seal_SG[1], XL_y_seal_SG[1], c=[(255/255,165/255,0)], s=200, marker="*")
-        ax.plot(XL_x_seal_SG[2:], XL_z_seal_SG[2:], XL_y_seal_SG[2:], alpha = 0.3)
-        #アスペクト比を揃える
-        max_range = np.array([XL_x_seal_SG.max()-XL_x_seal_SG.min(), XL_z_seal_SG.max()-XL_z_seal_SG.min(), XL_y_seal_SG.max()-XL_y_seal_SG.min()]).max() / 2.0
-        mid_x = (XL_x_seal_SG.max()+XL_x_seal_SG.min()) * 0.5
-        mid_z = (XL_z_seal_SG.max()+XL_z_seal_SG.min()) * 0.5
-        mid_y = (XL_y_seal_SG.max()+XL_y_seal_SG.min()) * 0.5
-        ax.set_xlim(mid_x - max_range, mid_x + max_range)
-        ax.set_ylim(mid_z - max_range, mid_z + max_range)
-        ax.set_zlim(mid_y - max_range, mid_y + max_range)
-        plt.tight_layout()
-        plt.show()
+        if seal_3dplot:
+            #3次元プロット
+            fig = plt.gcf()
+            plt.close(fig)
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.set_xlabel('X [mm]',fontsize=15)
+            ax.set_ylabel('Z [mm]',fontsize=15)
+            ax.set_zlabel('Y [mm]',fontsize=15)
+            ax.scatter(XL_x_seal_SG[2:], XL_z_seal_SG[2:], XL_y_seal_SG[2:], c=colors, s=15, alpha = 0.7)
+            ax.scatter(XL_x_seal_SG[1], XL_z_seal_SG[1], XL_y_seal_SG[1], c=[(255/255,165/255,0)], s=200, marker="*")
+            ax.plot(XL_x_seal_SG[2:], XL_z_seal_SG[2:], XL_y_seal_SG[2:], alpha = 0.3)
+            #アスペクト比を揃える
+            max_range = np.array([XL_x_seal_SG.max()-XL_x_seal_SG.min(), XL_z_seal_SG.max()-XL_z_seal_SG.min(), XL_y_seal_SG.max()-XL_y_seal_SG.min()]).max() / 2.0
+            mid_x = (XL_x_seal_SG.max()+XL_x_seal_SG.min()) * 0.5
+            mid_z = (XL_z_seal_SG.max()+XL_z_seal_SG.min()) * 0.5
+            mid_y = (XL_y_seal_SG.max()+XL_y_seal_SG.min()) * 0.5
+            ax.set_xlim(mid_x - max_range, mid_x + max_range)
+            ax.set_ylim(mid_z - max_range, mid_z + max_range)
+            ax.set_zlim(mid_y - max_range, mid_y + max_range)
+            plt.tight_layout()
+            plt.show()
 
 MakeGraph(root_dir, 30)
