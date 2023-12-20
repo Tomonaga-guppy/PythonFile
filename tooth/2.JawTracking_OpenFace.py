@@ -9,8 +9,8 @@ import sys
 import random
 import pyrealsense2 as rs
 
-
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 
@@ -22,7 +22,7 @@ depth_scale = 1.0000000474974513
 ply = False  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*[f]/RGB_image')  #RGB_imageがあるディレクトリを検索
+    pattern = os.path.join(root_dir, '2*/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
     for i,RGB_dir in enumerate(RGB_dirs):
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
@@ -39,10 +39,6 @@ def OpenFace(root_dir):
         #root_dirの2つ前のディレクトリパスを取得
         bagfile = os.path.dirname(os.path.dirname(dir_path)) + '/'+ id + '.bag'
         print(f"bagfile = {bagfile}")
-
-        accel_path = os.path.join(dir_path,"accel_data.npy")
-        accel = np.load(accel_path, allow_pickle=True) #[frame][x,y,z]
-        theta_camera = np.arccos(np.mean(abs(accel[:,1]))/(np.sqrt(np.mean(accel[:,1])**2+np.mean(accel[:,2])**2)))
 
         if not glob.glob(RGB_dir + "/*"):  #bagファイルの読み取りが出来ていない場合は飛ばす
             continue
