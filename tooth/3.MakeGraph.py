@@ -11,9 +11,8 @@ import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages #pdfで保存する
 import trimesh
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
-
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
 
@@ -30,7 +29,7 @@ theta_co_z = np.deg2rad(0)
 theta_co_x = np.deg2rad(0)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '2*/result.npy')
+    pattern = os.path.join(root_dir, '*b/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -45,13 +44,16 @@ def MakeGraph(root_dir, fps):
         XL_x_seal = []
         XL_y_seal = []
         XL_z_seal = []
-
         theta_nose_sum = 0
         X = []
         Y = []
         Z = []
 
-        for frame_number in range(1,aa.shape[0]+1):
+        frame_number = 1
+
+
+        while True:
+        # for frame_number in range(1,aa.shape[0]+1):
             # print(frame_number)
             #鼻先(30)、左右目(36,45)の位置ベクトル
             bector_30 = np.array([aa[frame_number-1][30][1], aa[frame_number-1][30][2], aa[frame_number-1][30][3]])
@@ -210,6 +212,11 @@ def MakeGraph(root_dir, fps):
                                 for vertex in range(len(mesh.vertices)):
                                     vertex = list(map(str, XL[vertex,:]))
                                     ply_file.write(" ".join(vertex) + "\n")
+
+            frame_number += 1
+            if frame_number > aa.shape[0]:  #frame_numberがaa.shape[0]を超えたらwhileを抜ける
+                break
+
 
         print('theta_nose [deg] = ', np.rad2deg(theta_nose))
         print('theta_cam [deg] = ', np.rad2deg(theta_camera))
