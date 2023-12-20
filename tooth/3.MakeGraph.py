@@ -11,15 +11,16 @@ import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages #pdfで保存する
 import trimesh
 
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
 
 caliblation_time = 5
 
 ply_create = False #Trueがplyファイル作成
-transp = True  #Trueが背景透明
+transp = False  #Trueが背景透明
 ear = False  #Trueがblink_frame_npy（まばたき補正）を使用
 
 global theta_co_x, theta_co_y, theta_co_z
@@ -28,7 +29,7 @@ theta_co_z = np.deg2rad(0)
 theta_co_x = np.deg2rad(0)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*d/result.npy')
+    pattern = os.path.join(root_dir, '2*/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -296,7 +297,10 @@ def MakeGraph(root_dir, fps):
 
         # 散布図,線を描画
         fig = plt.figure(figsize=(14, 5))
-        # fig = plt.figure(figsize=(20, 5))
+
+        id = os.path.basename(os.path.dirname(dir_path))
+        if id == "20231218_d":
+            fig = plt.figure(figsize=(20, 5))
         ax1 = fig.add_subplot(1,2,2)  #1行2列つくって右に配置
 
         ax1.set_xlabel('X [mm]',fontsize=15)
@@ -308,6 +312,10 @@ def MakeGraph(root_dir, fps):
             ax1.grid(which = "major", axis = "y", color = "gray", alpha = 0.5, linestyle = "-", linewidth = 1)
             ax1.grid(which = "minor", axis = "x", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
             ax1.grid(which = "minor", axis = "y", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
+
+            #各点にframe番号を表示
+            for i in range(1,data_num+1):
+                ax1.annotate(i, (XL_x_seal_SG[ i], XL_y_seal_SG[i]), fontsize=6, path_effects=[patheffects.withStroke(linewidth=1, foreground="w")])
 
         ax1.set_aspect('equal', adjustable='box')
 
@@ -338,6 +346,10 @@ def MakeGraph(root_dir, fps):
             ax2.grid(which = "major", axis = "y", color = "gray", alpha = 0.5, linestyle = "-", linewidth = 1)
             ax2.grid(which = "minor", axis = "x", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
             ax2.grid(which = "minor", axis = "y", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
+
+            #各点にframe番号を表示
+            for i in range(1,data_num+1):
+                ax2.annotate(i, (XL_z_seal_SG[ i], XL_y_seal_SG[i]), fontsize=6, path_effects=[patheffects.withStroke(linewidth=1, foreground="w")])
 
         ax2.invert_xaxis()
         ax2.set_aspect('equal', adjustable='box')
@@ -388,5 +400,27 @@ def MakeGraph(root_dir, fps):
                         print(f"error a,b,c,d = {a-mkg_a:.1f}, {b-mkg_b:.1f}, {c-mkg_c:.1f}, {d-mkg_d:.1f}")
         except:
             pass
+
+        #3次元プロット
+        fig = plt.gcf()
+        plt.close(fig)
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.set_xlabel('X [mm]',fontsize=15)
+        ax.set_ylabel('Z [mm]',fontsize=15)
+        ax.set_zlabel('Y [mm]',fontsize=15)
+        ax.scatter(XL_x_seal_SG[2:], XL_z_seal_SG[2:], XL_y_seal_SG[2:], c=colors, s=15, alpha = 0.7)
+        ax.scatter(XL_x_seal_SG[1], XL_z_seal_SG[1], XL_y_seal_SG[1], c=[(255/255,165/255,0)], s=200, marker="*")
+        ax.plot(XL_x_seal_SG[2:], XL_z_seal_SG[2:], XL_y_seal_SG[2:], alpha = 0.3)
+        #アスペクト比を揃える
+        max_range = np.array([XL_x_seal_SG.max()-XL_x_seal_SG.min(), XL_z_seal_SG.max()-XL_z_seal_SG.min(), XL_y_seal_SG.max()-XL_y_seal_SG.min()]).max() / 2.0
+        mid_x = (XL_x_seal_SG.max()+XL_x_seal_SG.min()) * 0.5
+        mid_z = (XL_z_seal_SG.max()+XL_z_seal_SG.min()) * 0.5
+        mid_y = (XL_y_seal_SG.max()+XL_y_seal_SG.min()) * 0.5
+        ax.set_xlim(mid_x - max_range, mid_x + max_range)
+        ax.set_ylim(mid_z - max_range, mid_z + max_range)
+        ax.set_zlim(mid_y - max_range, mid_y + max_range)
+        plt.tight_layout()
+        plt.show()
 
 MakeGraph(root_dir, 30)
