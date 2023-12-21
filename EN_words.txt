@@ -1,0 +1,6 @@
+#論文などで出てきた英単語，熟語などの記録
+
+state-of-the-art        :最先端の
+out-of-the-box          :すぐに使える，(独創的な)
+sparse                  :疎な，まばらな
+Brute-Force             :力任せ

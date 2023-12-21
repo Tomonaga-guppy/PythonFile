@@ -5,14 +5,14 @@ import glob
 import os
 
 root_dir = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale"
-dir_paths = glob.glob(os.path.join(root_dir,"*d/OpenFace.avi"))
+dir_paths = glob.glob(os.path.join(root_dir,"*a/OpenFace.avi"))
 
 for i,dir_path in enumerate(dir_paths):
     dir_path = os.path.dirname(dir_path)
     # if os.path.isfile(dir_path + r"\ply\random_cloud150.ply") == False or os.path.isfile(dir_path + r"\ply\random_cloud512.ply") == False :
     #     print(f'{dir_path}にはplyファイルがありません.')
     #     continue
-    ply_path = dir_path + r"\ply\random_cloud150.ply"
+    ply_path = dir_path + r"\plycam\random_cloud60.ply"
     # ply_path2 = dir_path + r"\ply\random_cloud514.ply"
     # ply_path = dir_path + r"\ply\random_cloud60.ply"
     # ply_path2 = dir_path + r"\ply\random_cloud291.ply"
@@ -33,8 +33,8 @@ for i,dir_path in enumerate(dir_paths):
     ax.axhline(0, color='black', alpha=0.4)
     ax.axvline(0, color='black', alpha=0.4)
     #描画範囲設定
-    ax.set_xlim(-100,100)
-    ax.set_ylim(-150,50)
+    # ax.set_xlim(-100,100)
+    # ax.set_ylim(-150,50)
     #アスペクト比を1:1に
     ax.set_aspect('equal', adjustable='box')
 

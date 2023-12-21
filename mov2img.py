@@ -3,13 +3,13 @@ import os
 import glob
 
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
-root_dir = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale"
+root_dir = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_12_20"
 
-# video_path = glob.glob(os.path.join(root_dir, "*b/SealDetection.mp4"))[0]
+# video_path = glob.glob(os.path.join(root_dir, "*/SealDetection.mp4"))[0]
 # dir_name = os.path.dirname(video_path)
 # output_folder = os.path.join(dir_name, "SealDetection")
 
-video_path = glob.glob(os.path.join(root_dir,"*b/OpenFace.avi"))[0]
+video_path = glob.glob(os.path.join(root_dir,"*a/OpenFace.avi"))[0]
 dir_name = os.path.dirname(video_path)
 output_folder = os.path.join(dir_name, "OpenFace")
 

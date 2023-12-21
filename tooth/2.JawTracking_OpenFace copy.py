@@ -17,10 +17,10 @@ seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_temp
 #depth_scale = mm/depth_data
 depth_scale = 1.0000000474974513
 
-ply = True  #plyファイルを作成するかどうか(Trueは作成する)
+ply = False  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*a/RGB_image')  #RGB_imageがあるディレクトリを検索
+    pattern = os.path.join(root_dir, '*[a-b]/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
     for i,RGB_dir in enumerate(RGB_dirs):
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
@@ -157,30 +157,12 @@ def OpenFace(root_dir):
                     z = result_frame.get_distance(xpix, ypix)
                     point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
                     x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
-
-                    if i ==36 or i==45 or i ==30:
-                        z_min = 100000
-                        for xpix_ex in range(-10,11):
-                            for ypix_ex in range(-10,11):
-                                xpix = int(float(OpenFace_result[frame_count][i+5])) + xpix_ex
-                                ypix = int(float(OpenFace_result[frame_count][i+73])) + ypix_ex
-                                z = result_frame.get_distance(xpix, ypix)
-                                point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
-                                x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
-
-                                if z < z_min:
-                                    z_min = z
-                                    x_min, y_min = x, y
-
-                        x,y,z = x_min, y_min, z_min
-
                     landmark_List.append([i,x,y,z])
 
 
                 if ply:
                     # if frame_count == 60 or frame_count == 291 or frame_count == 155:
-                    # if frame_count == 150 or frame_count == 514:
-                    if frame_count == 60:
+                    if frame_count == 150 or frame_count == 514:
                         save_frame_count.append(frame_count)
                         xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                         xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
@@ -218,28 +200,6 @@ def OpenFace(root_dir):
                                 z = result_frame.get_distance(xpix, ypix)
                                 point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
                                 x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
-
-
-                                # if i ==36 or i==45 or i ==30:
-                                #     zmin = 100000
-                                #     zmax = -100000
-                                #     for xpix_ex in range(-10,11):
-                                #         for ypix_ex in range(-10,11):
-                                #             xpix = int(float(OpenFace_result[frame_count][i+5])) + xpix_ex
-                                #             ypix = int(float(OpenFace_result[frame_count][i+73])) + ypix_ex
-                                #             z = result_frame.get_distance(xpix, ypix)
-                                #             point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
-                                #             x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
-
-                                #             if z < zmax and (i ==36 or i==45):
-                                #                 xmax, ymax, zmax = x, y, z
-                                #                 x,y,z = xmax, ymax, zmax
-
-                                #             if z < z_min and (i ==30):
-                                #                 xmin, ymin, zmin = x, y, z
-                                #                 x,y,z = xmin, ymin, zmin
-
-
                                 ply_list2.append([x,y,z])
                             ply_list2.append([seal_x,seal_y,seal_z])  #シールの座標を追加
                         except IndexError:

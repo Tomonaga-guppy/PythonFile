@@ -10,16 +10,17 @@ import csv
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages #pdfで保存する
 import trimesh
+import pyrealsense2 as rs
+import cv2
 
+
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_11_17"
 
 caliblation_time = 5
 
 ply_create = False #Trueがplyファイル作成
-transp = False  #Trueが背景透明
+transp = True  #Trueが背景透明
 ear = False  #Trueがblink_frame_npy（まばたき補正）を使用
 seal_3dplot = False  #Trueがシールの3D軌道作成
 
@@ -29,7 +30,7 @@ theta_co_z = np.deg2rad(0)
 theta_co_x = np.deg2rad(0)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*b/result.npy')
+    pattern = os.path.join(root_dir, '*c/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -51,14 +52,12 @@ def MakeGraph(root_dir, fps):
 
         frame_number = 1
 
-
         while True:
-        # for frame_number in range(1,aa.shape[0]+1):
-            # print(frame_number)
             #鼻先(30)、左右目(36,45)の位置ベクトル
             bector_30 = np.array([aa[frame_number-1][30][1], aa[frame_number-1][30][2], aa[frame_number-1][30][3]])
             bector_36 = np.array([aa[frame_number-1][36][1], aa[frame_number-1][36][2], aa[frame_number-1][36][3]])
             bector_45 = np.array([aa[frame_number-1][45][1], aa[frame_number-1][45][2], aa[frame_number-1][45][3]])
+
 
             #e_x (36 → 45のベクトル)
             bector_x = bector_45 - bector_36
@@ -307,7 +306,7 @@ def MakeGraph(root_dir, fps):
         fig = plt.figure(figsize=(14, 5))
 
         id = os.path.basename(os.path.dirname(dir_path))
-        if id == "20231218_d":
+        if id == "20231218_f":
             fig = plt.figure(figsize=(20, 5))
         ax1 = fig.add_subplot(1,2,2)  #1行2列つくって右に配置
 

@@ -8,9 +8,8 @@ import os
 import sys
 import csv
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_09_000"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 
 # if len(sys.argv) > 1:
 #     root_dir = sys.argv[1]
@@ -18,7 +17,7 @@ root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_
 #     print("bagファイルのあるディレクトリパスが指定されていません。")
 #     sys.exit()
 
-pattern = os.path.join(root_dir, '2*.bag')
+pattern = os.path.join(root_dir, '*.bag')
 bag_files = glob.glob(pattern, recursive=True)
 
 error_bagfiles = []  #読み取れなかったbagファイル記録用
