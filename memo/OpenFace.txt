@@ -1,0 +1,13 @@
+・OpenFace
+Convolutional Experts Constrained Local Model（CE-CLM）[75]を顔の特徴点検出と追跡に使用しています。CE-CLMの主要な2つのコンポーネントは、
+ランドマークの形状変動を捉えるPoint Distribution Model（PDM）と、各ランドマークの局所的な外観変動をモデル化するパッチエキスパートです。
+
+CE-CLMは主にPDMとパッチエキスパートの2つのコンポーネントから構成されている．
+
+
+
+
+------------------------------------------------------------------------------------------------------
+・CE-CLM
+CE-CLMはローカル検出器としてCEN(Convolutional Experts Network)を利用するCLMモデル(Constrained Local Models)のこと
+
