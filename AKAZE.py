@@ -3,9 +3,11 @@ import os
 import csv
 import numpy as np
 
-dir_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_09_000\20230606_J2"
+dir_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_12_20\20231117_a"
+# dir_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_09_000\20230606_J2"
 # テンプレートマッチングを実行する
-template_path = r"C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
+template_path = r"C:\Users\zutom\.vscode\PythonFile\temp.png"
+# template_path = r"C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
 image_path = dir_path + "/RGB_image/0001.png"
 img = cv2.imread(image_path)
 imgcopy = img.copy()
@@ -43,7 +45,7 @@ mask_img = cv2.bitwise_and(imgcopy, mask)
 
 # 画像を読み込む
 template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
-image = mask_img
+image = cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY)
 # image = cv2.imread(mask_img, cv2.IMREAD_GRAYSCALE)
 
 # AKAZE特徴量を抽出する
@@ -58,7 +60,7 @@ print(matches)
 matches = sorted(matches, key=lambda x: x.distance)
 
 # マッチング結果を表示する
-result = cv2.drawMatches(template, kp1, image, kp2[:], matches, None, flags=2)
+result = cv2.drawMatches(template, kp1, image, kp2, matches, None, flags=2)
 # result = cv2.drawMatches(template, kp1, image, kp2, matches[:30], None, flags=2)
 # result = cv2.drawMatches(template, kp1, image, kp2, matches[:100], None, flags=2)
 
