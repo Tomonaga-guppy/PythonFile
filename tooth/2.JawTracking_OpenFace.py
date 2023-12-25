@@ -76,6 +76,7 @@ def OpenFace(root_dir):
 
         ply_list_all = []
         ply_list2_all = []
+        ply_list3_all = []
 
         pix_list = []
         save_frame_count = []
@@ -158,21 +159,21 @@ def OpenFace(root_dir):
                     point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
                     x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
 
-                    if i ==36 or i==45 or i ==30:
-                        z_min = 100000
-                        for xpix_ex in range(-10,11):
-                            for ypix_ex in range(-10,11):
-                                xpix = int(float(OpenFace_result[frame_count][i+5])) + xpix_ex
-                                ypix = int(float(OpenFace_result[frame_count][i+73])) + ypix_ex
-                                z = result_frame.get_distance(xpix, ypix)
-                                point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
-                                x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
+                    # if i ==36 or i==45 or i ==30:
+                    #     z_min = 100000
+                    #     for xpix_ex in range(-10,11):
+                    #         for ypix_ex in range(-10,11):
+                    #             xpix = int(float(OpenFace_result[frame_count][i+5])) + xpix_ex
+                    #             ypix = int(float(OpenFace_result[frame_count][i+73])) + ypix_ex
+                    #             z = result_frame.get_distance(xpix, ypix)
+                    #             point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
+                    #             x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
 
-                                if z < z_min:
-                                    z_min = z
-                                    x_min, y_min = x, y
+                    #             if z < z_min:
+                    #                 z_min = z
+                    #                 x_min, y_min = x, y
 
-                        x,y,z = x_min, y_min, z_min
+                    #     x,y,z = x_min, y_min, z_min
 
                     landmark_List.append([i,x,y,z])
 
@@ -180,7 +181,8 @@ def OpenFace(root_dir):
                 if ply:
                     # if frame_count == 60 or frame_count == 291 or frame_count == 155:
                     # if frame_count == 150 or frame_count == 514:
-                    if frame_count == 60:
+                    if frame_count==60 or frame_count == 220 or frame_count==225:  #aのまばたき
+                    # if frame_count % 30 == 0:
                         save_frame_count.append(frame_count)
                         xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                         xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
@@ -191,7 +193,7 @@ def OpenFace(root_dir):
                         # print(max([OpenFace_result[frame_count][i+73] for i in range(68)]))
                         pix_list.append([xpix_min, xpix_max, ypix_min, ypix_max])
 
-                        point_num = 200000
+                        point_num = 100000
                         ply_list  = []
                         try:
                             for i in range(point_num):
@@ -219,32 +221,41 @@ def OpenFace(root_dir):
                                 point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
                                 x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
 
-
-                                # if i ==36 or i==45 or i ==30:
-                                #     zmin = 100000
-                                #     zmax = -100000
-                                #     for xpix_ex in range(-10,11):
-                                #         for ypix_ex in range(-10,11):
-                                #             xpix = int(float(OpenFace_result[frame_count][i+5])) + xpix_ex
-                                #             ypix = int(float(OpenFace_result[frame_count][i+73])) + ypix_ex
-                                #             z = result_frame.get_distance(xpix, ypix)
-                                #             point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
-                                #             x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
-
-                                #             if z < zmax and (i ==36 or i==45):
-                                #                 xmax, ymax, zmax = x, y, z
-                                #                 x,y,z = xmax, ymax, zmax
-
-                                #             if z < z_min and (i ==30):
-                                #                 xmin, ymin, zmin = x, y, z
-                                #                 x,y,z = xmin, ymin, zmin
-
-
                                 ply_list2.append([x,y,z])
                             ply_list2.append([seal_x,seal_y,seal_z])  #シールの座標を追加
                         except IndexError:
                             break  #OpenFaceの解析したframe数と合わなくなったら終了
                         ply_list2_all.append(ply_list2)
+
+                        ply_lisst3 = []
+                        try:
+                            for i in range(68):
+                                xpix = int(float(OpenFace_result[frame_count][i+5]))
+                                ypix = int(float(OpenFace_result[frame_count][i+73]))
+
+                                if i ==36 or i==45 or i ==30:
+                                    zmin = 100000
+                                    zmax = -100000
+                                    xf,yf,zf = 0,0,0
+                                    for xpix_ex in range(-10,11):
+                                        for ypix_ex in range(-10,11):
+                                            xpix = int(float(OpenFace_result[frame_count][i+5])) + xpix_ex
+                                            ypix = int(float(OpenFace_result[frame_count][i+73])) + ypix_ex
+                                            z = result_frame.get_distance(xpix, ypix)
+                                            point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
+                                            x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
+
+                                            if z > zmax and (i ==36 or i==45):
+                                                zmax = z
+                                                xf,yf,zf = x,y,z
+
+                                            if z < zmin and (i ==30):
+                                                zmin = z
+                                                xf,yf,zf = x,y,z
+                                    ply_lisst3.append([xf,yf,zf])
+                        except IndexError:
+                            break
+                        ply_list3_all.append(ply_lisst3)
 
                 landmark_List.append([68,seal_x,seal_y,seal_z])
                 cv2.circle(imgcopy, (int(seal_x_pixel),int(seal_y_pixel)), 5, (255, 0, 255), -1)    #整数型
@@ -261,28 +272,11 @@ def OpenFace(root_dir):
             #作製したnumpy配列は[フレーム数-1[landmark number[number, x, y, z]]]
             pipeline.stop()
 
-
-            # #まばたき検出
-            # #EAR（目のアスペクト比閾値）決定
-            # ear_list = []
-            # blink_frame_list = []
-            # for frame in range(1,151): #最初の150フレームで閾値を決定
-            #     ear = BlinkDetection(OpenFace_result,frame)
-            #     ear_list.append(ear)
-            # ear_threshold = np.median(ear_list)
-
-            # #閾値より小さければまばたきと判定
-            # for frame in range(1,frame_count): #まばたきをしているフレームをリストに追加
-            #     ear = BlinkDetection(OpenFace_result,frame)
-            #     if ear < ear_threshold:
-            #         blink_frame_list.append(frame)
-            # print(f"blink_frame_list = {blink_frame_list}")
-            # print(f"blink frame = {len(blink_frame_list)}")
-
             if ply:
                 # print(f"ply_list2_all.shape = {np.array(ply_list2_all).shape}")
                 ply_list_all = np.array(ply_list_all)
                 ply_list2_all = np.array(ply_list2_all)
+                ply_list3_all = np.array(ply_list3_all)
 
                 ply_path = dir_path + "plycam"
                 if not os.path.exists(ply_path):
@@ -293,6 +287,7 @@ def OpenFace(root_dir):
                     # PLYファイルのヘッダを書き込む
                     header = f"ply\nformat ascii 1.0\nelement vertex {point_num}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
                     header_face = f"ply\nformat ascii 1.0\nelement vertex 69\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
+                    header_face_df = f"ply\nformat ascii 1.0\nelement vertex 3\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
 
                     # PLYファイルに書き込む
                     with open(dir_path + f"plycam/random_cloud{frame_count}.ply", "w") as ply_file:
@@ -305,6 +300,13 @@ def OpenFace(root_dir):
                     with open(dir_path + f"plycam/face_cloud{frame_count}.ply", "w") as ply_file:
                         ply_file.write(header_face)
                         for vertex in ply_list2_all[i,:,:]:
+                            ply_file.write(" ".join(map(str, vertex)) + "\n")
+
+                    # PLYファイルに書き込む
+                    with open(dir_path + f"plycam/face_cloud_df{frame_count}.ply", "w") as ply_file:
+                        ply_file.write(header_face_df)
+                        for vertex in ply_list3_all[i,:,:]:
+                            vertex = list(map(str, vertex[:3])) + list(map(str, map(int, [255, 0, 0])))
                             ply_file.write(" ".join(map(str, vertex)) + "\n")
 
 # def SealDetection(height,width,img):

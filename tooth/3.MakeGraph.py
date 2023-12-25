@@ -8,21 +8,18 @@ from matplotlib.cm import ScalarMappable
 import sys
 import csv
 import pandas as pd
-from matplotlib.backends.backend_pdf import PdfPages #pdfで保存する
 import trimesh
-import pyrealsense2 as rs
-import cv2
 
 
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 
-caliblation_time = 5
+caliblation_time = 2
 
-ply_create = False #Trueがplyファイル作成
-transp = True  #Trueが背景透明
+ply_create = True #Trueがplyファイル作成
+transp = False  #Trueが背景透明
 ear = False  #Trueがblink_frame_npy（まばたき補正）を使用
-seal_3dplot = False  #Trueがシールの3D軌道作成
+seal_3dplot = True  #Trueがシールの3D軌道作成
 
 global theta_co_x, theta_co_y, theta_co_z
 theta_co_y = np.deg2rad(0)
@@ -30,7 +27,7 @@ theta_co_z = np.deg2rad(0)
 theta_co_x = np.deg2rad(0)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*c/result.npy')
+    pattern = os.path.join(root_dir, '*a/result.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -154,7 +151,7 @@ def MakeGraph(root_dir, fps):
                 if ply_create == True:
                     # # if frame_number == 122 or frame_number == 240 or frame_number == 161:  #a1最大開口時
                     # if frame_number == 150 or frame_number == 514:  #b1
-                    if frame_number == 150:
+                    # if frame_number == 150:
                         if os.path.isfile(dir_path + f"plycam/random_cloud{frame_number}.ply"):
                             random_ply_path = dir_path + f"plycam/random_cloud{frame_number}.ply"
                             print(random_ply_path)
@@ -248,29 +245,6 @@ def MakeGraph(root_dir, fps):
             df.loc[blink_frame_npy, :] = np.nan
             df = df.interpolate(method='spline', order=1, limit_direction='both')
 
-        # #グラフ開始，終了frameの決定
-        # start_frame = 0
-        # for fnum in range(df.shape[0]):
-        #     if XL_x_seal[fnum] - XL_x_seal[fnum+10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum+10] > 1.5:
-        #         start_frame = fnum
-        #         # print(XL_x_seal[fnum])
-        #         # print(XL_x_seal[fnum+10])
-        #         # print(f"XL_x_seal[fnum+10] - XL_x_seal[fnum] = {XL_x_seal[fnum+10] - XL_x_seal[fnum]}")
-        #         break
-
-        # end_frame = df.shape[0]
-        # for fnum in range(df.shape[0]-1,0,-1):
-        #     # if XL_x_seal[fnum] - XL_x_seal[fnum-10] > 1.5 and XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
-        #     if XL_y_seal[fnum] - XL_y_seal[fnum-10] > 1.5:
-        #     # if fnum > start_frame and XL_y_seal[fnum-30] - XL_y_seal[fnum] < -1 and abs(XL_y_seal[fnum]-XL_y_seal[start_frame]) < 2:
-        #         # print(XL_x_seal[fnum])
-        #         # print(XL_x_seal[fnum+10])
-        #         end_frame = fnum
-        #         break
-
-        # df = df[start_frame:end_frame]  #初期位置以前のデータは削除
-        # print(start_frame,end_frame)
-        # df = df.reset_index(drop=True)  #indexを0からにリセット
         df_sg = pd.DataFrame(index=df.index)
         # 各列データを平滑化して、結果をdf_sgに格納
         #SG法   https://mimikousi.com/smoothing_savgol/

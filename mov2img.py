@@ -5,13 +5,9 @@ import glob
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 root_dir = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_12_20"
 
-# video_path = glob.glob(os.path.join(root_dir, "*/SealDetection.mp4"))[0]
-# dir_name = os.path.dirname(video_path)
-# output_folder = os.path.join(dir_name, "SealDetection")
-
-video_path = glob.glob(os.path.join(root_dir,"*a/OpenFace.avi"))[0]
-dir_name = os.path.dirname(video_path)
-output_folder = os.path.join(dir_name, "OpenFace")
+target = "*/"
+# flag = "OpenFace"
+flag = "SealDetection"
 
 def save_frames(video_path, output_folder):
     video = cv2.VideoCapture(video_path)
@@ -30,7 +26,16 @@ def save_frames(video_path, output_folder):
         frame_count += 1
     video.release()
 
-if os.path.exists(output_folder) == False:
-    os.mkdir(output_folder)
+if flag == "OpenFace":  video_paths = glob.glob(os.path.join(root_dir,(target + "OpenFace.avi")))
+elif flag == "SealDetection":  video_paths = glob.glob(os.path.join(root_dir, (target + "SealDetection.mp4")))
 
-save_frames(video_path, output_folder)
+for i,video_path in enumerate(video_paths):
+    print(f"{i+1}/{len(video_paths)}")
+    dir_name = os.path.dirname(video_path)
+    if flag == "OpenFace":  output_folder = os.path.join(dir_name, "OpenFace")
+    elif flag == "SealDetection":  output_folder = os.path.join(dir_name, "SealDetection")
+
+    if os.path.exists(output_folder) == False:
+        os.mkdir(output_folder)
+
+    save_frames(video_path, output_folder)
