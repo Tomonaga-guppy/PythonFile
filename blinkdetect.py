@@ -5,9 +5,12 @@ import csv
 import cv2
 import pandas as pd
 import matplotlib.pyplot as plt
+import scipy.signal as signal
+from matplotlib.backends.backend_pdf import PdfPages
 
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/scale"
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
+pdf = PdfPages(os.path.join(root_dir,'EAR.pdf'))
 
 def BlinkDetection(OpenFace_result,frame):
     eye_landmark_list  = [range(36,42),range(42,48)]
@@ -23,8 +26,10 @@ def BlinkDetection(OpenFace_result,frame):
         ear_sum += (ver1 + ver2) / (2.0 * hor)
     return ear_sum  #右目と左目のEARの合計を返す
 
-pattern = os.path.join(root_dir, '*a1*/RGB_image')  #RGB_imageがあるディレクトリを検索
+pattern = os.path.join(root_dir, '*/RGB_image')  #RGB_imageがあるディレクトリを検索
 RGB_dirs = glob.glob(pattern, recursive=True)
+
+
 for i,RGB_dir in enumerate(RGB_dirs):
     id = os.path.basename(os.path.dirname(RGB_dir))
     print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
@@ -90,29 +95,34 @@ for i,RGB_dir in enumerate(RGB_dirs):
 
 
 
-    #signal.argrelminによるピーク（極小値）検出
-    import scipy.signal as signal
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    # signal.argrelminによるピーク（極小値）検出
     peaks = signal.argrelmin(df[0].values, order=30)  #わりとあり．連続したまばたきに弱い
     print(f"peaks = {peaks}")
-    plt.scatter(peaks[0], df.iloc[peaks[0]], label="peak", color = "r") #peak
+    ax.scatter(peaks[0], df.iloc[peaks[0]], label="peak", color="r") #peak
     blink_frame_list = peaks[0].tolist()
 
     # earをプロット
-    plt.plot(df.index, df[0], label="value")
-    plt.xticks(np.arange(0, frame_count, 30))
-    plt.yticks(np.arange(0.2, 0.7, 0.1))
-    plt.grid()
-    plt.tick_params(labelsize=10)   #軸のフォントサイズを設定
-    plt.xticks(rotation=-45)  #軸を斜めにする
-    plt.xlabel('frame [-]', fontsize=10)  #軸ラベルを設定
-    plt.ylabel('EAR [-]', fontsize=10)
-    # plt.fill_between(df.index, df.iqr_lower, df.iqr_upper, alpha=0.2) # Upper Lower
-    # plt.scatter(df.index, df.iqr_outlier, label="outlier", color="r") # Outlier
-    plt.legend()
+    ax.plot(df.index, df[0], label="value")
+    ax.set_xticks(np.arange(0, frame_count, 30))
+    ax.set_yticks(np.arange(0.2, 0.7, 0.1))
+    ax.grid()
+    ax.set_title(f'EAR {id}')
+    ax.tick_params(labelsize=10)   #軸のフォントサイズを設定
+    ax.set_xticklabels(ax.get_xticks(), rotation=-45)  #軸を斜めにする
+    ax.set_xlabel('frame [-]', fontsize=10)  #軸ラベルを設定
+    ax.set_ylabel('EAR [-]', fontsize=10)
+    # ax.fill_between(df.index, df.iqr_lower, df.iqr_upper, alpha=0.2) # Upper Lower
+    # ax.scatter(df.index, df.iqr_outlier, label="outlier", color="r") # Outlier
+    ax.legend()
     save_path = dir_path + 'EAR.png'
     plt.savefig(save_path, bbox_inches='tight')
-    plt.show()
-    plt.close()
+    pdf.savefig(fig)
+    # plt.show()
+    plt.close(fig)
 
 
 
@@ -172,26 +182,29 @@ for i,RGB_dir in enumerate(RGB_dirs):
 
 
 
-    mp4_path = glob.glob(dir_path+'*original.mp4')[0]
-    video_out_path = dir_path + 'blinkdetection.mp4'
-    #まばたきがあるフレームは"Blink"とテキストで表示
-    cap = cv2.VideoCapture(mp4_path)
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fourcc = cv2.VideoWriter_fourcc(*'DIVX')
-    video_out = cv2.VideoWriter(video_out_path, fourcc, fps, (width, height))
-    frame = 0
-    while(cap.isOpened()):
-        ret, frame_img = cap.read()
-        if ret == True:
-            if frame in blink_frame_list:
-                cv2.putText(frame_img, 'Blink', (400, 200), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 2, cv2.LINE_AA)
-            video_out.write(frame_img)
-            frame += 1
-        else:
-            break
-    cap.release()
-    video_out.release()
-    cv2.destroyAllWindows()
-    print(f"video_out_path = {video_out_path}")
+    # mp4_path = glob.glob(dir_path+'*original.mp4')[0]
+    # video_out_path = dir_path + 'blinkdetection.mp4'
+    # #まばたきがあるフレームは"Blink"とテキストで表示
+    # cap = cv2.VideoCapture(mp4_path)
+    # fps = cap.get(cv2.CAP_PROP_FPS)
+    # width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    # height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+    # video_out = cv2.VideoWriter(video_out_path, fourcc, fps, (width, height))
+    # frame = 0
+    # while(cap.isOpened()):
+    #     ret, frame_img = cap.read()
+    #     if ret == True:
+    #         if frame in blink_frame_list:
+    #             cv2.putText(frame_img, 'Blink', (400, 200), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 2, cv2.LINE_AA)
+    #         video_out.write(frame_img)
+    #         frame += 1
+    #     else:
+    #         break
+    # cap.release()
+    # video_out.release()
+    # cv2.destroyAllWindows()
+    # print(f"video_out_path = {video_out_path}")
+
+pdf.close()
+print("pdfsaved")
