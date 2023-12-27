@@ -11,3 +11,5 @@ CE-CLMは主にPDMとパッチエキスパートの2つのコンポーネント�
 ・CE-CLM
 CE-CLMはローカル検出器としてCEN(Convolutional Experts Network)を利用するCLMモデル(Constrained Local Models)のこと
 
+Convolutional Experts Constrained Local Model（CECLM）アルゴリズムは、
+主に2つの部分で構成されています。Convolutional Experts Networkによる応答マップの計算と形状パラメータの更新です。

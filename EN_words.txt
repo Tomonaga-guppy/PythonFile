@@ -6,3 +6,6 @@ sparse                  :疎な，まばらな
 Brute-Force             :力任せ
 outperform              :優れている
 proportion              :割合
+lacal                   :局所的
+profile                 :横顔
+fiducial                :基準となる
