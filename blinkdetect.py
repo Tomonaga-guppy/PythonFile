@@ -51,68 +51,56 @@ for i,RGB_dir in enumerate(RGB_dirs):
         ear = BlinkDetection(OpenFace_result,frame)
         ear_list.append(ear)
     input_df = pd.DataFrame(ear_list)
-    df = input_df.copy()
-
-
-    # # 四分位範囲による外れ値検出 https://data-analysis-stats.jp/%E6%A9%9F%E6%A2%B0%E5%AD%A6%E7%BF%92/%E6%99%82%E7%B3%BB%E5%88%97%E3%83%87%E3%83%BC%E3%82%BF%E3%81%AE%E5%A4%96%E3%82%8C%E5%80%A4%E3%81%AE%E7%B5%B1%E8%A8%88%E7%9A%84%E3%81%AA%E6%B1%82%E3%82%81%E6%96%B9%EF%BC%881%E6%AC%A1%E5%85%83%EF%BC%89/
-    # span = 11
-    # threshold = 3
-    # q1 = df.rolling(min_periods=1, window=span).quantile(0.25)
-    # q3 = df.rolling(min_periods=1, window=span).quantile(0.75)
-    # iqr = q3 - q1
-    # iqr_lower = q1 -(iqr * threshold)
-    # iqr_upper = q3 +(iqr * threshold)
-    # df["iqr"] = iqr
-    # df["iqr_lower"] = iqr_lower
-    # df["iqr_upper"] = iqr_upper
-    # df["iqr_outlier"] = df[0][(df[0] < df.iqr_lower) | (df[0] > df.iqr_upper)]
-
-    # #df["iqr_outlier"]がNaNでない行を抽出
-    # df_out = df.dropna(subset=["iqr_outlier"])
-    # #df["iqr_outlier"]がNaNでない行のindexを抽出
-    # blink_frame_list = df_out.index.values.tolist()
-    # # print(blink_frame_list)
-    # #blink_frame_listをnpyファイルとして保存
-    # # np.save(dir_path + 'blink_frame_list.npy', blink_frame_list)
-
-    # # earをプロット
-    # plt.plot(df.index, df[0], label="value")
-    # plt.xticks(np.arange(0, frame_count, 30))
-    # plt.yticks(np.arange(0.2, 0.7, 0.1))
-    # plt.grid()
-    # plt.tick_params(labelsize=10)   #軸のフォントサイズを設定
-    # plt.xticks(rotation=-45)  #軸を斜めにする
-    # plt.xlabel('frame [-]', fontsize=10)  #軸ラベルを設定
-    # plt.ylabel('EAR [-]', fontsize=10)
-    # # plt.fill_between(df.index, df.iqr_lower, df.iqr_upper, alpha=0.2) # Upper Lower
-    # plt.scatter(df.index, df.iqr_outlier, label="outlier", color="r") # Outlier
-    # plt.legend()
-    # save_path = dir_path + 'EAR.png'
-    # plt.savefig(save_path, bbox_inches='tight')
-    # plt.show()
-    # plt.close()
-
-
-
-
-    import matplotlib.pyplot as plt
+    df = input_df
+    df.index = range(1, len(df) + 1)
+    print(f"df = {df}")
+    print(f"df.index = {df.index}")
 
     fig, ax = plt.subplots(figsize=(10, 5))
 
-    # signal.argrelminによるピーク（極小値）検出
-    peaks = signal.argrelmin(df[0].values, order=30)  #わりとあり．連続したまばたきに弱い
-    print(f"peaks = {peaks}")
-    ax.scatter(peaks[0], df.iloc[peaks[0]], label="peak", color="r") #peak
-    blink_frame_list = peaks[0].tolist()
+    # # signal.argrelminによるピーク（極小値）検出
+    # peaks = signal.argrelmin(df[0].values, order=30)  #わりとあり．連続したまばたきに弱い
+    # print(f"peaks = {peaks}")
+    # ax.scatter(peaks[0], df.iloc[peaks[0]], label="peak", color="r") #peak
+    # blink_frame_list = peaks[0].tolist()
+
+    #挑戦
+    threshold_ear_down = 0.06
+    threshold_ear_recov = 0.02
+    blink_list = []
+    try:
+        for frame in range(1,frame_count-5):
+            # print(frame)
+            if df[0][frame] > df[0][frame+1] and df[0][frame] - min(df[0][frame:frame+5]) > threshold_ear_down:  #5フレーム後までの最小値との差が0.05以上 0.05は適当
+                min_index = df[0][frame:frame+5].idxmin()
+                # print("kouho")
+                for add_frame in range(1,30):
+                    if min_index < frame+add_frame and df[0][frame] - df[0][frame+add_frame] < threshold_ear_recov:  #EARが回復したとみなす条件
+                        blink_start_index = frame
+                        blink_end_index = frame + add_frame
+                        blink_list.extend(range(blink_start_index,blink_end_index+1))
+                        print(f"min_index = {min_index}")
+                        print(f"blink_start={blink_start_index},blink_end={blink_end_index}")
+                        break
+                else: pass
+    except KeyError:
+        print("KeyError")
+        pass
+
+    blink_list = sorted(list(set(blink_list))) #blink_listを重複削除して昇順にソート
+    # blink_list.sort()  #blink_listを昇順にソート
+    print(f"blink_list = {blink_list}")
+
+    ax.scatter([i for i in blink_list], [df[0][i] for i in blink_list], label="blink", color="r") #blink
 
     # earをプロット
     ax.plot(df.index, df[0], label="value")
     ax.set_xticks(np.arange(0, frame_count, 30))
-    ax.set_yticks(np.arange(0.2, 0.7, 0.1))
+    ax.set_yticks(np.arange(0.2, 0.75, 0.1))
     ax.grid()
     ax.set_title(f'EAR {id}')
     ax.tick_params(labelsize=10)   #軸のフォントサイズを設定
-    ax.set_xticklabels(ax.get_xticks(), rotation=-45)  #軸を斜めにする
+    # ax.set_xticklabels(ax.get_xticks(), rotation=-45)  #軸を斜めにする
     ax.set_xlabel('frame [-]', fontsize=10)  #軸ラベルを設定
     ax.set_ylabel('EAR [-]', fontsize=10)
     # ax.fill_between(df.index, df.iqr_lower, df.iqr_upper, alpha=0.2) # Upper Lower
@@ -120,67 +108,9 @@ for i,RGB_dir in enumerate(RGB_dirs):
     ax.legend()
     save_path = dir_path + 'EAR.png'
     plt.savefig(save_path, bbox_inches='tight')
+    plt.show()
     pdf.savefig(fig)
-    # plt.show()
     plt.close(fig)
-
-
-
-    # import scipy.signal as signal
-    # from matplotlib.backends.backend_pdf import PdfPages
-
-    # # 平滑化されたデータ用の空のDataFrameを作成
-    # df_sg = pd.DataFrame(index=df.index)
-    # # 各列データを平滑化して、結果をdf_sgに格納
-    # for col in df.columns:
-    #     df_sg[col] = signal.savgol_filter(df[col], window_length=11, polyorder=3)
-
-    # # 平滑化前後の差分
-    # delta_df = abs(df - df_sg)
-    # # Hampel Identifierの適用
-    # delta_diff = abs(delta_df - delta_df.median())
-    # mad = 1.4826 * delta_diff.median()
-    # cl = delta_df.median() + 3 * mad
-    # delta_new = delta_df[delta_diff < 3 * mad]
-    # delta_outliers = delta_df[delta_diff > 3 * mad]
-    # # 新しいデータフレームを作成して平滑化データと外れ値を格納
-    # df_sg_hampel = pd.DataFrame(index=delta_new.index)
-    # df_outliers_sg_hampel = pd.DataFrame(index=delta_outliers.index)
-    # for col in delta_new.columns:
-    #     df_index = delta_new[col].dropna().index
-    #     outlier_index = delta_outliers[col].dropna().index
-    #     df_sg_hampel[col] = df[col].loc[df_index]
-    #     df_outliers_sg_hampel[col] = df[col].loc[outlier_index]
-
-    # #hampelフィルターによる外れ値検出
-    # def Hampel(x, k, thr=3):
-    #     arraySize = len(x)
-    #     idx = np.arange(arraySize)
-    #     output_x = x.copy()
-    #     output_Idx = np.zeros_like(x)
-
-    #     for i in range(arraySize):
-    #         mask1 = np.where( idx >= (idx[i] - k) ,True, False)
-    #         mask2 = np.where( idx <= (idx[i] + k) ,True, False)
-    #         kernel = np.logical_and(mask1, mask2)
-    #         median = np.median(x[kernel])
-    #         std = 1.4826 * np.median(np.abs(x[kernel] - median))
-    #         if np.abs(x[i] - median) > thr * std:
-    #             output_Idx[i] = 1
-    #             output_x[i] = median
-    # # return output_x, output_Idx.astype(bool)
-    #     return output_x, output_Idx
-
-    # # result = Hampel(df[0], k=2, thr=3)
-    # output_x, output_Idx = Hampel(df[0], k=2, thr=3)
-    # print(output_x)
-    # print(output_Idx)
-    # #output_IdxがTrueの行を抽出
-    # df_fillter = df[output_Idx]
-    # plt.plot(df_fillter, df[0], label="value") # Value
-    # plt.show()
-
-
 
     # mp4_path = glob.glob(dir_path+'*original.mp4')[0]
     # video_out_path = dir_path + 'blinkdetection.mp4'
