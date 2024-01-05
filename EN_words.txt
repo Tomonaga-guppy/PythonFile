@@ -9,3 +9,6 @@ proportion              :割合
 lacal                   :局所的
 profile                 :横顔
 fiducial                :基準となる
+temporomandibular       :顎関節
+incisors                :切歯
+

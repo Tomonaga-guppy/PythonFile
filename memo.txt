@@ -57,6 +57,7 @@ FH平面の算出(花王) https://patentimages.storage.googleapis.com/f0/d0/39/9
 ナソヘキサグラフ：file:///C:/Users/zutom/Downloads/gifushika311_1924_2004.pdf
 
 日本顎関節学会, 顎関節症治療の指針(2020) https://kokuhoken.net/jstmj/publication/file/guideline/guideline_treatment_tmj_2020.pdf
+厚生労働省 平成28年歯科疾患実態調査の概要． https://www.mhlw.go.jp/toukei/list/dl/62-28-01.pdf
 
 元ネタ）大阪大のOpenface(咀嚼)  https://confit.atlas.jp/guide/event-img/jcmi2019/3-E-1-02/public/pdf_archive?type=in
 
