@@ -4,10 +4,12 @@ import csv
 import numpy as np
 
 dir_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_12_20\20231117_a"
+dir_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_12_20\20231218_c"
 # dir_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_09_000\20230606_J2"
 # テンプレートマッチングを実行する
-template_path = r"C:\Users\zutom\.vscode\PythonFile\temp.png"
+# template_path = r"C:\Users\zutom\.vscode\PythonFile\temp.png"
 # template_path = r"C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
+template_path = r"C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal_1.png"
 image_path = dir_path + "/RGB_image/0001.png"
 img = cv2.imread(image_path)
 imgcopy = img.copy()
@@ -29,6 +31,12 @@ mask1_y=int(float(OpenFace_result[1][121]))    #48y
 mask2_x=int(float(OpenFace_result[1][59]))    #54x
 mask2_y=int(float(OpenFace_result[1][81]))    #8y
 
+# Crop the image
+cropped_img = imgcopy[mask1_y:mask2_y, mask1_x:mask2_x]
+
+
+
+
 # 矩形のマスク画像の生成
 width, height = 1280, 720
 mask = np.zeros((height,width,3), dtype = np.uint8)
@@ -45,8 +53,11 @@ mask_img = cv2.bitwise_and(imgcopy, mask)
 
 # 画像を読み込む
 template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
-image = cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY)
-# image = cv2.imread(mask_img, cv2.IMREAD_GRAYSCALE)
+# template = cv2.cvtColor(cropped_img, cv2.COLOR_BGR2GRAY)
+image = cv2.cvtColor(cropped_img, cv2.COLOR_BGR2GRAY)
+
+# template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+# image = cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY)
 
 # AKAZE特徴量を抽出する
 akaze = cv2.AKAZE_create()
