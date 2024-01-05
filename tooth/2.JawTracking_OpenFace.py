@@ -8,6 +8,7 @@ import numpy as np
 import sys
 import random
 import pyrealsense2 as rs
+import pandas as pd
 
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
@@ -17,7 +18,7 @@ seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_temp
 #depth_scale = mm/depth_data
 depth_scale = 1.0000000474974513
 
-ply = True  #plyファイルを作成するかどうか(Trueは作成する)
+ply = False  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
     pattern = os.path.join(root_dir, '*a/RGB_image')  #RGB_imageがあるディレクトリを検索
@@ -107,6 +108,7 @@ def OpenFace(root_dir):
         try:
             pre_time = 0
             frame_count = 1
+            ear_list = []
             while True:
                 frames = pipeline.wait_for_frames()
 
@@ -257,6 +259,10 @@ def OpenFace(root_dir):
                             break
                         ply_list3_all.append(ply_lisst3)
 
+
+                ear = BlinkDetection(OpenFace_result,frame_count)
+                ear_list.append(ear)
+
                 landmark_List.append([68,seal_x,seal_y,seal_z])
                 cv2.circle(imgcopy, (int(seal_x_pixel),int(seal_y_pixel)), 5, (255, 0, 255), -1)    #整数型
                 List.append(landmark_List)
@@ -308,6 +314,36 @@ def OpenFace(root_dir):
                         for vertex in ply_list3_all[i,:,:]:
                             vertex = list(map(str, vertex[:3])) + list(map(str, map(int, [255, 0, 0])))
                             ply_file.write(" ".join(map(str, vertex)) + "\n")
+
+
+            ear_df = pd.DataFrame(ear_list)
+            ear_df.index = range(1, len(ear_df) + 1)
+
+            threshold_ear_down = 0.06
+            threshold_ear_recov = 0.02
+            blink_list = []
+            try:
+                for frame in range(1,frame_count-5):
+                    # print(frame)
+                    if ear_df[0][frame] > ear_df[0][frame+1] and ear_df[0][frame] - min(ear_df[0][frame:frame+5]) > threshold_ear_down:  #5フレーム後までの最小値との差が0.05以上 0.05は適当
+                        min_index = ear_df[0][frame:frame+5].idxmin()
+                        # print("kouho")
+                        for add_frame in range(1,30):
+                            if min_index < frame+add_frame and ear_df[0][frame] - ear_df[0][frame+add_frame] < threshold_ear_recov:  #EARが回復したとみなす条件
+                                blink_start_index = frame
+                                blink_end_index = frame + add_frame
+                                blink_list.extend(range(blink_start_index,blink_end_index+1))
+                                print(f"min_index = {min_index}")
+                                print(f"blink_start={blink_start_index},blink_end={blink_end_index}")
+                                break
+                        else: pass
+            except KeyError:
+                print("KeyError")
+                pass
+
+            blink_list = sorted(list(set(blink_list))) #blink_listを重複削除して昇順にソート
+            #blink_listをnpyファイルに保存
+            np.save(dir_path + "blink_list.npy",blink_list)
 
 # def SealDetection(height,width,img):
 def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_count):
@@ -420,5 +456,19 @@ def rotate_template(temp, angle):
     hor = np.linalg.norm(point_pixel[0]-point_pixel[3])
     ear = ver1+ver2/(2*hor)
     return ear
+
+def BlinkDetection(OpenFace_result,frame):
+    eye_landmark_list  = [range(36,42),range(42,48)]
+    ear_sum = 0
+    for eye in range(2):  #右目と左目のEARを計算
+        eye_pixel = []
+        for point in eye_landmark_list[eye]:
+            eye_pixel.append([float(OpenFace_result[frame][point+5]), float(OpenFace_result[frame][point+73])])
+        eye_pixel = np.array(eye_pixel)
+        ver1 =  np.linalg.norm(eye_pixel[1]-eye_pixel[5])
+        ver2 = np.linalg.norm(eye_pixel[2]-eye_pixel[4])
+        hor = np.linalg.norm(eye_pixel[0]-eye_pixel[3])
+        ear_sum += (ver1 + ver2) / (2.0 * hor)
+    return ear_sum  #右目と左目のEARの合計を返す
 
 OpenFace(root_dir)
