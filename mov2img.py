@@ -5,7 +5,7 @@ import glob
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 root_dir = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_12_20"
 
-target = "*/"
+target = "*d/"
 # flag = "OpenFace"
 flag = "SealDetection"
 

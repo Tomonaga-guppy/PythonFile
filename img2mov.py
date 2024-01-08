@@ -22,12 +22,12 @@ def images_to_video(image_folder, video_name):
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 root_dir = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\2023_12_20"
 
-# flag = "OpenFace"
-flag = "SealDetection"
+flag = "OpenFace"
+# flag = "SealDetection"
 
 # 画像フォルダと出力する動画の名前を指定して呼び出す
-if flag == "OpenFace":  input_dirs = glob.glob(os.path.join(root_dir,"*/OpenFace"))
-if flag == "SealDetection":  input_dirs = glob.glob(os.path.join(root_dir,"*/SealDetection"))
+if flag == "OpenFace":  input_dirs = glob.glob(os.path.join(root_dir,"*d/OpenFace"))
+if flag == "SealDetection":  input_dirs = glob.glob(os.path.join(root_dir,"*d/SealDetection"))
 
 for i, input_dir in enumerate(input_dirs):
     print(f"{i+1}/{len(input_dirs)}  {input_dir}")
