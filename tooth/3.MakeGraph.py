@@ -16,10 +16,10 @@ root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_
 
 caliblation_time = 2
 
-ply_create = True #Trueがplyファイル作成
+ply_create = False #Trueがplyファイル作成
 transp = False  #Trueが背景透明
-ear = False  #Trueがblink_frame_npy（まばたき補正）を使用
-seal_3dplot = True  #Trueがシールの3D軌道作成
+ear = True  #Trueがblink_list_npy（まばたき補正）を使用
+seal_3dplot = False  #Trueがシールの3D軌道作成
 
 global theta_co_x, theta_co_y, theta_co_z
 theta_co_y = np.deg2rad(0)
@@ -27,7 +27,7 @@ theta_co_z = np.deg2rad(0)
 theta_co_x = np.deg2rad(0)
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*a/result.npy')
+    pattern = os.path.join(root_dir, '*a/landmark.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -38,6 +38,7 @@ def MakeGraph(root_dir, fps):
         accel_path = os.path.join(dir_path,"accel_data.npy")
         accel = np.load(accel_path, allow_pickle=True)  #[frame][x,y,z]
         theta_camera = np.arccos(np.mean(abs(accel[:,1]))/(np.sqrt(np.mean(accel[:,1])**2+np.mean(accel[:,2])**2)))
+
         # print(f'aa.shape = {aa.shape}')
         XL_x_seal = []
         XL_y_seal = []
@@ -236,14 +237,14 @@ def MakeGraph(root_dir, fps):
         df.index = df.index + 1  #indexを1からに
 
         if ear:
-            blink_frame_npy = np.load(dir_path + "blink_frame_list.npy") - caliblation_time*30
-            #blink_frame_npy内の要素前後6フレームを追加
-            for i in range(-1,1+1):
-                blink_frame_npy = np.append(blink_frame_npy, blink_frame_npy + i)
+            blink_frame_npy = np.load(dir_path + "blink_list.npy")
+            print(f"blink_frame_npy = {blink_frame_npy}")
+            blink_frame_npy = blink_frame_npy - caliblation_time*30
             blink_frame_npy = blink_frame_npy[blink_frame_npy >= 0]  #calibrationtime調整後にblink_frame_npyの値が負の要素は削除
-            print(blink_frame_npy)
+            print(f"blink_frame_npy = {blink_frame_npy}")
             df.loc[blink_frame_npy, :] = np.nan
-            df = df.interpolate(method='spline', order=1, limit_direction='both')
+            # #dfの値がnanの場合は線形補間
+            df = df.interpolate(method='linear', limit_direction='both')
 
         df_sg = pd.DataFrame(index=df.index)
         # 各列データを平滑化して、結果をdf_sgに格納
@@ -262,9 +263,9 @@ def MakeGraph(root_dir, fps):
         # print(XL_z_seal_SG)
         # print(df_sg['z'])
 
-        print(f"min_z_index = {df['z'].idxmin()}, minz = {df.iloc[df['z'].idxmin()-1,2]}")  #df['z']が最小を取る時のindexを取得
-        print(f"df_z0 = {df.iloc[0,2]}")
-        print(f"zdif = {df.iloc[df['z'].idxmin()-1,2] - df.iloc[0,2]}")
+        # print(f"min_z_index = {df['z'].idxmin()}, minz = {df.iloc[df['z'].idxmin()-1,2]}")  #df['z']が最小を取る時のindexを取得
+        # print(f"df_z0 = {df.iloc[0,2]}")
+        # print(f"zdif = {df.iloc[df['z'].idxmin()-1,2] - df.iloc[0,2]}")
 
 
         # print(f"min_z_sg_index = {df_sg['z'].idxmin()}")  #df['z']が最小を取る時のindexを取得
@@ -304,7 +305,7 @@ def MakeGraph(root_dir, fps):
         normalize = plt.Normalize(1, data_num-1)
         colors = cmap(normalize(range(1,data_num-1)))
 
-        if ear: ax1.scatter(XL_x_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
+        # if ear: ax1.scatter(XL_x_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
 
         ax1.plot(XL_x_seal_SG[2:], XL_y_seal_SG[2:], alpha = 0.3)
 
@@ -336,7 +337,7 @@ def MakeGraph(root_dir, fps):
         ax2.set_aspect('equal', adjustable='box')
 
 
-        if ear: ax2.scatter(XL_z_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
+        # if ear: ax2.scatter(XL_z_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
 
         ax2.scatter(XL_z_seal_SG[2:], XL_y_seal_SG[2:], c=colors, s=15, alpha = 0.7)
         ax2.scatter(XL_z_seal_SG[1], XL_y_seal_SG[1], c=[(255/255,165/255,0)], s=200, marker="*")
