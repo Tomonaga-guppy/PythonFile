@@ -12,6 +12,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
 pdf = PdfPages(os.path.join(root_dir,'EAR.pdf'))
 
+blink_video = False  #Trueでまばたき検出動画を作成
+
 def BlinkDetection(OpenFace_result,frame):
     eye_landmark_list  = [range(36,42),range(42,48)]
     ear_sum = 0
@@ -29,6 +31,7 @@ def BlinkDetection(OpenFace_result,frame):
 pattern = os.path.join(root_dir, '*/RGB_image')  #RGB_imageがあるディレクトリを検索
 RGB_dirs = glob.glob(pattern, recursive=True)
 
+EAR_all_list = []
 
 for i,RGB_dir in enumerate(RGB_dirs):
     id = os.path.basename(os.path.dirname(RGB_dir))
@@ -47,14 +50,14 @@ for i,RGB_dir in enumerate(RGB_dirs):
 
     ear_list = []
     frame_count = len(OpenFace_result)
-    for frame in range(1,frame_count):
+    for frame in range(1,frame_count):  #1行目はヘッダーなので除く
         ear = BlinkDetection(OpenFace_result,frame)
         ear_list.append(ear)
     input_df = pd.DataFrame(ear_list)
     df = input_df
     df.index = range(1, len(df) + 1)
-    print(f"df = {df}")
-    print(f"df.index = {df.index}")
+    # print(f"df = {df}")
+    # print(f"df.index = {df.index}")
 
     fig, ax = plt.subplots(figsize=(10, 5))
 
@@ -65,36 +68,72 @@ for i,RGB_dir in enumerate(RGB_dirs):
     # blink_frame_list = peaks[0].tolist()
 
     #挑戦
-    threshold_ear_down = 0.06
-    threshold_ear_recov = 0.02
+    threshold_ear = 0.05
     blink_list = []
     try:
         for frame in range(1,frame_count-5):
             # print(frame)
-            if df[0][frame] > df[0][frame+1] and df[0][frame] - min(df[0][frame:frame+5]) > threshold_ear_down:  #5フレーム後までの最小値との差が0.05以上 0.05は適当
+            if df[0][frame] > df[0][frame+1] and df[0][frame] - min(df[0][frame:frame+5]) > threshold_ear:  #5フレーム後までの最小値との差が0.05以上 0.05は適当
                 min_index = df[0][frame:frame+5].idxmin()
                 # print("kouho")
                 for add_frame in range(1,30):
-                    if min_index < frame+add_frame and df[0][frame] - df[0][frame+add_frame] < threshold_ear_recov:  #EARが回復したとみなす条件
+                    if min_index < frame+add_frame and df[0][frame+add_frame] - df[0][min_index] > threshold_ear:  #EARが回復したとみなす条件
                         blink_start_index = frame
                         blink_end_index = frame + add_frame
                         blink_list.extend(range(blink_start_index,blink_end_index+1))
-                        print(f"min_index = {min_index}")
-                        print(f"blink_start={blink_start_index},blink_end={blink_end_index}")
+                        # print(f"min_index = {min_index}")
+                        # print(f"blink_start={blink_start_index},blink_end={blink_end_index}")
                         break
-                else: pass
     except KeyError:
         print("KeyError")
         pass
 
+
+    # threshold_ear_down = 0.06
+    # threshold_ear_recov = 0.02
+    # blink_list = []
+    # try:
+    #     for frame in range(1,frame_count-5):
+    #         # print(frame)
+    #         if df[0][frame] > df[0][frame+1] and df[0][frame] - min(df[0][frame:frame+5]) > threshold_ear_down:  #5フレーム後までの最小値との差が0.05以上 0.05は適当
+    #             min_index = df[0][frame:frame+5].idxmin()
+    #             # print("kouho")
+    #             for add_frame in range(1,30):
+    #                 if min_index < frame+add_frame and df[0][frame] - df[0][frame+add_frame] < threshold_ear_recov:  #EARが回復したとみなす条件
+    #                     blink_start_index = frame
+    #                     blink_end_index = frame + add_frame
+    #                     blink_list.extend(range(blink_start_index,blink_end_index+1))
+    #                     print(f"min_index = {min_index}")
+    #                     print(f"blink_start={blink_start_index},blink_end={blink_end_index}")
+    #                     break
+    # except KeyError:
+    #     print("KeyError")
+    #     pass
+
+
     blink_list = sorted(list(set(blink_list))) #blink_listを重複削除して昇順にソート
-    # blink_list.sort()  #blink_listを昇順にソート
-    print(f"blink_list = {blink_list}")
+    # # blink_list.sort()  #blink_listを昇順にソート
+    # print(f"blink_list = {blink_list}")
+    # #blinklistから60引いたものをprint
+    # print(f"blink_list-60 = {[i-60 for i in blink_list]}")
+    # print(f"blink_list-60 = {len([i-60 for i in blink_list])}")
+
+    median = df[0].median()
+    #第一四分位数
+    q1 = df[0].quantile(.25)
+    #第三四分位数
+    q3 = df[0].quantile(.75)
+    print(f"q1,median,q3 = {q1},{median},{q3}")
+    EAR_all_list.append([(df.index).tolist(),(df[0].values).tolist()])
+    # print(EAR_all_list[i])
+    print(f"EAR_all.shape = {len(EAR_all_list[i][0][:])}")
 
     ax.scatter([i for i in blink_list], [df[0][i] for i in blink_list], label="blink", color="r") #blink
+    # ax.scatter([i-60 for i in blink_list], [df[0][i] for i in blink_list], label="blink", color="r") #blink
 
     # earをプロット
     ax.plot(df.index, df[0], label="value")
+    # ax.plot(df.index-60, df[0], label="value")
     ax.set_xticks(np.arange(0, frame_count, 30))
     ax.set_yticks(np.arange(0.2, 0.75, 0.1))
     ax.grid()
@@ -108,33 +147,38 @@ for i,RGB_dir in enumerate(RGB_dirs):
     ax.legend()
     save_path = dir_path + 'EAR.png'
     plt.savefig(save_path, bbox_inches='tight')
-    plt.show()
+    # plt.show()
     pdf.savefig(fig)
     plt.close(fig)
 
-    # mp4_path = glob.glob(dir_path+'*original.mp4')[0]
-    # video_out_path = dir_path + 'blinkdetection.mp4'
-    # #まばたきがあるフレームは"Blink"とテキストで表示
-    # cap = cv2.VideoCapture(mp4_path)
-    # fps = cap.get(cv2.CAP_PROP_FPS)
-    # width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    # height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    # fourcc = cv2.VideoWriter_fourcc(*'DIVX')
-    # video_out = cv2.VideoWriter(video_out_path, fourcc, fps, (width, height))
-    # frame = 0
-    # while(cap.isOpened()):
-    #     ret, frame_img = cap.read()
-    #     if ret == True:
-    #         if frame in blink_frame_list:
-    #             cv2.putText(frame_img, 'Blink', (400, 200), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 2, cv2.LINE_AA)
-    #         video_out.write(frame_img)
-    #         frame += 1
-    #     else:
-    #         break
-    # cap.release()
-    # video_out.release()
-    # cv2.destroyAllWindows()
-    # print(f"video_out_path = {video_out_path}")
+    if blink_video:
+        mp4_path = glob.glob(dir_path+'*original.mp4')[0]
+        video_out_path = dir_path + 'blinkdetection.mp4'
+        #まばたきがあるフレームは"Blink"とテキストで表示
+        cap = cv2.VideoCapture(mp4_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+        video_out = cv2.VideoWriter(video_out_path, fourcc, fps, (width, height))
+        frame = 0
+        while(cap.isOpened()):
+            ret, frame_img = cap.read()
+            if ret == True:
+                if frame in blink_list:
+                    cv2.putText(frame_img, 'Blink', (400, 200), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 2, cv2.LINE_AA)
+                video_out.write(frame_img)
+                frame += 1
+            else:
+                break
+        cap.release()
+        video_out.release()
+        cv2.destroyAllWindows()
+        print(f"video_out_path = {video_out_path}")
+
+
+# print(f"EAR_all_list = {EAR_all_list}")
+
 
 pdf.close()
 print("pdfsaved")
