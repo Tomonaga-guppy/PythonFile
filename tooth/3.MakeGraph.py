@@ -14,30 +14,45 @@ import trimesh
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 
-caliblation_time = 2
+# caliblation_time = 5 #aは2秒，d,eは4秒
 
-ply_create = False #Trueがplyファイル作成
 transp = False  #Trueが背景透明
-ear = True  #Trueがblink_list_npy（まばたき補正）を使用
+ear = False  #Trueがblink_list_npy（まばたき補正）を使用
+frame_draw = False  #Trueが各点にframe番号を表示
 seal_3dplot = False  #Trueがシールの3D軌道作成
 
+ply_create = False #Trueがplyファイル作成
+
 global theta_co_x, theta_co_y, theta_co_z
+theta_co_x = np.deg2rad(0)
 theta_co_y = np.deg2rad(0)
 theta_co_z = np.deg2rad(0)
-theta_co_x = np.deg2rad(0)
+
+corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,0]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*a/landmark.npy')
+    pattern = os.path.join(root_dir, '*[a-f]/landmark.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
     for i,npy_file in enumerate(npy_files):
         print(f"{i + 1}/{num_npy_files} {npy_file}")
         dir_path = os.path.dirname(npy_file) + '/'
+        id = os.path.basename(os.path.dirname(dir_path))
+        if id == "20231117_a": caliblation_time, theta_co_x = corrective_condition[0][0], np.deg2rad(corrective_condition[0][1])
+        if id == "20231117_b": caliblation_time, theta_co_x = corrective_condition[1][0], np.deg2rad(corrective_condition[1][1])
+        if id == "20231218_c": caliblation_time, theta_co_x = corrective_condition[2][0], np.deg2rad(corrective_condition[2][1])
+        if id == "20231218_d": caliblation_time, theta_co_x = corrective_condition[3][0], np.deg2rad(corrective_condition[3][1])
+        if id == "20231218_e": caliblation_time, theta_co_x = corrective_condition[4][0], np.deg2rad(corrective_condition[4][1])
+        if id == "20231218_f": caliblation_time, theta_co_x = corrective_condition[5][0], np.deg2rad(corrective_condition[5][1])
+        print(f"caliblation_time = {caliblation_time}, theta_co_x = {np.rad2deg(theta_co_x)}")
         aa=np.load(npy_file, allow_pickle=True)  #作製したnumpy配列は[frame][number][number, x, y, z]
         accel_path = os.path.join(dir_path,"accel_data.npy")
         accel = np.load(accel_path, allow_pickle=True)  #[frame][x,y,z]
         theta_camera = np.arccos(np.mean(abs(accel[:,1]))/(np.sqrt(np.mean(accel[:,1])**2+np.mean(accel[:,2])**2)))
+
+        blink_frame_npy = np.load(dir_path + "blink_list.npy")
+        # print(f"blink_frame_npy = {blink_frame_npy}")
 
         # print(f'aa.shape = {aa.shape}')
         XL_x_seal = []
@@ -50,45 +65,81 @@ def MakeGraph(root_dir, fps):
 
         frame_number = 1
 
+        df_vector_30 = pd.DataFrame(aa[:,30,1:])
+        df_vector_36 = pd.DataFrame(aa[:,36,1:])
+        df_vector_45 = pd.DataFrame(aa[:,45,1:])
+
+        # #おまけでカメラ基準のシールの位置ベクトルをcsvで保存
+        # df_vector_seal = pd.DataFrame(aa[:,68,1:])
+        # df_vector_seal.to_csv(dir_path + "df_vector_seal.csv")
+        # #df_vector_36をcsvで保存
+        # df_vector_36.to_csv(dir_path + "df_vector_36.csv")
+        # df_vector_45.to_csv(dir_path + "df_vector_45.csv")
+
+
+        #df_vector_45のフレームとy座標をプロット
+        fig = plt.figure()
+        ax_45a = fig.add_subplot(1,2,1)
+        ax_45a.plot(df_vector_45.index, df_vector_45.iloc[:,1])
+        #ax_45aのタイトルを設定
+        ax_45a.set_title('45bef', fontsize=10)
+
+        if ear:
+            # df_vector_30.loc[blink_frame_npy,:] = np.nan
+            # df_vector_30 = df_vector_30.interpolate(method='linear', limit_direction='both')
+            df_vector_36.loc[blink_frame_npy,:] = np.nan
+            df_vector_36 = df_vector_36.interpolate(method='linear', limit_direction='both')
+            df_vector_45.loc[blink_frame_npy,:] = np.nan
+            df_vector_45 = df_vector_45.interpolate(method='linear', limit_direction='both')
+
+            # df_vector_36.to_csv(dir_path + "df_vector_36_interpolate.csv")
+            # df_vector_45.to_csv(dir_path + "df_vector_45_interpolate.csv")
+
+            # df_vector_45のフレームとy座標をプロット
+            ax_45b = fig.add_subplot(1,2,2)
+            ax_45b.plot(df_vector_45.index, df_vector_45.iloc[:,1])
+            ax_45b.set_title('45af', fontsize=10)
+            #ax45aとax45bを表示
+            # plt.show()
+
         while True:
             #鼻先(30)、左右目(36,45)の位置ベクトル
-            bector_30 = np.array([aa[frame_number-1][30][1], aa[frame_number-1][30][2], aa[frame_number-1][30][3]])
-            bector_36 = np.array([aa[frame_number-1][36][1], aa[frame_number-1][36][2], aa[frame_number-1][36][3]])
-            bector_45 = np.array([aa[frame_number-1][45][1], aa[frame_number-1][45][2], aa[frame_number-1][45][3]])
-
+            vector_30 = np.array([df_vector_30.iloc[frame_number-1,0], df_vector_30.iloc[frame_number-1,1], df_vector_30.iloc[frame_number-1,2]])
+            vector_36 = np.array([df_vector_36.iloc[frame_number-1,0], df_vector_36.iloc[frame_number-1,1], df_vector_36.iloc[frame_number-1,2]])
+            vector_45 = np.array([df_vector_45.iloc[frame_number-1,0], df_vector_45.iloc[frame_number-1,1], df_vector_45.iloc[frame_number-1,2]])
 
             #e_x (36 → 45のベクトル)
-            bector_x = bector_45 - bector_36
-            base_bector_x = bector_x / np.linalg.norm(bector_x)
-            bector_30_36 = bector_36 - bector_30
-            c = - (np.dot(bector_x,bector_30_36))/(np.linalg.norm(bector_x)**2)
+            vector_x = vector_45 - vector_36
+            base_vector_x = vector_x / np.linalg.norm(vector_x)
+            vector_30_36 = vector_36 - vector_30
+            c = - (np.dot(vector_x,vector_30_36))/(np.linalg.norm(vector_x)**2)
 
             #e_y
-            #bector_Xと30からbectorXに下した垂線の交点をPとした、30とPを結ぶベクトルがbector_y_nose
-            bector_y_nose = bector_30_36 + c*bector_x
-            bector_Pposition = bector_y_nose + bector_30
-            bector_y_nose2= np.array([bector_y_nose[0],bector_y_nose[1], 0])
+            #vector_Xと30からvectorXに下した垂線の交点をPとした、30とPを結ぶベクトルがvector_y_nose
+            vector_y_nose = vector_30_36 + c*vector_x
+            vector_Pposition = vector_y_nose + vector_30
+            vector_y_nose2= np.array([vector_y_nose[0],vector_y_nose[1], 0])
 
             if frame_number < caliblation_time*fps:
-                theta_nose_sum += float(np.arccos(np.dot(bector_y_nose,bector_y_nose2)/(np.linalg.norm(bector_y_nose)*np.linalg.norm(bector_y_nose2))))
+                theta_nose_sum += float(np.arccos(np.dot(vector_y_nose,vector_y_nose2)/(np.linalg.norm(vector_y_nose)*np.linalg.norm(vector_y_nose2))))
                 theta_nose = (theta_nose_sum/(caliblation_time*fps))
 
             elif frame_number >= caliblation_time*fps:
                 #e_y
-                base_bector_y = bector_y_nose/np.linalg.norm(bector_y_nose)
+                base_vector_y = vector_y_nose/np.linalg.norm(vector_y_nose)
                 #e_z
-                base_bector_z = np.cross(base_bector_x,base_bector_y)
+                base_vector_z = np.cross(base_vector_x,base_vector_y)
 
                 # 点を反時計回りにtheta回転 = 軸を時計回りにtheta回転  ==   点は反時計回りが正、軸は時計回りが正
                 # https://qiita.com/suzuki-navi/items/60ef241b2dca499df794
                 theta_x =  -theta_nose  +theta_camera + theta_co_x
 
                 #ベクトル変換https://eman-physics.net/math/linear08.html  グローバル座標とローカル座標https://programming-surgeon.com/script/coordinate-system/
-                R_Cam_Nose = np.array([base_bector_x,base_bector_y,base_bector_z]).T
+                R_Cam_Nose = np.array([base_vector_x,base_vector_y,base_vector_z]).T
                 R_Nose_Local = np.array([[1,0,0],[0,np.cos(theta_x), np.sin(theta_x)],[0, -np.sin(theta_x),np.cos(theta_x)]]).T  #x軸回転
                 R_Local_Local2 = np.array([[np.cos(theta_co_y),0, -np.sin(theta_co_y)],[0, 1, 0],[np.sin(theta_co_y), 0, np.cos(theta_co_y),]]).T  #y軸回転
                 R_Local2_Local3 = np.array([[np.cos(theta_co_z),np.sin(theta_co_z),0],[-np.sin(theta_co_z), np.cos(theta_co_z), 0],[0, 0, 1]]).T  #z軸回転
-                t = [bector_Pposition[0],bector_Pposition[1],bector_Pposition[2]]
+                t = [vector_Pposition[0],vector_Pposition[1],vector_Pposition[2]]
 
                 #Aは同次変換行列    (A_Cam_Noseはtheta_nose補正前までの回転と並進、原点は33番    A_xはXnose軸について鼻の角度分回転のみ)
                 A_Cam_Nose = np.array([[R_Cam_Nose[0][0],R_Cam_Nose[0][1],R_Cam_Nose[0][2],t[0]],
@@ -236,16 +287,6 @@ def MakeGraph(root_dir, fps):
         df = pd.DataFrame(data)
         df.index = df.index + 1  #indexを1からに
 
-        if ear:
-            blink_frame_npy = np.load(dir_path + "blink_list.npy")
-            print(f"blink_frame_npy = {blink_frame_npy}")
-            blink_frame_npy = blink_frame_npy - caliblation_time*30
-            blink_frame_npy = blink_frame_npy[blink_frame_npy >= 0]  #calibrationtime調整後にblink_frame_npyの値が負の要素は削除
-            print(f"blink_frame_npy = {blink_frame_npy}")
-            df.loc[blink_frame_npy, :] = np.nan
-            # #dfの値がnanの場合は線形補間
-            df = df.interpolate(method='linear', limit_direction='both')
-
         df_sg = pd.DataFrame(index=df.index)
         # 各列データを平滑化して、結果をdf_sgに格納
         #SG法   https://mimikousi.com/smoothing_savgol/
@@ -257,6 +298,9 @@ def MakeGraph(root_dir, fps):
         XL_x_seal_SG = df_sg['x']
         XL_y_seal_SG = df_sg['y']
         XL_z_seal_SG = df_sg['z']
+        # XL_x_seal_SG = df['x']
+        # XL_y_seal_SG = df['y']
+        # XL_z_seal_SG = df['z']
 
 
         # pd.set_option('display.max_rows', None)  #全ての行を表示
@@ -295,6 +339,7 @@ def MakeGraph(root_dir, fps):
             ax1.grid(which = "minor", axis = "x", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
             ax1.grid(which = "minor", axis = "y", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
 
+        if frame_draw:
             #各点にframe番号を表示
             for i in range(1,data_num+1):
                 ax1.annotate(i, (XL_x_seal_SG[ i], XL_y_seal_SG[i]), fontsize=6, path_effects=[patheffects.withStroke(linewidth=1, foreground="w")])
@@ -329,6 +374,7 @@ def MakeGraph(root_dir, fps):
             ax2.grid(which = "minor", axis = "x", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
             ax2.grid(which = "minor", axis = "y", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
 
+        if frame_draw:
             #各点にframe番号を表示
             for i in range(1,data_num+1):
                 ax2.annotate(i, (XL_z_seal_SG[ i], XL_y_seal_SG[i]), fontsize=6, path_effects=[patheffects.withStroke(linewidth=1, foreground="w")])
@@ -345,12 +391,19 @@ def MakeGraph(root_dir, fps):
         ax2.plot(XL_z_seal_SG[2:], XL_y_seal_SG[2:], alpha = 0.3)
 
         plt.tight_layout()  # グラフのレイアウトを調整
-        if transp:
-            plt.savefig(dir_path + f"frontal&sagittal_tranp_theta[{int(np.rad2deg(theta_co_x))},{int(np.rad2deg(theta_co_y))},{int(np.rad2deg(theta_co_z))}].png", bbox_inches='tight', transparent=True)
-            print(f"fig is saved in frontal&sagittal_transp_theta[{int(np.rad2deg(theta_co_x))},{int(np.rad2deg(theta_co_y))},{int(np.rad2deg(theta_co_z))}].png")
-        if transp == False:
-            plt.savefig(dir_path + f"frontal&sagittal_theta[{int(np.rad2deg(theta_co_x))},{int(np.rad2deg(theta_co_y))},{int(np.rad2deg(theta_co_z))}].png", bbox_inches='tight', transparent=True)
-            print(f"fig is saved in frontal&sagittal_theta[{int(np.rad2deg(theta_co_x))},{int(np.rad2deg(theta_co_y))},{int(np.rad2deg(theta_co_z))}].png")
+
+        if frame_draw and ear:
+            plt.savefig(dir_path + f"frontal&sagittal_frame_ear_theta[{int(np.rad2deg(theta_co_x))}].png", bbox_inches='tight', transparent=True)
+            print(f"fig is saved in frontal&sagittal_frame_ear_theta[{int(np.rad2deg(theta_co_x))}].png")
+        if frame_draw and ear == False:
+            plt.savefig(dir_path + f"frontal&sagittal_frame_theta[{int(np.rad2deg(theta_co_x))}].png", bbox_inches='tight', transparent=True)
+            print(f"fig is saved in frontal&sagittal_frame_theta[{int(np.rad2deg(theta_co_x))}].png")
+        if frame_draw == False and ear:
+            plt.savefig(dir_path + f"frontal&sagittal_ear_theta[{int(np.rad2deg(theta_co_x))}].png", bbox_inches='tight', transparent=True)
+            print(f"fig is saved in frontal&sagittal_ear_theta[{int(np.rad2deg(theta_co_x))}].png")
+        if frame_draw == False and ear == False:
+            plt.savefig(dir_path + f"frontal&sagittal_theta[{int(np.rad2deg(theta_co_x))}].png", bbox_inches='tight', transparent=True)
+            print(f"fig is saved in frontal&sagittal_theta[{int(np.rad2deg(theta_co_x))}].png")
 
         a = min(XL_x_seal_SG)- XL_x_seal_SG[1]
         b = max(XL_x_seal_SG)- XL_x_seal_SG[1]
