@@ -82,9 +82,7 @@ def OpenFace(root_dir):
 
         ply_list_all = []
         ply_list2_all = []
-        ply_list3_all = []
 
-        pix_list = []
         save_frame_count = []
 
 
@@ -199,7 +197,6 @@ def OpenFace(root_dir):
 
                         # print([OpenFace_result[frame_count][i+73] for i in range(68)])
                         # print(max([OpenFace_result[frame_count][i+73] for i in range(68)]))
-                        pix_list.append([xpix_min, xpix_max, ypix_min, ypix_max])
 
                         point_num = 100000
                         ply_list  = []
@@ -235,36 +232,6 @@ def OpenFace(root_dir):
                             break  #OpenFaceの解析したframe数と合わなくなったら終了
                         ply_list2_all.append(ply_list2)
 
-                        ply_lisst3 = []
-                        try:
-                            for i in range(68):
-                                xpix = int(float(OpenFace_result[frame_count][i+5]))
-                                ypix = int(float(OpenFace_result[frame_count][i+73]))
-
-                                if i ==36 or i==45 or i ==30:
-                                    zmin = 100000
-                                    zmax = -100000
-                                    xf,yf,zf = 0,0,0
-                                    for xpix_ex in range(-10,11):
-                                        for ypix_ex in range(-10,11):
-                                            xpix = int(float(OpenFace_result[frame_count][i+5])) + xpix_ex
-                                            ypix = int(float(OpenFace_result[frame_count][i+73])) + ypix_ex
-                                            z = result_frame.get_distance(xpix, ypix)
-                                            point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
-                                            x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
-
-                                            if z > zmax and (i ==36 or i==45):
-                                                zmax = z
-                                                xf,yf,zf = x,y,z
-
-                                            if z < zmin and (i ==30):
-                                                zmin = z
-                                                xf,yf,zf = x,y,z
-                                    ply_lisst3.append([xf,yf,zf])
-                        except IndexError:
-                            break
-                        ply_list3_all.append(ply_lisst3)
-
                 ear = BlinkDetection(OpenFace_result,frame_count)
                 ear_list.append(ear)
 
@@ -298,7 +265,6 @@ def OpenFace(root_dir):
                     # PLYファイルのヘッダを書き込む
                     header = f"ply\nformat ascii 1.0\nelement vertex {point_num}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
                     header_face = f"ply\nformat ascii 1.0\nelement vertex 69\nproperty float x\nproperty float y\nproperty float z\nend_header\n"
-                    header_face_df = f"ply\nformat ascii 1.0\nelement vertex 3\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
 
                     # PLYファイルに書き込む
                     with open(dir_path + f"plycam/random_cloud{frame_count}.ply", "w") as ply_file:
@@ -311,13 +277,6 @@ def OpenFace(root_dir):
                     with open(dir_path + f"plycam/face_cloud{frame_count}.ply", "w") as ply_file:
                         ply_file.write(header_face)
                         for vertex in ply_list2_all[i,:,:]:
-                            ply_file.write(" ".join(map(str, vertex)) + "\n")
-
-                    # PLYファイルに書き込む
-                    with open(dir_path + f"plycam/face_cloud_df{frame_count}.ply", "w") as ply_file:
-                        ply_file.write(header_face_df)
-                        for vertex in ply_list3_all[i,:,:]:
-                            vertex = list(map(str, vertex[:3])) + list(map(str, map(int, [255, 0, 0])))
                             ply_file.write(" ".join(map(str, vertex)) + "\n")
 
 
@@ -342,7 +301,6 @@ def OpenFace(root_dir):
                                 break
                         else: pass
             except KeyError:
-                print("KeyError")
                 pass
 
             blink_list = sorted(list(set(blink_list))) #blink_listを重複削除して昇順にソート
@@ -350,6 +308,9 @@ def OpenFace(root_dir):
             print(f"blink_list = {blink_list}")
             print(f"blink_listlen = {len(blink_list)}")
             np.save(dir_path + "blink_list.npy",blink_list)
+
+    if len(error_bagfiles) != 0:
+        print(f"以下のbagファイルが読み取れませんでした\n{error_bagfiles}")
 
 # def SealDetection(height,width,img):
 def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_count,seal_template):
