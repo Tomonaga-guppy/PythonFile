@@ -13,15 +13,15 @@ import pandas as pd
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
 
-seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
+seal_temp = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
 
 #depth_scale = mm/depth_data
 depth_scale = 1.0000000474974513
 
-ply = False  #plyファイルを作成するかどうか(Trueは作成する)
+ply = True  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*a/RGB_image')  #RGB_imageがあるディレクトリを検索
+    pattern = os.path.join(root_dir, '*f/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
     for i,RGB_dir in enumerate(RGB_dirs):
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
@@ -31,6 +31,11 @@ def OpenFace(root_dir):
         #mkgの結果を取得
         id = os.path.basename(os.path.dirname(dir_path))
         print(f"ID {id}")
+
+        seal_template = seal_temp
+        if id == "20231218_d":
+            seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal_2023_1218_d.png"
+            print(f"seal_template = {seal_template}")
 
         #root_dirの2つ前のディレクトリパスを取得
         bagfile = os.path.dirname(os.path.dirname(dir_path)) + '/'+ id + '.bag'
@@ -143,7 +148,7 @@ def OpenFace(root_dir):
                     break  #OpenFaceの解析したframe数と合わなくなったら終了
 
 
-                seal_position, imgcopy, ratio, template_shape = SealDetection(height, width, imgcopy, mask1_x, mask2_x, mask1_y, mask2_y ,frame_count)
+                seal_position, imgcopy, ratio, template_shape = SealDetection(height, width, imgcopy, mask1_x, mask2_x, mask1_y, mask2_y ,frame_count,seal_template)
 
                 cv2.circle(imgcopy, (seal_position[0],seal_position[1]), 1, (255, 120, 255), -1)
                 seal_x_pixel = seal_position[0]
@@ -183,8 +188,9 @@ def OpenFace(root_dir):
                 if ply:
                     # if frame_count == 60 or frame_count == 291 or frame_count == 155:
                     # if frame_count == 150 or frame_count == 514:
-                    if frame_count==60 or frame_count == 220 or frame_count==225:  #aのまばたき
+                    # if frame_count==60 or frame_count == 220 or frame_count==225:  #aのまばたき
                     # if frame_count % 30 == 0:
+                    if frame_count == 30:
                         save_frame_count.append(frame_count)
                         xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                         xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
@@ -259,7 +265,6 @@ def OpenFace(root_dir):
                             break
                         ply_list3_all.append(ply_lisst3)
 
-
                 ear = BlinkDetection(OpenFace_result,frame_count)
                 ear_list.append(ear)
 
@@ -273,7 +278,7 @@ def OpenFace(root_dir):
         finally:
             writer.release()
             NumpyList = np.array(List)
-            path = dir_path + "result.npy"
+            path = dir_path + "landmark.npy"
             np.save(path,NumpyList)
             #作製したnumpy配列は[フレーム数-1[landmark number[number, x, y, z]]]
             pipeline.stop()
@@ -319,22 +324,21 @@ def OpenFace(root_dir):
             ear_df = pd.DataFrame(ear_list)
             ear_df.index = range(1, len(ear_df) + 1)
 
-            threshold_ear_down = 0.06
-            threshold_ear_recov = 0.02
+            threshold_ear = 0.05
             blink_list = []
             try:
                 for frame in range(1,frame_count-5):
                     # print(frame)
-                    if ear_df[0][frame] > ear_df[0][frame+1] and ear_df[0][frame] - min(ear_df[0][frame:frame+5]) > threshold_ear_down:  #5フレーム後までの最小値との差が0.05以上 0.05は適当
+                    if ear_df[0][frame] > ear_df[0][frame+1] and ear_df[0][frame] - min(ear_df[0][frame:frame+5]) > threshold_ear:  #5フレーム後までの最小値との差が0.05以上 0.05は適当
                         min_index = ear_df[0][frame:frame+5].idxmin()
                         # print("kouho")
                         for add_frame in range(1,30):
-                            if min_index < frame+add_frame and ear_df[0][frame] - ear_df[0][frame+add_frame] < threshold_ear_recov:  #EARが回復したとみなす条件
+                            if min_index < frame+add_frame and ear_df[0][frame+add_frame] - ear_df[0][min_index] > threshold_ear:  #EARが回復したとみなす条件
                                 blink_start_index = frame
                                 blink_end_index = frame + add_frame
                                 blink_list.extend(range(blink_start_index,blink_end_index+1))
-                                print(f"min_index = {min_index}")
-                                print(f"blink_start={blink_start_index},blink_end={blink_end_index}")
+                                # print(f"min_index = {min_index}")
+                                # print(f"blink_start={blink_start_index},blink_end={blink_end_index}")
                                 break
                         else: pass
             except KeyError:
@@ -343,12 +347,15 @@ def OpenFace(root_dir):
 
             blink_list = sorted(list(set(blink_list))) #blink_listを重複削除して昇順にソート
             #blink_listをnpyファイルに保存
+            print(f"blink_list = {blink_list}")
+            print(f"blink_listlen = {len(blink_list)}")
             np.save(dir_path + "blink_list.npy",blink_list)
 
 # def SealDetection(height,width,img):
-def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_count):
+def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_count,seal_template):
     np.value = []
     seal_position = (0, 0)
+    seal_template = seal_template
 
     # 矩形のマスク画像の生成
     mask = np.zeros((height,width,3), dtype = np.uint8)
