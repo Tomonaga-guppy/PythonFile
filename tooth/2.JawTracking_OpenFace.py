@@ -142,7 +142,6 @@ def OpenFace(root_dir):
                     mask2_x=int(float(OpenFace_result[frame_count][59]))    #54x
                     mask2_y=int(float(OpenFace_result[frame_count][81]))    #8y
                 except IndexError:
-
                     break  #OpenFaceの解析したframe数と合わなくなったら終了
 
 
@@ -188,7 +187,7 @@ def OpenFace(root_dir):
                     # if frame_count == 150 or frame_count == 514:
                     # if frame_count==60 or frame_count == 220 or frame_count==225:  #aのまばたき
                     # if frame_count % 30 == 0:
-                    if frame_count == 30:
+                    if (frame_count%30==0 and frame_count>=150) or frame_count == 457:
                         save_frame_count.append(frame_count)
                         xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                         xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
@@ -239,6 +238,9 @@ def OpenFace(root_dir):
                 cv2.circle(imgcopy, (int(seal_x_pixel),int(seal_y_pixel)), 5, (255, 0, 255), -1)    #整数型
                 List.append(landmark_List)
 
+                #imgcopyにフレーム数を書き込む
+                cv2.putText(imgcopy, str(frame_count), (100, 100), cv2.FONT_HERSHEY_PLAIN, 4, (0, 255, 0), 2, cv2.LINE_AA)
+
                 frame_count +=1
                 writer.write(imgcopy)
 
@@ -254,7 +256,6 @@ def OpenFace(root_dir):
                 # print(f"ply_list2_all.shape = {np.array(ply_list2_all).shape}")
                 ply_list_all = np.array(ply_list_all)
                 ply_list2_all = np.array(ply_list2_all)
-                ply_list3_all = np.array(ply_list3_all)
 
                 ply_path = dir_path + "plycam"
                 if not os.path.exists(ply_path):
