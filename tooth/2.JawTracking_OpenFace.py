@@ -22,7 +22,7 @@ depth_scale = 1.0000000474974513
 ply = False  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*a/RGB_image')  #RGB_imageがあるディレクトリを検索
+    pattern = os.path.join(root_dir, '*/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
     for i,RGB_dir in enumerate(RGB_dirs):
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
@@ -248,7 +248,7 @@ def OpenFace(root_dir):
         finally:
             writer.release()
             NumpyList = np.array(List)
-            path = dir_path + "landmark.npy"
+            path = dir_path + "landmark_cam.npy"
             np.save(path,NumpyList)
             #作製したnumpy配列は[フレーム数-1[landmark number[number, x, y, z]]]
             pipeline.stop()
@@ -326,7 +326,7 @@ def OpenFace(root_dir):
             ax.legend()
             save_path = dir_path + 'EAR_pix.png'
             plt.savefig(save_path, bbox_inches='tight')
-            plt.show()
+            # plt.show()
             plt.close(fig)
 
 
