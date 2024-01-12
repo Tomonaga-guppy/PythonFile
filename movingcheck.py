@@ -2,35 +2,44 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+import os
 
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20/20231218_f"
+frame1 = 150
+frame2 = 457
 
-# def save_frames(video_path, output_dir):
-#     # 動画を読み込む
-#     video = cv2.VideoCapture(video_path)
+def save_frames(video_path, output_dir):
+    # 動画を読み込む
+    video = cv2.VideoCapture(video_path)
 
-#     # フレーム数を取得する
-#     frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+    # フレーム数を取得する
+    frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
 
-#     # フレームごとに保存する
-#     for i in range(frame_count):
-#             # フレームを読み込む
-#             ret, frame = video.read()
+    # フレームごとに保存する
+    for i in range(1,frame_count):
+            # フレームを読み込む
+            ret, frame = video.read()
 
-#             # フレームが正常に読み込まれた場合は保存する
-#             if ret:
-#                 # if i == 0 or i == 410:  # 1フレーム目と410フレーム目を保存
-#                 # 画像を保存する範囲を指定
-#                 frame = frame[700:1180,600:1080]  # 1920*1080 →480*480に切り取り
-#                 frame_path = f"{output_dir}/frame_{i}.jpg"
-#                 cv2.imwrite(frame_path, frame)
+            # フレームが正常に読み込まれた場合は保存する
+            if ret:
+                # if i == 0 or i == 410:  # 1フレーム目と410フレーム目を保存
+                # 画像を保存する範囲を指定
+                frame = frame[600:1080,500:980]  # 1920*1080 →480*480に切り取り
+                # frame = frame[700:1180,600:1080]  # 1920*1080 →480*480に切り取り
+                frame_path = f"{output_dir}/frame_{i}.jpg"
+                cv2.imwrite(frame_path, frame)
 
-#     # 動画を解放する
-#     video.release()
-# # 動画のパスと保存先ディレクトリを指定する
+    # 動画を解放する
+    video.release()
+# 動画のパスと保存先ディレクトリを指定する
+video_path = root_dir + "/f.mp4"
+output_dir = root_dir + "/yoko"
 # video_path = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231117_b1\b1.mp4"
 # output_dir = r"C:\Users\zutom\BRLAB\tooth\Temporomandibular_movement\movie\scale\20231117_b1\yoko"
-# # フレームを保存する
-# save_frames(video_path, output_dir)
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+# フレームを保存する
+save_frames(video_path, output_dir)
 
 #スケール
 point1 = np.array([363.8, 329.9])
