@@ -31,7 +31,7 @@ theta_co_z = np.deg2rad(0)
 
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*/landmark.npy')
+    pattern = os.path.join(root_dir, '*f/landmark.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
