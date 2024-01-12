@@ -1,4 +1,6 @@
 
+pixel値にfloat入れたいけどintになってるから補間 https://anchoco.me/python-math-floor-ceil/  https://www.higashisalary.com/entry/python-map-data-interpolation  https://www.tekutechlabo.com/2022/11/python-interpolation.html
+pixel値をintで読み取ってmmでEAR出すとノイズが増える→補間した方がよさそう
 
 1. RGB,Depth取得  できれば2と一緒にしたい
 2. 特徴点検出，スケール変換，world座標格納
@@ -11,22 +13,9 @@
 シールなしの計測
 ・点群による下顎モデル作成？要調査
 
-pixel値にfloat入れたいけどintになってるから補間 https://anchoco.me/python-math-floor-ceil/  https://www.higashisalary.com/entry/python-map-data-interpolation  https://www.tekutechlabo.com/2022/11/python-interpolation.html
-
 外れ値検出：
 https://datachemeng.com/wp-content/uploads/outlierdetection.pdf
 https://mimikousi.com/python-outlier/
-
-J2  theta_camない方が自然 ← カメラ型か傾いている＋顔がカメラの方向を向いているため
-A2
-B2  途中で輪郭がmkgに移ってる
-    C2  途中のブレがひどい ← 動かした際に目とmkgのフレームが重なっていることが原因 元動画11秒あたり
-    D2  シール検出×
-E2
-    F2  シール検出×
-    G2  シール貼ってない
-    H2  シール貼ってない
-I2  5秒経つ前に運動開始しているため始点と終点が合わない
 
 realsenseデータシート file:///C:/Users/zutom/Downloads/Intel-RealSense-D400-Series-Datasheet-September-2023.pdf
 p.19にdepthの計測方向記載

@@ -11,4 +11,7 @@ profile                 :横顔
 fiducial                :基準となる
 temporomandibular       :顎関節
 incisors                :切歯
-
+pros & cons             :メリットとデメリット（ラテン語）
+present invention       :本発明，この発明
+refer to ～ as ...      :～を...と呼ぶ
+hereinafter             :以下    例文→Deep Neural Networks (hereinafter "DNN") is common in perception AI.
