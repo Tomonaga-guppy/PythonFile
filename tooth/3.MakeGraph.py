@@ -15,14 +15,16 @@ root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 
 # caliblation_time = 10 #aは2秒，d,eは4秒
+# corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,-4.578-25]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
+# corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,-4.578]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,0]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 
-transp = True  #Trueが背景透明
+transp = False  #Trueが背景透明
 ear = True  #Trueがblink_list_npy（まばたき補正）を使用
 frame_draw = False  #Trueが各点にframe番号を表示
 seal_3dplot = False  #Trueがシールの3D軌道作成
 
-ply_create = False #Trueがplyファイル作成
+ply_create = True #Trueがplyファイル作成
 
 global theta_co_x, theta_co_y, theta_co_z
 theta_co_x = np.deg2rad(0)
@@ -31,7 +33,7 @@ theta_co_z = np.deg2rad(0)
 
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*f/landmark.npy')
+    pattern = os.path.join(root_dir, '*f/landmark_cam.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -73,8 +75,8 @@ def MakeGraph(root_dir, fps):
         # df_vector_seal = pd.DataFrame(aa[:,68,1:])
         # df_vector_seal.to_csv(dir_path + "df_vector_seal.csv")
         # #df_vector_36をcsvで保存
-        df_vector_36.to_csv(dir_path + "df_vector_36.csv")
-        df_vector_45.to_csv(dir_path + "df_vector_45.csv")
+        # df_vector_36.to_csv(dir_path + "df_vector_36.csv")
+        # df_vector_45.to_csv(dir_path + "df_vector_45.csv")
 
 
         #df_vector_45のフレームとy座標をプロット
@@ -92,8 +94,8 @@ def MakeGraph(root_dir, fps):
             df_vector_45.loc[blink_frame_npy,:] = np.nan
             df_vector_45 = df_vector_45.interpolate(method='linear', limit_direction='both')
 
-            df_vector_36.to_csv(dir_path + "df_vector_36_interpolate.csv")
-            df_vector_45.to_csv(dir_path + "df_vector_45_interpolate.csv")
+            # df_vector_36.to_csv(dir_path + "df_vector_36_interpolate.csv")
+            # df_vector_45.to_csv(dir_path + "df_vector_45_interpolate.csv")
 
             # df_vector_45のフレームとy座標をプロット
             ax_45b = fig.add_subplot(1,2,2)
@@ -133,6 +135,8 @@ def MakeGraph(root_dir, fps):
                 # 点を反時計回りにtheta回転 = 軸を時計回りにtheta回転  ==   点は反時計回りが正、軸は時計回りが正
                 # https://qiita.com/suzuki-navi/items/60ef241b2dca499df794
                 theta_x =  -theta_nose  +theta_camera + theta_co_x
+                if frame_number == 457:
+                    theta_x = theta_x + np.deg2rad(-5)
 
                 #ベクトル変換https://eman-physics.net/math/linear08.html  グローバル座標とローカル座標https://programming-surgeon.com/script/coordinate-system/
                 R_Cam_Nose = np.array([base_vector_x,base_vector_y,base_vector_z]).T
@@ -205,7 +209,8 @@ def MakeGraph(root_dir, fps):
 
                     # # if frame_number == 122 or frame_number == 240 or frame_number == 161:  #a1最大開口時
                     # if frame_number == 150 or frame_number == 514:  #b1
-                    if frame_number%30==0 or frame_number == 457:
+                    # if frame_number%30==0 or frame_number == 457:
+                    if frame_number == 150 or frame_number == 457:
                         if os.path.isfile(dir_path + f"plycam/random_cloud{frame_number}.ply"):
                             random_ply_path = dir_path + f"plycam/random_cloud{frame_number}.ply"
                             print(random_ply_path)
@@ -278,7 +283,7 @@ def MakeGraph(root_dir, fps):
         Y = np.array(Y).reshape(((aa.shape[0]-(caliblation_time*fps-1)),aa.shape[1]))
         Z = np.array(Z).reshape(((aa.shape[0]-(caliblation_time*fps-1)),aa.shape[1]))
         XYZdata = np.stack([X,Y,Z])
-        path = dir_path + "XYZ_localdata.npy"
+        path = dir_path + "landmark_local.npy"
         np.save(path,XYZdata)
         # print('XYZ_localdata is saved')
 
