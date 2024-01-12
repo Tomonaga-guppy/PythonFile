@@ -28,7 +28,7 @@ def BlinkDetection(OpenFace_result,frame):
         ear_sum += (ver1 + ver2) / (2.0 * hor)
     return ear_sum  #右目と左目のEARの合計を返す
 
-pattern = os.path.join(root_dir, '*/RGB_image')  #RGB_imageがあるディレクトリを検索
+pattern = os.path.join(root_dir, '*a/RGB_image')  #RGB_imageがあるディレクトリを検索
 RGB_dirs = glob.glob(pattern, recursive=True)
 
 EAR_all_list = []
@@ -118,15 +118,15 @@ for i,RGB_dir in enumerate(RGB_dirs):
     # print(f"blink_list-60 = {[i-60 for i in blink_list]}")
     # print(f"blink_list-60 = {len([i-60 for i in blink_list])}")
 
-    median = df[0].median()
-    #第一四分位数
-    q1 = df[0].quantile(.25)
-    #第三四分位数
-    q3 = df[0].quantile(.75)
-    print(f"q1,median,q3 = {q1},{median},{q3}")
-    EAR_all_list.append([(df.index).tolist(),(df[0].values).tolist()])
-    # print(EAR_all_list[i])
-    print(f"EAR_all.shape = {len(EAR_all_list[i][0][:])}")
+    # median = df[0].median()
+    # #第一四分位数
+    # q1 = df[0].quantile(.25)
+    # #第三四分位数
+    # q3 = df[0].quantile(.75)
+    # print(f"q1,median,q3 = {q1},{median},{q3}")
+    # EAR_all_list.append([(df.index).tolist(),(df[0].values).tolist()])
+    # # print(EAR_all_list[i])
+    # print(f"EAR_all.shape = {len(EAR_all_list[i][0][:])}")
 
     ax.scatter([i for i in blink_list], [df[0][i] for i in blink_list], label="blink", color="r") #blink
     # ax.scatter([i-60 for i in blink_list], [df[0][i] for i in blink_list], label="blink", color="r") #blink
