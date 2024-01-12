@@ -9,6 +9,7 @@ import sys
 import random
 import pyrealsense2 as rs
 import pandas as pd
+import matplotlib.pyplot as plt
 
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
@@ -18,10 +19,10 @@ seal_temp = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template
 #depth_scale = mm/depth_data
 depth_scale = 1.0000000474974513
 
-ply = True  #plyファイルを作成するかどうか(Trueは作成する)
+ply = False  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*f/RGB_image')  #RGB_imageがあるディレクトリを検索
+    pattern = os.path.join(root_dir, '*a/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
     for i,RGB_dir in enumerate(RGB_dirs):
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
@@ -306,9 +307,29 @@ def OpenFace(root_dir):
 
             blink_list = sorted(list(set(blink_list))) #blink_listを重複削除して昇順にソート
             #blink_listをnpyファイルに保存
-            print(f"blink_list = {blink_list}")
-            print(f"blink_listlen = {len(blink_list)}")
+            print(f"blink_frame_list = {blink_list}")
+            print(f"len(blink_frame_list) = {len(blink_list)}")
             np.save(dir_path + "blink_list.npy",blink_list)
+
+            # earをプロット
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.scatter([i for i in blink_list], [ear_df[0][i] for i in blink_list], label="blink", color="r")
+            ax.plot(ear_df.index, ear_df[0], label="value")
+            ax.set_xticks(np.arange(0, frame_count, 30))
+            ax.set_yticks(np.arange(0.2, 0.75, 0.1))
+            ax.grid()
+            ax.set_title(f'EAR {id}')
+            ax.tick_params(labelsize=10)   #軸のフォントサイズを設定
+            # ax.set_xticklabels(ax.get_xticks(), rotation=-45)  #軸を斜めにする
+            ax.set_xlabel('frame [-]', fontsize=10)  #軸ラベルを設定
+            ax.set_ylabel('EAR [-]', fontsize=10)
+            ax.legend()
+            save_path = dir_path + 'EAR_pix.png'
+            plt.savefig(save_path, bbox_inches='tight')
+            plt.show()
+            plt.close(fig)
+
+
 
     if len(error_bagfiles) != 0:
         print(f"以下のbagファイルが読み取れませんでした\n{error_bagfiles}")

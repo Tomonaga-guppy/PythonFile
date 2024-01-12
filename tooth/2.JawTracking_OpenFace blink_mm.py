@@ -8,11 +8,13 @@ import numpy as np
 import sys
 import random
 import pyrealsense2 as rs
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
 
-seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
+seal_temp = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
 
 #depth_scale = mm/depth_data
 depth_scale = 1.0000000474974513
@@ -20,7 +22,7 @@ depth_scale = 1.0000000474974513
 ply = False  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*[a-b]/RGB_image')  #RGB_imageがあるディレクトリを検索
+    pattern = os.path.join(root_dir, '*a/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
     for i,RGB_dir in enumerate(RGB_dirs):
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
@@ -30,6 +32,11 @@ def OpenFace(root_dir):
         #mkgの結果を取得
         id = os.path.basename(os.path.dirname(dir_path))
         print(f"ID {id}")
+
+        seal_template = seal_temp
+        if id == "20231218_d":
+            seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal_2023_1218_d.png"
+            print(f"seal_template = {seal_template}")
 
         #root_dirの2つ前のディレクトリパスを取得
         bagfile = os.path.dirname(os.path.dirname(dir_path)) + '/'+ id + '.bag'
@@ -77,7 +84,6 @@ def OpenFace(root_dir):
         ply_list_all = []
         ply_list2_all = []
 
-        pix_list = []
         save_frame_count = []
 
 
@@ -106,6 +112,7 @@ def OpenFace(root_dir):
         try:
             pre_time = 0
             frame_count = 1
+            ear_list = []
             while True:
                 frames = pipeline.wait_for_frames()
 
@@ -136,11 +143,10 @@ def OpenFace(root_dir):
                     mask2_x=int(float(OpenFace_result[frame_count][59]))    #54x
                     mask2_y=int(float(OpenFace_result[frame_count][81]))    #8y
                 except IndexError:
-
                     break  #OpenFaceの解析したframe数と合わなくなったら終了
 
 
-                seal_position, imgcopy, ratio, template_shape = SealDetection(height, width, imgcopy, mask1_x, mask2_x, mask1_y, mask2_y ,frame_count)
+                seal_position, imgcopy, ratio, template_shape = SealDetection(height, width, imgcopy, mask1_x, mask2_x, mask1_y, mask2_y ,frame_count,seal_template)
 
                 cv2.circle(imgcopy, (seal_position[0],seal_position[1]), 1, (255, 120, 255), -1)
                 seal_x_pixel = seal_position[0]
@@ -157,12 +163,32 @@ def OpenFace(root_dir):
                     z = result_frame.get_distance(xpix, ypix)
                     point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
                     x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
+
+                    # if i ==36 or i==45 or i ==30:
+                    #     z_min = 100000
+                    #     for xpix_ex in range(-10,11):
+                    #         for ypix_ex in range(-10,11):
+                    #             xpix = int(float(OpenFace_result[frame_count][i+5])) + xpix_ex
+                    #             ypix = int(float(OpenFace_result[frame_count][i+73])) + ypix_ex
+                    #             z = result_frame.get_distance(xpix, ypix)
+                    #             point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
+                    #             x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
+
+                    #             if z < z_min:
+                    #                 z_min = z
+                    #                 x_min, y_min = x, y
+
+                    #     x,y,z = x_min, y_min, z_min
+
                     landmark_List.append([i,x,y,z])
 
 
                 if ply:
                     # if frame_count == 60 or frame_count == 291 or frame_count == 155:
-                    if frame_count == 150 or frame_count == 514:
+                    # if frame_count == 150 or frame_count == 514:
+                    # if frame_count==60 or frame_count == 220 or frame_count==225:  #aのまばたき
+                    # if frame_count % 30 == 0:
+                    if (frame_count%30==0 and frame_count>=150) or frame_count == 457:
                         save_frame_count.append(frame_count)
                         xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                         xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
@@ -171,9 +197,8 @@ def OpenFace(root_dir):
 
                         # print([OpenFace_result[frame_count][i+73] for i in range(68)])
                         # print(max([OpenFace_result[frame_count][i+73] for i in range(68)]))
-                        pix_list.append([xpix_min, xpix_max, ypix_min, ypix_max])
 
-                        point_num = 200000
+                        point_num = 100000
                         ply_list  = []
                         try:
                             for i in range(point_num):
@@ -200,15 +225,22 @@ def OpenFace(root_dir):
                                 z = result_frame.get_distance(xpix, ypix)
                                 point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [xpix,ypix], z))*1000
                                 x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
+
                                 ply_list2.append([x,y,z])
                             ply_list2.append([seal_x,seal_y,seal_z])  #シールの座標を追加
                         except IndexError:
                             break  #OpenFaceの解析したframe数と合わなくなったら終了
                         ply_list2_all.append(ply_list2)
 
+                ear = BlinkDetection(OpenFace_result,frame_count,result_frame,color_intr)
+                ear_list.append(ear)
+
                 landmark_List.append([68,seal_x,seal_y,seal_z])
                 cv2.circle(imgcopy, (int(seal_x_pixel),int(seal_y_pixel)), 5, (255, 0, 255), -1)    #整数型
                 List.append(landmark_List)
+
+                #imgcopyにフレーム数を書き込む
+                cv2.putText(imgcopy, str(frame_count), (100, 100), cv2.FONT_HERSHEY_PLAIN, 4, (0, 255, 0), 2, cv2.LINE_AA)
 
                 frame_count +=1
                 writer.write(imgcopy)
@@ -216,28 +248,10 @@ def OpenFace(root_dir):
         finally:
             writer.release()
             NumpyList = np.array(List)
-            path = dir_path + "result.npy"
+            path = dir_path + "landmark.npy"
             np.save(path,NumpyList)
             #作製したnumpy配列は[フレーム数-1[landmark number[number, x, y, z]]]
             pipeline.stop()
-
-
-            # #まばたき検出
-            # #EAR（目のアスペクト比閾値）決定
-            # ear_list = []
-            # blink_frame_list = []
-            # for frame in range(1,151): #最初の150フレームで閾値を決定
-            #     ear = BlinkDetection(OpenFace_result,frame)
-            #     ear_list.append(ear)
-            # ear_threshold = np.median(ear_list)
-
-            # #閾値より小さければまばたきと判定
-            # for frame in range(1,frame_count): #まばたきをしているフレームをリストに追加
-            #     ear = BlinkDetection(OpenFace_result,frame)
-            #     if ear < ear_threshold:
-            #         blink_frame_list.append(frame)
-            # print(f"blink_frame_list = {blink_frame_list}")
-            # print(f"blink frame = {len(blink_frame_list)}")
 
             if ply:
                 # print(f"ply_list2_all.shape = {np.array(ply_list2_all).shape}")
@@ -267,10 +281,64 @@ def OpenFace(root_dir):
                         for vertex in ply_list2_all[i,:,:]:
                             ply_file.write(" ".join(map(str, vertex)) + "\n")
 
+
+            ear_df = pd.DataFrame(ear_list)
+            ear_df.index = range(1, len(ear_df) + 1)
+
+            threshold_ear = 0.05
+            blink_list = []
+            try:
+                for frame in range(1,frame_count-5):
+                    # print(frame)
+                    if ear_df[0][frame] > ear_df[0][frame+1] and ear_df[0][frame] - min(ear_df[0][frame:frame+5]) > threshold_ear:  #5フレーム後までの最小値との差が0.05以上 0.05は適当
+                        min_index = ear_df[0][frame:frame+5].idxmin()
+                        # print("kouho")
+                        for add_frame in range(1,30):
+                            if min_index < frame+add_frame and ear_df[0][frame+add_frame] - ear_df[0][min_index] > threshold_ear:  #EARが回復したとみなす条件
+                                blink_start_index = frame
+                                blink_end_index = frame + add_frame
+                                blink_list.extend(range(blink_start_index,blink_end_index+1))
+                                # print(f"min_index = {min_index}")
+                                # print(f"blink_start={blink_start_index},blink_end={blink_end_index}")
+                                break
+                        else: pass
+            except KeyError:
+                pass
+
+            blink_list = sorted(list(set(blink_list))) #blink_listを重複削除して昇順にソート
+            #blink_listをnpyファイルに保存
+            print(f"blink_frame_list = {blink_list}")
+            print(f"len(blink_frame_list) = {len(blink_list)}")
+            np.save(dir_path + "blink_list.npy",blink_list)
+
+            # earをプロット
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.scatter([i for i in blink_list], [ear_df[0][i] for i in blink_list], label="blink", color="r")
+            ax.plot(ear_df.index, ear_df[0], label="value")
+            ax.set_xticks(np.arange(0, frame_count, 30))
+            ax.set_yticks(np.arange(0.2, 0.75, 0.1))
+            ax.grid()
+            ax.set_title(f'EAR {id}')
+            ax.tick_params(labelsize=10)   #軸のフォントサイズを設定
+            # ax.set_xticklabels(ax.get_xticks(), rotation=-45)  #軸を斜めにする
+            ax.set_xlabel('frame [-]', fontsize=10)  #軸ラベルを設定
+            ax.set_ylabel('EAR [-]', fontsize=10)
+            ax.legend()
+            save_path = dir_path + 'EAR_mm.png'
+            plt.savefig(save_path, bbox_inches='tight')
+            plt.show()
+            plt.close(fig)
+
+
+
+    if len(error_bagfiles) != 0:
+        print(f"以下のbagファイルが読み取れませんでした\n{error_bagfiles}")
+
 # def SealDetection(height,width,img):
-def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_count):
+def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_count,seal_template):
     np.value = []
     seal_position = (0, 0)
+    seal_template = seal_template
 
     # 矩形のマスク画像の生成
     mask = np.zeros((height,width,3), dtype = np.uint8)
@@ -378,5 +446,25 @@ def rotate_template(temp, angle):
     hor = np.linalg.norm(point_pixel[0]-point_pixel[3])
     ear = ver1+ver2/(2*hor)
     return ear
+
+def BlinkDetection(OpenFace_result,frame,result_frame,color_intr):
+    eye_landmark_list  = [range(36,42),range(42,48)]
+    ear_sum = 0
+    for eye in range(2):  #右目と左目のEARを計算
+        eye_pixel = []
+        for point in eye_landmark_list[eye]:
+            x_pix,y_pix = int(float(OpenFace_result[frame][point+5])), int(float(OpenFace_result[frame][point+73]))
+            z = result_frame.get_distance(x_pix, y_pix)
+            point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [x_pix,y_pix], z))*1000
+            x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
+            eye_pixel.append([x,y,z])
+        eye_pixel = np.array(eye_pixel)
+        if frame == 2:
+            print(f"eye_pixel = {eye_pixel}")
+        ver1 =  np.linalg.norm(eye_pixel[1]-eye_pixel[5])
+        ver2 = np.linalg.norm(eye_pixel[2]-eye_pixel[4])
+        hor = np.linalg.norm(eye_pixel[0]-eye_pixel[3])
+        ear_sum += (ver1 + ver2) / (2.0 * hor)
+    return ear_sum  #右目と左目のEARの合計を返す
 
 OpenFace(root_dir)
