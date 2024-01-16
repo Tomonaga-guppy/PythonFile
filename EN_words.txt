@@ -1,7 +1,5 @@
 #論文などで出てきた英単語，熟語などの記録
 
-state-of-the-art        :最先端の
-out-of-the-box          :すぐに使える，(独創的な)
 sparse                  :疎な，まばらな
 Brute-Force             :力任せ
 outperform              :優れている
@@ -11,6 +9,12 @@ profile                 :横顔
 fiducial                :基準となる
 temporomandibular       :顎関節
 incisors                :切歯
+mastification           :咀嚼
+
+
+[論文で多そうな表現]
+state-of-the-art        :最先端の
+out-of-the-box          :すぐに使える，(独創的な)
 pros & cons             :メリットとデメリット（ラテン語）
 present invention       :本発明，この発明
 refer to ～ as ...      :～を...と呼ぶ
