@@ -5,7 +5,7 @@ import glob
 import os
 
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
-dir_paths = glob.glob(os.path.join(root_dir,"*f/OpenFace.avi"))
+dir_paths = glob.glob(os.path.join(root_dir,"*e/OpenFace.avi"))
 
 landmark_plot = True  #Trueでランドマークをプロット
 caliblation_time_list = [2,5,5,4,4,5]  #a-fまでのキャリブレーション時間
@@ -27,8 +27,18 @@ for i,dir_path in enumerate(dir_paths):
         landmark_path = dir_path + r"\landmark_local.npy"
         landmark = np.load(landmark_path,allow_pickle=True)   #dataは[axis][frame][id]の順で並んでいる
 
-    frame1 = 150
-    frame2 = 457
+    # frame1 = 60  #a
+    # frame2 = 308
+    # frame1 = 150  #b
+    # frame2 = 514
+    # frame1 = 150  #c
+    # frame2 = 287
+    # frame1 = 120  #d
+    # frame2 = 367
+    frame1 = 120  #e
+    frame2 = 410
+    # frame1 = 150  #f
+    # frame2 = 456
     ply_path = dir_path + r"\ply\random_cloud"+ str(frame1) +".ply"
     ply_path2 = dir_path + r"\ply\random_cloud" + str(frame2) + ".ply"
     # ply_path = dir_path + r"\ply\random_cloud150.ply"
@@ -40,6 +50,9 @@ for i,dir_path in enumerate(dir_paths):
     colors2 = np.array(mesh2.visual.vertex_colors)/255  #meshから色の情報を取得
     # 読み込んだ点群を色付きでmatplotlibで可視化
     fig = plt.figure()
+    #figsizeを設定
+    fig.set_figwidth(12)
+    fig.set_figheight(6)
     xlim = [-150,50]
     ylim = [-150,50]
     ax = fig.add_subplot(1,2,1)
