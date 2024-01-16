@@ -450,21 +450,23 @@ def rotate_template(temp, angle):
 def BlinkDetection(OpenFace_result,frame,result_frame,color_intr):
     eye_landmark_list  = [range(36,42),range(42,48)]
     ear_sum = 0
+    ear_list = np.array([])
     for eye in range(2):  #右目と左目のEARを計算
-        eye_pixel = []
+        eye_position = []
         for point in eye_landmark_list[eye]:
             x_pix,y_pix = int(float(OpenFace_result[frame][point+5])), int(float(OpenFace_result[frame][point+73]))
             z = result_frame.get_distance(x_pix, y_pix)
             point_pos = np.array(rs.rs2_deproject_pixel_to_point(color_intr , [x_pix,y_pix], z))*1000
             x,y,z = point_pos[0], point_pos[1], point_pos[2]*depth_scale
-            eye_pixel.append([x,y,z])
-        eye_pixel = np.array(eye_pixel)
+            eye_position.append([x,y,z])
+        eye_position = np.array(eye_position)
         if frame == 2:
-            print(f"eye_pixel = {eye_pixel}")
-        ver1 =  np.linalg.norm(eye_pixel[1]-eye_pixel[5])
-        ver2 = np.linalg.norm(eye_pixel[2]-eye_pixel[4])
-        hor = np.linalg.norm(eye_pixel[0]-eye_pixel[3])
-        ear_sum += (ver1 + ver2) / (2.0 * hor)
-    return ear_sum  #右目と左目のEARの合計を返す
+            print(f"eye_position = {eye_position}")
+        ver1 =  np.linalg.norm(eye_position[1]-eye_position[5])
+        ver2 = np.linalg.norm(eye_position[2]-eye_position[4])
+        hor = np.linalg.norm(eye_position[0]-eye_position[3])
+        ear = (ver1+ver2)/(2*hor)
+        ear_list = np.append(ear_list,ear)
+    return ear_list  #右目と左目のEARの合計を返す
 
 OpenFace(root_dir)
