@@ -38,7 +38,7 @@ output_dir = dir_path + "/yoko"
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
     # フレームを保存する
-save_frames(video_path, output_dir)
+    save_frames(video_path, output_dir)
 
 
 image1_path = output_dir + "/0001.jpg"  #b
@@ -59,5 +59,5 @@ ax2 = fig.add_subplot(1,2,2)
 ax2.imshow(cv2.cvtColor(image2, cv2.COLOR_BGR2RGB))
 ax2.set_xlabel('Z-axis', fontsize=15)
 ax2.set_ylabel('Y-axis', fontsize=15)
-plt.savefig(root_dir + "/yoko_pix.png")
+plt.savefig(dir_path + "/yoko_pix.png")
 plt.show()
