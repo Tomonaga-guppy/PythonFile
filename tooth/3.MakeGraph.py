@@ -17,14 +17,15 @@ root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_
 # caliblation_time = 10 #aは2秒，d,eは4秒
 # corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,-4.578-25]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 # corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,-4.578]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
+# corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,-25]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,0]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 
-transp = False  #Trueが背景透明
+transp = True  #Trueが背景透明
 ear = True  #Trueがblink_list_npy（まばたき補正）を使用
-frame_draw = False  #Trueが各点にframe番号を表示
+frame_draw = False#Trueが各点にframe番号を表示
 seal_3dplot = False  #Trueがシールの3D軌道作成
 
-ply_create = True #Trueがplyファイル作成
+ply_create = False #Trueがplyファイル作成
 
 global theta_co_x, theta_co_y, theta_co_z
 theta_co_x = np.deg2rad(0)
@@ -33,7 +34,7 @@ theta_co_z = np.deg2rad(0)
 
 
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*f/landmark_cam.npy')
+    pattern = os.path.join(root_dir, '*e/landmark_cam.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -54,7 +55,7 @@ def MakeGraph(root_dir, fps):
         theta_camera = np.arccos(np.mean(abs(accel[:,1]))/(np.sqrt(np.mean(accel[:,1])**2+np.mean(accel[:,2])**2)))
 
         blink_frame_npy = np.load(dir_path + "blink_list.npy")
-        # print(f"blink_frame_npy = {blink_frame_npy}")
+        print(f"blink_frame_npy = {blink_frame_npy}")
 
         # print(f'aa.shape = {aa.shape}')
         XL_x_seal = []
@@ -79,12 +80,12 @@ def MakeGraph(root_dir, fps):
         # df_vector_45.to_csv(dir_path + "df_vector_45.csv")
 
 
-        #df_vector_45のフレームとy座標をプロット
-        fig = plt.figure()
-        ax_45a = fig.add_subplot(1,2,1)
-        ax_45a.plot(df_vector_45.index, df_vector_45.iloc[:,1])
-        #ax_45aのタイトルを設定
-        ax_45a.set_title('45bef', fontsize=10)
+        # #df_vector_45のフレームとy座標をプロット
+        # fig = plt.figure()
+        # ax_45a = fig.add_subplot(1,2,1)
+        # ax_45a.plot(df_vector_45.index, df_vector_45.iloc[:,1])
+        # #ax_45aのタイトルを設定
+        # ax_45a.set_title('45bef', fontsize=10)
 
         if ear:
             # df_vector_30.loc[blink_frame_npy,:] = np.nan
@@ -97,12 +98,12 @@ def MakeGraph(root_dir, fps):
             # df_vector_36.to_csv(dir_path + "df_vector_36_interpolate.csv")
             # df_vector_45.to_csv(dir_path + "df_vector_45_interpolate.csv")
 
-            # df_vector_45のフレームとy座標をプロット
-            ax_45b = fig.add_subplot(1,2,2)
-            ax_45b.plot(df_vector_45.index, df_vector_45.iloc[:,1])
-            ax_45b.set_title('45af', fontsize=10)
-            #ax45aとax45bを表示
-            # plt.show()
+            # # df_vector_45のフレームとy座標をプロット
+            # ax_45b = fig.add_subplot(1,2,2)
+            # ax_45b.plot(df_vector_45.index, df_vector_45.iloc[:,1])
+            # ax_45b.set_title('45af', fontsize=10)
+            # #ax45aとax45bを表示
+            # # plt.show()
 
         while True:
             #鼻先(30)、左右目(36,45)の位置ベクトル
@@ -124,7 +125,8 @@ def MakeGraph(root_dir, fps):
 
             if frame_number < caliblation_time*fps:
                 theta_nose_sum += float(np.arccos(np.dot(vector_y_nose,vector_y_nose2)/(np.linalg.norm(vector_y_nose)*np.linalg.norm(vector_y_nose2))))
-                theta_nose = (theta_nose_sum/(caliblation_time*fps))
+                theta_nose = (theta_nose_sum/frame_number)
+                # print(f"theta_nose = {np.rad2deg(theta_nose)}")
 
             elif frame_number >= caliblation_time*fps:
                 #e_y
@@ -135,8 +137,12 @@ def MakeGraph(root_dir, fps):
                 # 点を反時計回りにtheta回転 = 軸を時計回りにtheta回転  ==   点は反時計回りが正、軸は時計回りが正
                 # https://qiita.com/suzuki-navi/items/60ef241b2dca499df794
                 theta_x =  -theta_nose  +theta_camera + theta_co_x
-                if frame_number == 457:
-                    theta_x = theta_x + np.deg2rad(-5)
+                # if frame_number == 457 and id == "20231218_f":  #f
+                #     theta_x = theta_x + np.deg2rad(-5)
+
+
+                # print(f"theta_x = {np.rad2deg(theta_x)}")
+
 
                 #ベクトル変換https://eman-physics.net/math/linear08.html  グローバル座標とローカル座標https://programming-surgeon.com/script/coordinate-system/
                 R_Cam_Nose = np.array([base_vector_x,base_vector_y,base_vector_z]).T
@@ -208,9 +214,13 @@ def MakeGraph(root_dir, fps):
                     # print(f"{frame_number} ply_create == True")
 
                     # # if frame_number == 122 or frame_number == 240 or frame_number == 161:  #a1最大開口時
-                    # if frame_number == 150 or frame_number == 514:  #b1
+                    # if frame_number == 60 or frame_number == 308:  #a
+                    # if frame_number == 150 or frame_number == 514:  #b
+                    # if frame_number == 150 or frame_number == 287:  #c
+                    # if frame_number == 120 or frame_number == 367:  #d
+                    if frame_number == 120 or frame_number == 410:  #e
+                    # if frame_number == 150 or frame_number == 456:  #f
                     # if frame_number%30==0 or frame_number == 457:
-                    if frame_number == 150 or frame_number == 457:
                         if os.path.isfile(dir_path + f"plycam/random_cloud{frame_number}.ply"):
                             random_ply_path = dir_path + f"plycam/random_cloud{frame_number}.ply"
                             print(random_ply_path)
@@ -273,6 +283,7 @@ def MakeGraph(root_dir, fps):
                 break
 
 
+
         print('theta_nose [deg] = ', np.rad2deg(theta_nose))
         print('theta_cam [deg] = ', np.rad2deg(theta_camera))
         print('theta_co_x [deg] = ', np.rad2deg(theta_co_x))
@@ -292,7 +303,7 @@ def MakeGraph(root_dir, fps):
                 'z': XL_z_seal}
 
         df = pd.DataFrame(data)
-        df.index = df.index + 1  #indexを1からに
+        # df.index = df.index + 1  #indexを1からに
 
         df_sg = pd.DataFrame(index=df.index)
         # 各列データを平滑化して、結果をdf_sgに格納
@@ -328,6 +339,48 @@ def MakeGraph(root_dir, fps):
 
         data_num = df.shape[0]
         # print(f"data_num = {df.shape[0]}")
+        mo =  np.sqrt((XL_y_seal_SG[1:] - XL_y_seal_SG[0])**2 + (XL_z_seal_SG[1:] - XL_z_seal_SG[0])**2)
+        rs_mo = max(mo)
+        mo_index = mo.idxmax()
+        rs_xr = min(XL_x_seal_SG)- XL_x_seal_SG[0]
+        rs_xl = max(XL_x_seal_SG)- XL_x_seal_SG[0]
+        rs_y = XL_y_seal_SG[mo_index]- XL_y_seal_SG[0]
+        rs_z = XL_z_seal_SG[mo_index]- XL_z_seal_SG[0]
+        print(f" XL_z_seal_SG[mo_index]={ XL_z_seal_SG[mo_index]}" )
+        print(f"XL_z_seal_SG[0]={XL_z_seal_SG[0]}")
+        # rs_y = min(XL_y_seal_SG)- XL_y_seal_SG[0]
+        # rs_z = min(XL_z_seal_SG)- XL_z_seal_SG[0]
+
+
+        # print(f"min(XL_z_seal_SG) = {min(XL_z_seal_SG)}")
+        # print(f"XL_z_seal_SG[1] = {XL_z_seal_SG[1]}")
+        # print(f"d = {d}")
+        print(f"max_mo_frame = {mo_index}({mo_index+fps*caliblation_time})")
+        print(f"RS xr,xl,y,z = {rs_xr:.1f}, {rs_xl:.1f}, {rs_y:.1f}, {rs_z:.1f}, rs_mo = {rs_mo:.1f}")
+
+
+
+
+        id = os.path.basename(os.path.dirname(dir_path))
+        mkg_xr, mkg_xl, mkg_y, mkg_z, mkg_mo = 0, 0, 0, 0, 0
+        try:
+            mkg_result_path = os.path.join(root_dir,"mkg_result.csv")
+            # CSVファイルを読み込みモードで開く
+            with open(mkg_result_path, 'r', newline='') as file:
+                reader = csv.reader(file)
+                mkg_result = [row for row in reader]
+                for i in range(0,len(mkg_result)):
+                    if mkg_result[i][0] == str(id):
+                        mkg_xr = float(mkg_result[i][1])
+                        mkg_xl = float(mkg_result[i][2])
+                        mkg_y = float(mkg_result[i][3])
+                        mkg_z = float(mkg_result[i][4])
+                        mkg_mo = float(mkg_result[i][5])
+                        print(f"mkg a,b,c,d = {mkg_xr}, {mkg_xl}, {mkg_y}, {mkg_z}, mkg_mo = {mkg_mo:.1f}")
+                        print(f"error a,b,c,d = {rs_xr-mkg_xr:.1f}, {rs_xl-mkg_xl:.1f}, {rs_y-mkg_y:.1f}, {rs_z-mkg_z:.1f}, error_mo = {rs_mo-mkg_mo:.1f}")
+        except:
+            pass
+
 
         # 散布図,線を描画
         fig = plt.figure(figsize=(14, 5))
@@ -349,21 +402,22 @@ def MakeGraph(root_dir, fps):
 
         if frame_draw:
             #各点にframe番号を表示
-            for i in range(1,data_num+1):
-                ax1.annotate(i, (XL_x_seal_SG[ i], XL_y_seal_SG[i]), fontsize=6, path_effects=[patheffects.withStroke(linewidth=1, foreground="w")])
+            for i in range(data_num):
+                ax1.annotate(i, (XL_x_seal_SG[i], XL_y_seal_SG[i]), fontsize=6, path_effects=[patheffects.withStroke(linewidth=1, foreground="w")])
 
         ax1.set_aspect('equal', adjustable='box')
 
         cmap = plt.get_cmap('jet')
-        normalize = plt.Normalize(1, data_num-1)
-        colors = cmap(normalize(range(1,data_num-1)))
+        normalize = plt.Normalize(1, data_num)
+        colors = cmap(normalize(range(1,data_num)))
 
         # if ear: ax1.scatter(XL_x_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
 
-        ax1.plot(XL_x_seal_SG[2:], XL_y_seal_SG[2:], alpha = 0.3)
+        ax1.plot(XL_x_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
 
-        ax1.scatter(XL_x_seal_SG[2:], XL_y_seal_SG[2:], c=colors, s=15, alpha = 0.7)
-        ax1.scatter(XL_x_seal_SG[1], XL_y_seal_SG[1], c=[(255/255,165/255,0)], s=200, marker="*")
+        ax1.scatter(XL_x_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
+        ax1.scatter(XL_x_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
+        ax1.scatter(XL_x_seal_SG[mo_index], XL_y_seal_SG[mo_index], c="b", s=200, marker="*")
 
         # Create a colorbar
         cbar = fig.colorbar(ScalarMappable(norm=normalize, cmap=cmap), ax=ax1)
@@ -384,8 +438,8 @@ def MakeGraph(root_dir, fps):
 
         if frame_draw:
             #各点にframe番号を表示
-            for i in range(1,data_num+1):
-                ax2.annotate(i, (XL_z_seal_SG[ i], XL_y_seal_SG[i]), fontsize=6, path_effects=[patheffects.withStroke(linewidth=1, foreground="w")])
+            for i in range(data_num):
+                ax2.annotate(i, (XL_z_seal_SG[i], XL_y_seal_SG[i]), fontsize=6, path_effects=[patheffects.withStroke(linewidth=1, foreground="w")])
 
         ax2.invert_xaxis()
         ax2.set_aspect('equal', adjustable='box')
@@ -393,10 +447,12 @@ def MakeGraph(root_dir, fps):
 
         # if ear: ax2.scatter(XL_z_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
 
-        ax2.scatter(XL_z_seal_SG[2:], XL_y_seal_SG[2:], c=colors, s=15, alpha = 0.7)
-        ax2.scatter(XL_z_seal_SG[1], XL_y_seal_SG[1], c=[(255/255,165/255,0)], s=200, marker="*")
+        ax2.plot(XL_z_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
 
-        ax2.plot(XL_z_seal_SG[2:], XL_y_seal_SG[2:], alpha = 0.3)
+        ax2.scatter(XL_z_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
+        ax2.scatter(XL_z_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
+        ax2.scatter(XL_z_seal_SG[mo_index], XL_y_seal_SG[mo_index], c="b", s=200, marker="*")
+
 
         plt.tight_layout()  # グラフのレイアウトを調整
 
@@ -413,36 +469,7 @@ def MakeGraph(root_dir, fps):
             plt.savefig(dir_path + f"frontal&sagittal_theta[{int(np.rad2deg(theta_co_x))}].png", bbox_inches='tight', transparent=True)
             print(f"fig is saved in frontal&sagittal_theta[{int(np.rad2deg(theta_co_x))}].png")
 
-        a = min(XL_x_seal_SG)- XL_x_seal_SG[1]
-        b = max(XL_x_seal_SG)- XL_x_seal_SG[1]
-        c = min(XL_y_seal_SG)- XL_y_seal_SG[1]
-        d = min(XL_z_seal_SG)- XL_z_seal_SG[1]
-        # print(f"min(XL_z_seal_SG) = {min(XL_z_seal_SG)}")
-        # print(f"XL_z_seal_SG[1] = {XL_z_seal_SG[1]}")
-        # print(f"d = {d}")
-        print(f"RS a,b,c,d = {a:.1f}, {b:.1f}, {c:.1f}, {d:.1f}")
 
-
-
-
-        id = os.path.basename(os.path.dirname(dir_path))
-        mkg_a, mkg_b, mkg_c, mkg_d = 0, 0, 0, 0
-        try:
-            mkg_result_path = os.path.join(root_dir,"mkg_result.csv")
-            # CSVファイルを読み込みモードで開く
-            with open(mkg_result_path, 'r', newline='') as file:
-                reader = csv.reader(file)
-                mkg_result = [row for row in reader]
-                for i in range(0,len(mkg_result)):
-                    if mkg_result[i][0] == str(id):
-                        mkg_a = float(mkg_result[i][1])
-                        mkg_b = float(mkg_result[i][2])
-                        mkg_c = float(mkg_result[i][3])
-                        mkg_d = float(mkg_result[i][4])
-                        print(f"mkg a,b,c,d = {mkg_a}, {mkg_b}, {mkg_c}, {mkg_d}")
-                        print(f"error a,b,c,d = {a-mkg_a:.1f}, {b-mkg_b:.1f}, {c-mkg_c:.1f}, {d-mkg_d:.1f}")
-        except:
-            pass
 
         if seal_3dplot:
             #3次元プロット
@@ -453,9 +480,10 @@ def MakeGraph(root_dir, fps):
             ax.set_xlabel('X [mm]',fontsize=15)
             ax.set_ylabel('Z [mm]',fontsize=15)
             ax.set_zlabel('Y [mm]',fontsize=15)
-            ax.scatter(XL_x_seal_SG[2:], XL_z_seal_SG[2:], XL_y_seal_SG[2:], c=colors, s=15, alpha = 0.7)
-            ax.scatter(XL_x_seal_SG[1], XL_z_seal_SG[1], XL_y_seal_SG[1], c=[(255/255,165/255,0)], s=200, marker="*")
-            ax.plot(XL_x_seal_SG[2:], XL_z_seal_SG[2:], XL_y_seal_SG[2:], alpha = 0.3)
+            ax.scatter(XL_x_seal_SG[1:], XL_z_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
+            ax.scatter(XL_x_seal_SG[0], XL_z_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
+            ax.scatter(XL_x_seal_SG[mo_index], XL_z_seal_SG[mo_index], XL_y_seal_SG[mo_index], c=[(0/255,0/255,255/255)], s=200, marker="*")
+            ax.plot(XL_x_seal_SG[1:], XL_z_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
             #アスペクト比を揃える
             max_range = np.array([XL_x_seal_SG.max()-XL_x_seal_SG.min(), XL_z_seal_SG.max()-XL_z_seal_SG.min(), XL_y_seal_SG.max()-XL_y_seal_SG.min()]).max() / 2.0
             mid_x = (XL_x_seal_SG.max()+XL_x_seal_SG.min()) * 0.5
