@@ -1,0 +1,8 @@
+import math
+
+def calculate_distance(x, y):
+    distance = math.sqrt(x**2 + y**2)
+    return distance
+
+
+print(calculate_distance(-29.7,31.8))
