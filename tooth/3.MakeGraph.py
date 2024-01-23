@@ -9,20 +9,19 @@ import sys
 import csv
 import pandas as pd
 import trimesh
-
+import matplotlib.ticker as mticker
 
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
 
 # caliblation_time = 10 #aは2秒，d,eは4秒
-# corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,-4.578-25]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 # corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,-4.578]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 # corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,-25]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,0]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 
-transp = True  #Trueが背景透明
+grid_draw = False  #Trueでグリッドを描画
 ear = True  #Trueがblink_list_npy（まばたき補正）を使用
-frame_draw = False#Trueが各点にframe番号を表示
+frame_draw = False #Trueが各点にframe番号を表示
 seal_3dplot = False  #Trueがシールの3D軌道作成
 
 ply_create = False #Trueがplyファイル作成
@@ -32,9 +31,8 @@ theta_co_x = np.deg2rad(0)
 theta_co_y = np.deg2rad(0)
 theta_co_z = np.deg2rad(0)
 
-
 def MakeGraph(root_dir, fps):
-    pattern = os.path.join(root_dir, '*e/landmark_cam.npy')
+    pattern = os.path.join(root_dir, '*a/landmark_cam.npy')
     npy_files = glob.glob(pattern, recursive=True)
     num_npy_files = len(npy_files)
 
@@ -79,31 +77,12 @@ def MakeGraph(root_dir, fps):
         # df_vector_36.to_csv(dir_path + "df_vector_36.csv")
         # df_vector_45.to_csv(dir_path + "df_vector_45.csv")
 
-
-        # #df_vector_45のフレームとy座標をプロット
-        # fig = plt.figure()
-        # ax_45a = fig.add_subplot(1,2,1)
-        # ax_45a.plot(df_vector_45.index, df_vector_45.iloc[:,1])
-        # #ax_45aのタイトルを設定
-        # ax_45a.set_title('45bef', fontsize=10)
-
         if ear:
-            # df_vector_30.loc[blink_frame_npy,:] = np.nan
-            # df_vector_30 = df_vector_30.interpolate(method='linear', limit_direction='both')
+            #まばたきしているフレームの目の位置はまばたき前後で線形補間をおこなう
             df_vector_36.loc[blink_frame_npy,:] = np.nan
             df_vector_36 = df_vector_36.interpolate(method='linear', limit_direction='both')
             df_vector_45.loc[blink_frame_npy,:] = np.nan
             df_vector_45 = df_vector_45.interpolate(method='linear', limit_direction='both')
-
-            # df_vector_36.to_csv(dir_path + "df_vector_36_interpolate.csv")
-            # df_vector_45.to_csv(dir_path + "df_vector_45_interpolate.csv")
-
-            # # df_vector_45のフレームとy座標をプロット
-            # ax_45b = fig.add_subplot(1,2,2)
-            # ax_45b.plot(df_vector_45.index, df_vector_45.iloc[:,1])
-            # ax_45b.set_title('45af', fontsize=10)
-            # #ax45aとax45bを表示
-            # # plt.show()
 
         while True:
             #鼻先(30)、左右目(36,45)の位置ベクトル
@@ -137,12 +116,8 @@ def MakeGraph(root_dir, fps):
                 # 点を反時計回りにtheta回転 = 軸を時計回りにtheta回転  ==   点は反時計回りが正、軸は時計回りが正
                 # https://qiita.com/suzuki-navi/items/60ef241b2dca499df794
                 theta_x =  -theta_nose  +theta_camera + theta_co_x
-                # if frame_number == 457 and id == "20231218_f":  #f
+                # if frame_number == 457 and id == "20231218_f":  #f最大開口時に鼻先検出位置のずれにより約5°ずれていることを確認したため補正
                 #     theta_x = theta_x + np.deg2rad(-5)
-
-
-                # print(f"theta_x = {np.rad2deg(theta_x)}")
-
 
                 #ベクトル変換https://eman-physics.net/math/linear08.html  グローバル座標とローカル座標https://programming-surgeon.com/script/coordinate-system/
                 R_Cam_Nose = np.array([base_vector_x,base_vector_y,base_vector_z]).T
@@ -199,9 +174,6 @@ def MakeGraph(root_dir, fps):
                 XL_y_seal.append(XL_seal[1])
                 XL_z_seal.append(XL_seal[2])
 
-                # if XL_seal[2] + 43.153105694389495 < abs(0.01):
-                #     print(f"frame_number = {frame_number}, XL_seal[2] = {XL_seal[2]}")
-
                 for id in range(aa.shape[1]):
                     Xid = np.array([aa[frame_number-1][id][1], aa[frame_number-1][id][2], aa[frame_number-1][id][3],1])
                     XX = np.linalg.inv(A_Cam_Nose) @ Xid
@@ -211,9 +183,6 @@ def MakeGraph(root_dir, fps):
                     Z.append(XX[2])
 
                 if ply_create == True:
-                    # print(f"{frame_number} ply_create == True")
-
-                    # # if frame_number == 122 or frame_number == 240 or frame_number == 161:  #a1最大開口時
                     # if frame_number == 60 or frame_number == 308:  #a
                     # if frame_number == 150 or frame_number == 514:  #b
                     # if frame_number == 150 or frame_number == 287:  #c
@@ -284,10 +253,10 @@ def MakeGraph(root_dir, fps):
 
 
 
-        print('theta_nose [deg] = ', np.rad2deg(theta_nose))
-        print('theta_cam [deg] = ', np.rad2deg(theta_camera))
-        print('theta_co_x [deg] = ', np.rad2deg(theta_co_x))
-        print('theta_x [deg] = ', np.rad2deg(theta_x))
+        # print('theta_nose [deg] = ', np.rad2deg(theta_nose))
+        # print('theta_cam [deg] = ', np.rad2deg(theta_camera))
+        # print('theta_co_x [deg] = ', np.rad2deg(theta_co_x))
+        # print('theta_x [deg] = ', np.rad2deg(theta_x))
 
         #ローカル座標のxyzをnpyファイルで保存
         X = np.array(X).reshape(((aa.shape[0]-(caliblation_time*fps-1)),aa.shape[1]))
@@ -303,58 +272,39 @@ def MakeGraph(root_dir, fps):
                 'z': XL_z_seal}
 
         df = pd.DataFrame(data)
+
         # df.index = df.index + 1  #indexを1からに
 
         df_sg = pd.DataFrame(index=df.index)
         # 各列データを平滑化して、結果をdf_sgに格納
         #SG法   https://mimikousi.com/smoothing_savgol/
-        window_length = 11 #奇数に設定． 窓枠を増やすとより平滑化される
+        window_length = 7 #奇数に設定． 窓枠を増やすとより平滑化される
         polyorder = 2  #window_lengthよりも小さく． 次数が大きい方がノイズを強調する
         for col in df.columns:
             df_sg[col] = savgol_filter(df[col], window_length=window_length, polyorder=polyorder)
 
+        df_sg = df_sg-df_sg.iloc[0,:]  #顎運動開始時点を原点に
         XL_x_seal_SG = df_sg['x']
         XL_y_seal_SG = df_sg['y']
         XL_z_seal_SG = df_sg['z']
+
+        #df = df-df.iloc[0,:]  #顎運動開始時点を原点に
         # XL_x_seal_SG = df['x']
         # XL_y_seal_SG = df['y']
         # XL_z_seal_SG = df['z']
 
-
-        # pd.set_option('display.max_rows', None)  #全ての行を表示
-        # print(XL_z_seal_SG)
-        # print(df_sg['z'])
-
-        # print(f"min_z_index = {df['z'].idxmin()}, minz = {df.iloc[df['z'].idxmin()-1,2]}")  #df['z']が最小を取る時のindexを取得
-        # print(f"df_z0 = {df.iloc[0,2]}")
-        # print(f"zdif = {df.iloc[df['z'].idxmin()-1,2] - df.iloc[0,2]}")
-
-
-        # print(f"min_y_sg_index = {df_sg['y'].idxmin()}")  #df['y']が最小を取る時のindexを取得
-        # print(f"min_z_sg_index = {df_sg['z'].idxmin()}")  #df['z']が最小を取る時のindexを取得
-        # print(f"minz_sg = {df_sg.iloc[df_sg['z'].idxmin()-1,2]}")
-        # print(f"df_sg_z0 = {df_sg.iloc[0,2]}")
-        # print(f"z_sgdif = {df_sg.iloc[df_sg['z'].idxmin()-1,2] - df_sg.iloc[0,2]}")
-
-
         data_num = df.shape[0]
         # print(f"data_num = {df.shape[0]}")
-        mo =  np.sqrt((XL_y_seal_SG[1:] - XL_y_seal_SG[0])**2 + (XL_z_seal_SG[1:] - XL_z_seal_SG[0])**2)
+        mo =  np.sqrt((XL_y_seal_SG[1:] - XL_y_seal_SG[0])**2 + (XL_z_seal_SG[1:] - XL_z_seal_SG[0])**2)  #最大開口量
         rs_mo = max(mo)
         mo_index = mo.idxmax()
-        rs_xr = min(XL_x_seal_SG)- XL_x_seal_SG[0]
-        rs_xl = max(XL_x_seal_SG)- XL_x_seal_SG[0]
-        rs_y = XL_y_seal_SG[mo_index]- XL_y_seal_SG[0]
-        rs_z = XL_z_seal_SG[mo_index]- XL_z_seal_SG[0]
-        print(f" XL_z_seal_SG[mo_index]={ XL_z_seal_SG[mo_index]}" )
-        print(f"XL_z_seal_SG[0]={XL_z_seal_SG[0]}")
-        # rs_y = min(XL_y_seal_SG)- XL_y_seal_SG[0]
-        # rs_z = min(XL_z_seal_SG)- XL_z_seal_SG[0]
+        rs_xr = min(XL_x_seal_SG)
+        rs_xl = max(XL_x_seal_SG)
+        rs_y = XL_y_seal_SG[mo_index]
+        rs_z = XL_z_seal_SG[mo_index]
+        # print(f" XL_z_seal_SG[mo_index]={ XL_z_seal_SG[mo_index]}" )
+        # print(f"XL_z_seal_SG[0]={XL_z_seal_SG[0]}")
 
-
-        # print(f"min(XL_z_seal_SG) = {min(XL_z_seal_SG)}")
-        # print(f"XL_z_seal_SG[1] = {XL_z_seal_SG[1]}")
-        # print(f"d = {d}")
         print(f"max_mo_frame = {mo_index}({mo_index+fps*caliblation_time})")
         print(f"RS xr,xl,y,z = {rs_xr:.1f}, {rs_xl:.1f}, {rs_y:.1f}, {rs_z:.1f}, rs_mo = {rs_mo:.1f}")
 
@@ -382,6 +332,7 @@ def MakeGraph(root_dir, fps):
             pass
 
 
+        # plt.rcParams["font.size"] = 20  #全体のフォントサイズ設定
         # 散布図,線を描画
         fig = plt.figure(figsize=(14, 5))
 
@@ -390,37 +341,48 @@ def MakeGraph(root_dir, fps):
             fig = plt.figure(figsize=(20, 5))
         ax1 = fig.add_subplot(1,2,2)  #1行2列つくって右に配置
 
-        ax1.set_xlabel('X [mm]',fontsize=15)
-        ax1.set_ylabel('Y [mm]',fontsize=15)
+        ax1.set_xlabel('X [mm]',fontsize=20)
+        ax1.set_ylabel('Y [mm]',fontsize=20)
+
+        #軸範囲を設定 a([-10,10][-30,5][5,-20])
+        axis_range = [[int(min(XL_x_seal_SG)-6),int(max(XL_x_seal_SG)+6)],[int(min(XL_y_seal_SG)-10),int(max(XL_y_seal_SG)+5)],[int(min(XL_z_seal_SG)-5),int(max(XL_z_seal_SG)+5)]]
+        ax1.set_xlim(axis_range[0][:])
+        ax1.set_ylim(axis_range[1][:])
 
         ax1.minorticks_on()
-        if transp == False:
-            ax1.grid(which = "major", axis = "x", color = "gray", alpha = 0.5, linestyle = "-", linewidth = 1)
-            ax1.grid(which = "major", axis = "y", color = "gray", alpha = 0.5, linestyle = "-", linewidth = 1)
-            ax1.grid(which = "minor", axis = "x", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
-            ax1.grid(which = "minor", axis = "y", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
+        if grid_draw == False:
+            print(f"axis_range = {axis_range}")
+            ax1.set_xticks(np.arange(axis_range[0][0]-axis_range[0][0]%5+5, axis_range[0][1], 5))
+            ax1.set_xticks(np.arange(axis_range[0][0], axis_range[0][1], 1), minor=True)
+            ax1.set_yticks(np.arange(axis_range[1][0]-axis_range[1][0]%5+5, axis_range[1][1], 5))
+            ax1.set_yticks(np.arange(axis_range[1][0], axis_range[1][1], 1), minor=True)
+            ax1.grid(which = "major", axis = "x", color = "gray", alpha = 1, linestyle = "-", linewidth = 1)
+            ax1.grid(which = "major", axis = "y", color = "gray", alpha = 1, linestyle = "-", linewidth = 1)
+            ax1.grid(which = "minor", axis = "x", color = "gray", alpha = 0.3, linestyle = "-", linewidth = 1)
+            ax1.grid(which = "minor", axis = "y", color = "gray", alpha = 0.3, linestyle = "-", linewidth = 1)
 
         if frame_draw:
             #各点にframe番号を表示
             for i in range(data_num):
                 ax1.annotate(i, (XL_x_seal_SG[i], XL_y_seal_SG[i]), fontsize=6, path_effects=[patheffects.withStroke(linewidth=1, foreground="w")])
 
+        #0の位置に線
+        ax1.plot([0,0], [axis_range[1][0],axis_range[1][1]], color='black', linewidth = 2)
+        ax1.plot([axis_range[0][0],axis_range[0][1]], [0,0], color='black', linewidth = 2)
         ax1.set_aspect('equal', adjustable='box')
 
         cmap = plt.get_cmap('jet')
         normalize = plt.Normalize(1, data_num)
         colors = cmap(normalize(range(1,data_num)))
 
-        # if ear: ax1.scatter(XL_x_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
-
         ax1.plot(XL_x_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
 
         ax1.scatter(XL_x_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
-        ax1.scatter(XL_x_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
-        ax1.scatter(XL_x_seal_SG[mo_index], XL_y_seal_SG[mo_index], c="b", s=200, marker="*")
+        # ax1.scatter(XL_x_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
+        # ax1.scatter(XL_x_seal_SG[mo_index], XL_y_seal_SG[mo_index], c="b", s=200, marker="*")
 
         # Create a colorbar
-        cbar = fig.colorbar(ScalarMappable(norm=normalize, cmap=cmap), ax=ax1)
+        cbar = fig.colorbar(ScalarMappable(norm=normalize, cmap=cmap), ax=ax1,ticks=mticker.MultipleLocator(base=30))
         cbar.set_label('frame', fontsize=10)
 
         # 散布図を描画
@@ -429,33 +391,42 @@ def MakeGraph(root_dir, fps):
         ax2.set_xlabel('Z [mm]',fontsize=15)
         ax2.set_ylabel('Y [mm]',fontsize=15)
 
+        #軸範囲を設定
+        ax2.set_xlim(axis_range[2][:])
+        ax2.set_ylim(axis_range[1][:])
+
         ax2.minorticks_on()
-        if transp == False:
-            ax2.grid(which = "major", axis = "x", color = "gray", alpha = 0.5, linestyle = "-", linewidth = 1)
-            ax2.grid(which = "major", axis = "y", color = "gray", alpha = 0.5, linestyle = "-", linewidth = 1)
-            ax2.grid(which = "minor", axis = "x", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
-            ax2.grid(which = "minor", axis = "y", color = "gray", alpha = 0.1, linestyle = "-", linewidth = 1)
+        if grid_draw == False:
+            ax2.set_xticks(np.arange(axis_range[2][0]-axis_range[2][0]%5+5, axis_range[2][1], 5))
+            ax2.set_xticks(np.arange(axis_range[2][0], axis_range[2][1], 1), minor=True)
+            ax2.set_yticks(np.arange(axis_range[1][0]-axis_range[1][0]%5+5, axis_range[1][1], 5))
+            ax2.set_yticks(np.arange(axis_range[1][0], axis_range[1][1], 1), minor=True)
+            ax2.grid(which = "major", axis = "x", color = "gray", alpha = 1, linestyle = "-", linewidth = 1)
+            ax2.grid(which = "major", axis = "y", color = "gray", alpha = 1, linestyle = "-", linewidth = 1)
+            ax2.grid(which = "minor", axis = "x", color = "gray", alpha = 0.3, linestyle = "-", linewidth = 1)
+            ax2.grid(which = "minor", axis = "y", color = "gray", alpha = 0.3, linestyle = "-", linewidth = 1)
 
         if frame_draw:
             #各点にframe番号を表示
             for i in range(data_num):
                 ax2.annotate(i, (XL_z_seal_SG[i], XL_y_seal_SG[i]), fontsize=6, path_effects=[patheffects.withStroke(linewidth=1, foreground="w")])
 
+        ax2.plot([0,0], [axis_range[1][0],axis_range[1][1]], color='black', linewidth = 2)
+        ax2.plot([axis_range[2][0],axis_range[2][1]], [0,0], color='black', linewidth = 2)
         ax2.invert_xaxis()
         ax2.set_aspect('equal', adjustable='box')
-
 
         # if ear: ax2.scatter(XL_z_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
 
         ax2.plot(XL_z_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
-
         ax2.scatter(XL_z_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
-        ax2.scatter(XL_z_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
-        ax2.scatter(XL_z_seal_SG[mo_index], XL_y_seal_SG[mo_index], c="b", s=200, marker="*")
+        # ax2.scatter(XL_z_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
+        # ax2.scatter(XL_z_seal_SG[mo_index], XL_y_seal_SG[mo_index], c="b", s=200, marker="*")
 
 
         plt.tight_layout()  # グラフのレイアウトを調整
 
+        # plt.show()
         if frame_draw and ear:
             plt.savefig(dir_path + f"frontal&sagittal_frame_ear_theta[{int(np.rad2deg(theta_co_x))}].png", bbox_inches='tight', transparent=True)
             print(f"fig is saved in frontal&sagittal_frame_ear_theta[{int(np.rad2deg(theta_co_x))}].png")
@@ -468,7 +439,6 @@ def MakeGraph(root_dir, fps):
         if frame_draw == False and ear == False:
             plt.savefig(dir_path + f"frontal&sagittal_theta[{int(np.rad2deg(theta_co_x))}].png", bbox_inches='tight', transparent=True)
             print(f"fig is saved in frontal&sagittal_theta[{int(np.rad2deg(theta_co_x))}].png")
-
 
 
         if seal_3dplot:
