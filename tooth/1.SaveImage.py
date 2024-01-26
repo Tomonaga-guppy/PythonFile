@@ -17,7 +17,7 @@ root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_
 #     print("bagファイルのあるディレクトリパスが指定されていません。")
 #     sys.exit()
 
-pattern = os.path.join(root_dir, '*.bag')
+pattern = os.path.join(root_dir, '*d.bag')
 bag_files = glob.glob(pattern, recursive=True)
 
 error_bagfiles = []  #読み取れなかったbagファイル記録用
