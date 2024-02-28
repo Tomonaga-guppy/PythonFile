@@ -11,10 +11,7 @@ import pyrealsense2 as rs
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
-# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
-root_dir = r"C:\Users\zutom\BRLAB\tooth\chewing\2024_2_26"
-
+root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
 
 seal_temp = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
 
@@ -24,7 +21,7 @@ depth_scale = 1.0000000474974513
 ply = False  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*P/RGB_image')  #RGB_imageがあるディレクトリを検索
+    pattern = os.path.join(root_dir, '*a/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
     for i,RGB_dir in enumerate(RGB_dirs):
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
