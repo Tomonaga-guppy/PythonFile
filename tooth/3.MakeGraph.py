@@ -13,13 +13,13 @@ import matplotlib.ticker as mticker
 
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
+# root_dir = r"C:\Users\zutom\BRLAB\tooth\chewing\2024_2_26"
 
-# caliblation_time = 10 #aは2秒，d,eは4秒
 # corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,-4.578]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
-# corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,-25]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
+# corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,-10],[5,0]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 corrective_condition = [[2,-5],[5,0],[5,-10],[4,-15],[4,0],[5,0]]  #a,b,c,d,e,fの順 [caliblation_time, theta_co_x]
 
-grid_draw = False  #Trueでグリッドを描画
+grid_draw = True  #Trueでグリッドを描画
 ear = True  #Trueがblink_list_npy（まばたき補正）を使用
 frame_draw = False #Trueが各点にframe番号を表示
 seal_3dplot = False  #Trueがシールの3D軌道作成
@@ -116,7 +116,8 @@ def MakeGraph(root_dir, fps):
                 # 点を反時計回りにtheta回転 = 軸を時計回りにtheta回転  ==   点は反時計回りが正、軸は時計回りが正
                 # https://qiita.com/suzuki-navi/items/60ef241b2dca499df794
                 theta_x =  -theta_nose  +theta_camera + theta_co_x
-                # if frame_number == 457 and id == "20231218_f":  #f最大開口時に鼻先検出位置のずれにより約5°ずれていることを確認したため補正
+
+                # if frame_number == 457 and id == "20231218_f":  #f最大開口時に鼻先検出位置のずれにより約5°ずれていることを確認したため，ためしに補正
                 #     theta_x = theta_x + np.deg2rad(-5)
 
                 #ベクトル変換https://eman-physics.net/math/linear08.html  グローバル座標とローカル座標https://programming-surgeon.com/script/coordinate-system/
@@ -167,16 +168,18 @@ def MakeGraph(root_dir, fps):
                 #                             [0, 0, 0, 1]])
                 # A_rotate = A_rotate @ A_Local3_Local4  #行列掛け算
 
-
                 XL_seal = np.linalg.inv(A_Cam_Nose) @ X_seal
-                XL_seal = A_rotate @ XL_seal
+                XL_seal = A_x @ XL_seal
+
+                # print(f"XL_seal_0 = {XL_seal_0}")
+                # XL_seal = A_y @ XL_seal
                 XL_x_seal.append(XL_seal[0])
                 XL_y_seal.append(XL_seal[1])
                 XL_z_seal.append(XL_seal[2])
 
-                for id in range(aa.shape[1]):
-                    Xid = np.array([aa[frame_number-1][id][1], aa[frame_number-1][id][2], aa[frame_number-1][id][3],1])
-                    XX = np.linalg.inv(A_Cam_Nose) @ Xid
+                for landmark_num in range(aa.shape[1]):
+                    X_land = np.array([aa[frame_number-1][landmark_num][1], aa[frame_number-1][landmark_num][2], aa[frame_number-1][landmark_num][3],1])
+                    XX = np.linalg.inv(A_Cam_Nose) @ X_land
                     XX = A_rotate @ XX
                     X.append(XX[0])
                     Y.append(XX[1])
@@ -187,9 +190,8 @@ def MakeGraph(root_dir, fps):
                     # if frame_number == 150 or frame_number == 514:  #b
                     # if frame_number == 150 or frame_number == 287:  #c
                     # if frame_number == 120 or frame_number == 367:  #d
-                    if frame_number == 120 or frame_number == 410:  #e
-                    # if frame_number == 150 or frame_number == 456:  #f
-                    # if frame_number%30==0 or frame_number == 457:
+                    # if frame_number == 120 or frame_number == 410:  #e
+                    if frame_number == 150 or frame_number == 456:  #f
                         if os.path.isfile(dir_path + f"plycam/random_cloud{frame_number}.ply"):
                             random_ply_path = dir_path + f"plycam/random_cloud{frame_number}.ply"
                             print(random_ply_path)
@@ -251,8 +253,6 @@ def MakeGraph(root_dir, fps):
             if frame_number > aa.shape[0]:  #frame_numberがaa.shape[0]を超えたらwhileを抜ける
                 break
 
-
-
         # print('theta_nose [deg] = ', np.rad2deg(theta_nose))
         # print('theta_cam [deg] = ', np.rad2deg(theta_camera))
         # print('theta_co_x [deg] = ', np.rad2deg(theta_co_x))
@@ -273,22 +273,28 @@ def MakeGraph(root_dir, fps):
 
         df = pd.DataFrame(data)
 
-        # df.index = df.index + 1  #indexを1からに
+        #df['y']をフレーム数を横軸としてグラフを描画
+        plt.figure()
+        ax_a = plt.subplot(1,2,1)
+        ax_a.plot(df['z'])
 
         df_sg = pd.DataFrame(index=df.index)
         # 各列データを平滑化して、結果をdf_sgに格納
         #SG法   https://mimikousi.com/smoothing_savgol/
         window_length = 7 #奇数に設定． 窓枠を増やすとより平滑化される
         polyorder = 2  #window_lengthよりも小さく． 次数が大きい方がノイズを強調する
+
         for col in df.columns:
             df_sg[col] = savgol_filter(df[col], window_length=window_length, polyorder=polyorder)
 
-        df_sg = df_sg-df_sg.iloc[0,:]  #顎運動開始時点を原点に
         XL_x_seal_SG = df_sg['x']
         XL_y_seal_SG = df_sg['y']
         XL_z_seal_SG = df_sg['z']
 
-        #df = df-df.iloc[0,:]  #顎運動開始時点を原点に
+        ax_b = plt.subplot(1,2,2)
+        ax_b.plot(df_sg['z'])
+        # plt.show()
+
         # XL_x_seal_SG = df['x']
         # XL_y_seal_SG = df['y']
         # XL_z_seal_SG = df['z']
@@ -298,18 +304,25 @@ def MakeGraph(root_dir, fps):
         mo =  np.sqrt((XL_y_seal_SG[1:] - XL_y_seal_SG[0])**2 + (XL_z_seal_SG[1:] - XL_z_seal_SG[0])**2)  #最大開口量
         rs_mo = max(mo)
         mo_index = mo.idxmax()
-        rs_xr = min(XL_x_seal_SG)
-        rs_xl = max(XL_x_seal_SG)
-        rs_y = XL_y_seal_SG[mo_index]
-        rs_z = XL_z_seal_SG[mo_index]
-        # print(f" XL_z_seal_SG[mo_index]={ XL_z_seal_SG[mo_index]}" )
-        # print(f"XL_z_seal_SG[0]={XL_z_seal_SG[0]}")
+        # print(f"mo = {mo}")
+
+        #初期位置を原点に
+        rs_xr = min(XL_x_seal_SG)- XL_x_seal_SG[0]
+        rs_xl = max(XL_x_seal_SG)- XL_x_seal_SG[0]
+        rs_y = XL_y_seal_SG[mo_index]- XL_y_seal_SG[0]
+        rs_z = XL_z_seal_SG[mo_index]- XL_z_seal_SG[0]
 
         print(f"max_mo_frame = {mo_index}({mo_index+fps*caliblation_time})")
+        print(f"df[max_mo_frame] = {df.iloc[mo_index,:]}")
+        print(f"df_sg[max_mo_frame] = {df_sg.iloc[mo_index,:]}")
+
+        print(f"before_opening = y:{ XL_y_seal_SG[0]},z:{ XL_z_seal_SG[0]}")
+        print(f"max_opening = y:{ XL_y_seal_SG[mo_index]},z:{ XL_z_seal_SG[mo_index]}")
+
+        # print(f"XL_y_seal_SG[mo_index-3:mo_index+3] = {XL_y_seal_SG[mo_index-3:mo_index+3]}")
+        # print(f"XL_z_seal_SG[mo_index-3:mo_index+3] = {XL_z_seal_SG[mo_index-3:mo_index+3]}")
+
         print(f"RS xr,xl,y,z = {rs_xr:.1f}, {rs_xl:.1f}, {rs_y:.1f}, {rs_z:.1f}, rs_mo = {rs_mo:.1f}")
-
-
-
 
         id = os.path.basename(os.path.dirname(dir_path))
         mkg_xr, mkg_xl, mkg_y, mkg_z, mkg_mo = 0, 0, 0, 0, 0
@@ -341,8 +354,8 @@ def MakeGraph(root_dir, fps):
             fig = plt.figure(figsize=(20, 5))
         ax1 = fig.add_subplot(1,2,2)  #1行2列つくって右に配置
 
-        ax1.set_xlabel('X [mm]',fontsize=20)
-        ax1.set_ylabel('Y [mm]',fontsize=20)
+        ax1.set_xlabel('X-axis [mm]',fontsize=20)
+        ax1.set_ylabel('Y-axis [mm]',fontsize=20)
 
         #軸範囲を設定 a([-10,10][-30,5][5,-20])
         axis_range = [[int(min(XL_x_seal_SG)-6),int(max(XL_x_seal_SG)+6)],[int(min(XL_y_seal_SG)-10),int(max(XL_y_seal_SG)+5)],[int(min(XL_z_seal_SG)-5),int(max(XL_z_seal_SG)+5)]]
@@ -350,7 +363,7 @@ def MakeGraph(root_dir, fps):
         ax1.set_ylim(axis_range[1][:])
 
         ax1.minorticks_on()
-        if grid_draw == False:
+        if grid_draw == True:
             print(f"axis_range = {axis_range}")
             ax1.set_xticks(np.arange(axis_range[0][0]-axis_range[0][0]%5+5, axis_range[0][1], 5))
             ax1.set_xticks(np.arange(axis_range[0][0], axis_range[0][1], 1), minor=True)
@@ -360,6 +373,8 @@ def MakeGraph(root_dir, fps):
             ax1.grid(which = "major", axis = "y", color = "gray", alpha = 1, linestyle = "-", linewidth = 1)
             ax1.grid(which = "minor", axis = "x", color = "gray", alpha = 0.3, linestyle = "-", linewidth = 1)
             ax1.grid(which = "minor", axis = "y", color = "gray", alpha = 0.3, linestyle = "-", linewidth = 1)
+            ax1.set_xticklabels(ax1.get_xticks(), fontsize=15)
+            ax1.set_yticklabels(ax1.get_yticks(), fontsize=15)
 
         if frame_draw:
             #各点にframe番号を表示
@@ -377,26 +392,28 @@ def MakeGraph(root_dir, fps):
 
         ax1.plot(XL_x_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
 
-        ax1.scatter(XL_x_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
+        ax1.scatter(XL_x_seal_SG[1:], XL_y_seal_SG[1:], c="b", s=15, alpha = 0.7)
+        # ax1.scatter(XL_x_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
         # ax1.scatter(XL_x_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
         # ax1.scatter(XL_x_seal_SG[mo_index], XL_y_seal_SG[mo_index], c="b", s=200, marker="*")
 
-        # Create a colorbar
-        cbar = fig.colorbar(ScalarMappable(norm=normalize, cmap=cmap), ax=ax1,ticks=mticker.MultipleLocator(base=30))
-        cbar.set_label('frame', fontsize=10)
+        # カラーバーを表示
+        # cbar = fig.colorbar(ScalarMappable(norm=normalize, cmap=cmap), ax=ax1,ticks=mticker.MultipleLocator(base=30))
+        # cbar.ax.tick_params(labelsize=12)
+        # cbar.set_label('frame [-]', fontsize=15)
 
         # 散布図を描画
         ax2 = fig.add_subplot(1,2,1)  #1行2列つくって左に配置
 
-        ax2.set_xlabel('Z [mm]',fontsize=15)
-        ax2.set_ylabel('Y [mm]',fontsize=15)
+        ax2.set_xlabel('Z-axis [mm]',fontsize=20)
+        ax2.set_ylabel('Y-axis [mm]',fontsize=20)
 
         #軸範囲を設定
         ax2.set_xlim(axis_range[2][:])
         ax2.set_ylim(axis_range[1][:])
 
         ax2.minorticks_on()
-        if grid_draw == False:
+        if grid_draw == True:
             ax2.set_xticks(np.arange(axis_range[2][0]-axis_range[2][0]%5+5, axis_range[2][1], 5))
             ax2.set_xticks(np.arange(axis_range[2][0], axis_range[2][1], 1), minor=True)
             ax2.set_yticks(np.arange(axis_range[1][0]-axis_range[1][0]%5+5, axis_range[1][1], 5))
@@ -405,6 +422,8 @@ def MakeGraph(root_dir, fps):
             ax2.grid(which = "major", axis = "y", color = "gray", alpha = 1, linestyle = "-", linewidth = 1)
             ax2.grid(which = "minor", axis = "x", color = "gray", alpha = 0.3, linestyle = "-", linewidth = 1)
             ax2.grid(which = "minor", axis = "y", color = "gray", alpha = 0.3, linestyle = "-", linewidth = 1)
+            ax2.set_xticklabels(ax2.get_xticks(), fontsize=15)
+            ax2.set_yticklabels(ax2.get_yticks(), fontsize=15)
 
         if frame_draw:
             #各点にframe番号を表示
@@ -419,10 +438,10 @@ def MakeGraph(root_dir, fps):
         # if ear: ax2.scatter(XL_z_seal_SG[blink_frame_npy], XL_y_seal_SG[blink_frame_npy], c="r", s=200, alpha = 1.0)
 
         ax2.plot(XL_z_seal_SG[1:], XL_y_seal_SG[1:], alpha = 0.3)
-        ax2.scatter(XL_z_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
+        ax2.scatter(XL_z_seal_SG[1:], XL_y_seal_SG[1:], c="b", s=15, alpha = 0.7)
+        # ax2.scatter(XL_z_seal_SG[1:], XL_y_seal_SG[1:], c=colors, s=15, alpha = 0.7)
         # ax2.scatter(XL_z_seal_SG[0], XL_y_seal_SG[0], c=[(255/255,165/255,0)], s=200, marker="*")
         # ax2.scatter(XL_z_seal_SG[mo_index], XL_y_seal_SG[mo_index], c="b", s=200, marker="*")
-
 
         plt.tight_layout()  # グラフのレイアウトを調整
 
