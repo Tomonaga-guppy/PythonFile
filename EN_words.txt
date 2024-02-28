@@ -10,6 +10,9 @@ fiducial                :基準となる
 temporomandibular       :顎関節
 incisors                :切歯
 mastification           :咀嚼
+trajectory              :軌跡（pathと違う？）
+differentiate           :微分する
+Stomatognathic Function :顎口腔機能
 
 
 [論文で多そうな表現]
@@ -19,3 +22,8 @@ pros & cons             :メリットとデメリット（ラテン語）
 present invention       :本発明，この発明
 refer to ～ as ...      :～を...と呼ぶ
 hereinafter             :以下    例文→Deep Neural Networks (hereinafter "DNN") is common in perception AI.
+likelihood              :尤度
+implementation          :実装
+Intrarater reliability  :再現性（一人の測定者がどれだけ正確に同じ結果を出せるか）
+interrater reliability  :再現性（複数の測定者がどれだけ正確に同じ結果を出せるか）
+in vitro，in vivo       :非生体，生体（分野で細かい意味は変わってくる）

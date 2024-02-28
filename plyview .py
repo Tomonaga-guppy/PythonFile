@@ -5,9 +5,9 @@ import glob
 import os
 
 root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
-dir_paths = glob.glob(os.path.join(root_dir,"*e/OpenFace.avi"))
+dir_paths = glob.glob(os.path.join(root_dir,"*a/OpenFace.avi"))
 
-landmark_plot = True  #Trueでランドマークをプロット
+landmark_plot = False  #Trueでランドマークをプロット
 caliblation_time_list = [2,5,5,4,4,5]  #a-fまでのキャリブレーション時間
 
 for i,dir_path in enumerate(dir_paths):
@@ -27,22 +27,24 @@ for i,dir_path in enumerate(dir_paths):
         landmark_path = dir_path + r"\landmark_local.npy"
         landmark = np.load(landmark_path,allow_pickle=True)   #dataは[axis][frame][id]の順で並んでいる
 
-    # frame1 = 60  #a
-    # frame2 = 308
+    #原点を合わせるための平行移動量を最後にした場合
+    frame1 = 60  #a
+    frame2 = 308
     # frame1 = 150  #b
     # frame2 = 514
     # frame1 = 150  #c
     # frame2 = 287
     # frame1 = 120  #d
     # frame2 = 367
-    frame1 = 120  #e
-    frame2 = 410
+    # frame1 = 120  #e
+    # frame2 = 410
     # frame1 = 150  #f
     # frame2 = 456
+
+    # ply_path = dir_path + r"\plycam\random_cloud"+ str(frame1) +".ply"
+    # ply_path2 = dir_path + r"\plycam\random_cloud" + str(frame2) + ".ply"
     ply_path = dir_path + r"\ply\random_cloud"+ str(frame1) +".ply"
     ply_path2 = dir_path + r"\ply\random_cloud" + str(frame2) + ".ply"
-    # ply_path = dir_path + r"\ply\random_cloud150.ply"
-    # ply_path2 = dir_path + r"\ply\random_cloud457.ply"
     print(f"{i+1}/{len(dir_paths)}: {dir_path}")
     mesh = trimesh.load_mesh(ply_path)  # PLYファイルを読み込む
     mesh2 = trimesh.load_mesh(ply_path2)  # PLYファイルを読み込む
@@ -53,8 +55,12 @@ for i,dir_path in enumerate(dir_paths):
     #figsizeを設定
     fig.set_figwidth(12)
     fig.set_figheight(6)
+    # xlim = [450,600]
+    # ylim = [100,-50]
     xlim = [-150,50]
-    ylim = [-150,50]
+    ylim = [-75,125]
+    # xlim = [-150,50]
+    # ylim = [-150,50]
     ax = fig.add_subplot(1,2,1)
     ax.scatter(mesh.vertices[:,2], mesh.vertices[:,1], c=colors, s=1)
     if landmark_plot:
@@ -103,23 +109,3 @@ for i,dir_path in enumerate(dir_paths):
     plt.savefig(dir_path + "/sagittal.png")
     # plt.tight_layout()
     plt.show()
-
-    # #2枚を重ねて表示
-    # plt.close(fig)
-    # fig = plt.figure()
-    # ax = fig.add_subplot(1,1,1)
-    # ax.scatter(mesh.vertices[:,2], mesh.vertices[:,1], c=colors, s=1)
-    # ax.scatter(mesh2.vertices[:,2], mesh2.vertices[:,1], c=colors2, s=1)
-    # ax.set_xlabel('Z-axis', fontsize=15)
-    # ax.set_ylabel('Y-axis', fontsize=15)
-    # #グリッドを表示
-    # ax.grid()
-    # #x,y軸に少し薄めの黒で線を引く
-    # ax.axhline(0, color='black', alpha=0.4)
-    # ax.axvline(0, color='black', alpha=0.4)
-    # #描画範囲設定
-    # ax.set_xlim(xlim[0],xlim[1])
-    # ax.set_ylim(ylim[0],ylim[1])
-    # #アスペクト比を1:1に
-    # ax.set_aspect('equal', adjustable='box')
-    # plt.show()

@@ -147,7 +147,7 @@ for i,RGB_dir in enumerate(RGB_dirs):
     ax.legend()
     save_path = dir_path + 'EAR.png'
     plt.savefig(save_path, bbox_inches='tight')
-    # plt.show()
+    plt.show()
     pdf.savefig(fig)
     plt.close(fig)
 
