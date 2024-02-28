@@ -8,8 +8,10 @@ import os
 import sys
 import csv
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
+root_dir = r"C:\Users\zutom\BRLAB\tooth\chewing\2024_2_26"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
+
 
 # if len(sys.argv) > 1:
 #     root_dir = sys.argv[1]
@@ -17,7 +19,7 @@ root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_
 #     print("bagファイルのあるディレクトリパスが指定されていません。")
 #     sys.exit()
 
-pattern = os.path.join(root_dir, '*d.bag')
+pattern = os.path.join(root_dir, '*.bag')
 bag_files = glob.glob(pattern, recursive=True)
 
 error_bagfiles = []  #読み取れなかったbagファイル記録用
@@ -87,6 +89,9 @@ for progress, bagfile in enumerate(bag_files):
             cur_time = playback.get_position()  #再生時間の取得 単位はナノ秒
 
             if cur_time < pre_time:  #前フレームより再生時間が進んでいなかったら終了
+                break
+
+            if fps_count > 900:  #900フレーム以上のデータは保存しない
                 break
 
             cv2.imwrite('{}/{}.png'.format(RGB_path, str(fps_count).zfill(4)), color_image)
@@ -177,6 +182,9 @@ for progress, bagfile in enumerate(bag_files):
 
             cur_time = playback.get_position()  #再生時間の取得 単位はナノ秒
             if cur_time < pre_time:
+                break
+
+            if fps_count > 900:  #900フレーム以上のデータは保存しない
                 break
 
             #depth_scale = device.first_depth_sensor().get_depth_scale()
