@@ -12,17 +12,19 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_demo"
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
+# root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
+root_dir = r"C:\Users\zutom\BRLAB\tooth\chewing\2024_2_26"
+
 
 seal_temp = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal.png"
 
 #depth_scale = mm/depth_data
 depth_scale = 1.0000000474974513
 
-ply = True  #plyファイルを作成するかどうか(Trueは作成する)
+ply = False  #plyファイルを作成するかどうか(Trueは作成する)
 
 def OpenFace(root_dir):
-    pattern = os.path.join(root_dir, '*f/RGB_image')  #RGB_imageがあるディレクトリを検索
+    pattern = os.path.join(root_dir, '*P/RGB_image')  #RGB_imageがあるディレクトリを検索
     RGB_dirs = glob.glob(pattern, recursive=True)
     for i,RGB_dir in enumerate(RGB_dirs):
         print(f"{i+1}/{len(RGB_dirs)}  {RGB_dir}")
@@ -36,6 +38,12 @@ def OpenFace(root_dir):
         seal_template = seal_temp
         if id == "20231218_d":
             seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal_2023_1218_d.png"
+            print(f"seal_template = {seal_template}")
+        if id == "20240226_N":
+            seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal_2024_0226_N.png"
+            print(f"seal_template = {seal_template}")
+        if id == "20240226_P":
+            seal_template = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/seal_template/seal_2024_0226_P.png"
             print(f"seal_template = {seal_template}")
 
         #root_dirの2つ前のディレクトリパスを取得
@@ -182,19 +190,13 @@ def OpenFace(root_dir):
 
                     landmark_List.append([i,x,y,z])
 
-
                 if ply:
-                    # if frame_count == 60 or frame_count == 291 or frame_count == 155:
-                    # if frame_count == 150 or frame_count == 514:
-                    # if frame_count==60 or frame_count == 220 or frame_count==225:  #aのまばたき
-                    # if frame_count % 30 == 0:
                     # if frame_count==60 or frame_count == 308:  #a用
-                    # if (frame_count%30==0 and frame_count>=150) or frame_count == 514:  #b用
+                    # if frame_count==150 or frame_count == 514:  #b用
                     # if frame_count == 150 or frame_count == 287:  #c用
                     # if frame_count == 120 or frame_count == 367:  #d用
                     # if frame_count == 120 or frame_count == 410:  #e用
                     if frame_count==150 or frame_count == 456:  #f用
-                    # if (frame_count%30==0 and frame_count>=150) or frame_count == 457:  #f用
                         save_frame_count.append(frame_count)
                         xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                         xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
@@ -311,7 +313,7 @@ def OpenFace(root_dir):
             except KeyError:
                 pass
 
-            blink_list = sorted(list(set(blink_list))) #blink_listを重複削除して昇順にソート
+            blink_list = sorted(list(set(blink_list))) #blink_list（まばたき判定したフレーム）を重複削除して昇順にソート
             #blink_listをnpyファイルに保存
             print(f"blink_frame_list = {blink_list}")
             print(f"len(blink_frame_list) = {len(blink_list)}")
@@ -336,11 +338,9 @@ def OpenFace(root_dir):
             plt.close(fig)
 
 
-
     if len(error_bagfiles) != 0:
         print(f"以下のbagファイルが読み取れませんでした\n{error_bagfiles}")
 
-# def SealDetection(height,width,img):
 def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_count,seal_template):
     np.value = []
     seal_position = (0, 0)
@@ -427,7 +427,6 @@ def SealDetection(height,width,imgcopy,mask1_x,mask2_x,mask1_y,mask2_y ,frame_co
     radius = int((w_result+h_result)/4)
 
     seal_position = center_x, center_y
-    # seal_position = int(maxLoc[0]), int(maxLoc[1]) #整数型
 
     return seal_position, imgcopy, ratio, template_shape
 
@@ -441,17 +440,6 @@ def rotate_template(temp, angle):
     #画像に対してアフィン変換を行う
     rot_image = cv2.warpAffine(temp, trans, (width, height))
     return rot_image
-
-# def BlinkDetection(OpenFace_result,frame):
-    point_pixel = []
-    for point in range(36,42):
-        point_pixel.append([float(OpenFace_result[frame][point+5]), float(OpenFace_result[frame][point+73])])
-    point_pixel = np.array(point_pixel)
-    ver1 =  np.linalg.norm(point_pixel[1]-point_pixel[5])
-    ver2 = np.linalg.norm(point_pixel[2]-point_pixel[4])
-    hor = np.linalg.norm(point_pixel[0]-point_pixel[3])
-    ear = ver1+ver2/(2*hor)
-    return ear
 
 def BlinkDetection(OpenFace_result,frame):
     eye_landmark_list  = [range(36,42),range(42,48)]
