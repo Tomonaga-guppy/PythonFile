@@ -184,11 +184,12 @@ def OpenFace(root_dir):
 
 
                 if ply:
-                    # if frame_count == 60 or frame_count == 291 or frame_count == 155:
-                    # if frame_count == 150 or frame_count == 514:
-                    # if frame_count==60 or frame_count == 220 or frame_count==225:  #aのまばたき
-                    # if frame_count % 30 == 0:
-                    if (frame_count%30==0 and frame_count>=150) or frame_count == 457:
+                    # if frame_count==60 or frame_count == 308:  #a用
+                    # if frame_count==150 or frame_count == 514:  #b用
+                    # if frame_count == 150 or frame_count == 287:  #c用
+                    # if frame_count == 120 or frame_count == 367:  #d用
+                    # if frame_count == 120 or frame_count == 410:  #e用
+                    if frame_count==150 or frame_count == 456:  #f用
                         save_frame_count.append(frame_count)
                         xpix_max = int(max([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
                         xpix_min = int(min([float(OpenFace_result[frame_count][i+5]) for i in range(68)]))
@@ -435,17 +436,6 @@ def rotate_template(temp, angle):
     #画像に対してアフィン変換を行う
     rot_image = cv2.warpAffine(temp, trans, (width, height))
     return rot_image
-
-# def BlinkDetection(OpenFace_result,frame):
-    point_pixel = []
-    for point in range(36,42):
-        point_pixel.append([float(OpenFace_result[frame][point+5]), float(OpenFace_result[frame][point+73])])
-    point_pixel = np.array(point_pixel)
-    ver1 =  np.linalg.norm(point_pixel[1]-point_pixel[5])
-    ver2 = np.linalg.norm(point_pixel[2]-point_pixel[4])
-    hor = np.linalg.norm(point_pixel[0]-point_pixel[3])
-    ear = ver1+ver2/(2*hor)
-    return ear
 
 def BlinkDetection(OpenFace_result,frame,result_frame,color_intr):
     eye_landmark_list  = [range(36,42),range(42,48)]
