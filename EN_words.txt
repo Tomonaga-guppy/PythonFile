@@ -9,7 +9,9 @@ fiducial                :基準となる
 differentiate           :微分する
 musculoskeletal         :筋骨格系
 stroke                  :脳卒中
-ortgises                :装具
+ankle foot orthosis     :短下肢装具
+Ambulation              :歩行運動
+gait                    :歩き方、歩様
 
 
 

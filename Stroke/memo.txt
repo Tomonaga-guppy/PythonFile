@@ -1,0 +1,7 @@
+脳卒中患者の評価指標
+    ・MI (Motricity Index)                      :脳卒中後の運動障害の評価指標     https://therabby.com/motricity-index/#google_vignette
+    ・SIAS (Stroke Impairment Assessment Set)   :脳卒中機能障害評価法 身体機能のダメージ把握のための評価指標    https://knowledge.nurse-senka.jp/500431#:~:text=%E8%84%B3%E5%8D%92%E4%B8%AD%E6%A9%9F%E8%83%BD%E9%9A%9C%E5%AE%B3%E8%A9%95%E4%BE%A1%E6%B3%95%EF%BC%88Stroke%20Impairment%20Assessment%20Set%EF%BC%9ASIAS,%E3%81%84%E3%82%8B%E3%81%AE%E3%81%8C%E7%89%B9%E5%BE%B4%E3%81%A7%E3%81%99%E3%80%82
+    ・FAC (Functional Ambulation Categorie)     :歩行能力の臨床評価指標 https://www.ayumieye.com/fac/#:~:text=%E8%84%B3%E5%8D%92%E4%B8%AD%E3%82%84%E5%A4%9A%E7%99%BA%E6%80%A7%E7%A1%AC%E5%8C%96,%E3%81%A7%E3%81%8D%E3%82%8B%E3%81%AE%E3%81%8C%E7%89%B9%E5%BE%B4%E3%81%A7%E3%81%99%E3%80%82
+    ・BRS (Brunnstrome stage)                   :脳血管障害による片麻痺の回復過程を評価するためのスケール    https://knowledge.nurse-senka.jp/233449/
+    ・MAS (modified Ashworth scale)             :脳血管障害などの疾患による痙縮の程度を評価するためのスケール
+
