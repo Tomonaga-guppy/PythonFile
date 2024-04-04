@@ -5,14 +5,12 @@ Brute-Force             :力任せ
 outperform              :優れている
 proportion              :割合
 lacal                   :局所的
-profile                 :横顔
 fiducial                :基準となる
-temporomandibular       :顎関節
-incisors                :切歯
-mastification           :咀嚼
-trajectory              :軌跡（pathと違う？）
 differentiate           :微分する
-Stomatognathic Function :顎口腔機能
+musculoskeletal         :筋骨格系
+stroke                  :脳卒中
+ortgises                :装具
+
 
 
 [論文で多そうな表現]
@@ -27,3 +25,13 @@ implementation          :実装
 Intrarater reliability  :再現性（一人の測定者がどれだけ正確に同じ結果を出せるか）
 interrater reliability  :再現性（複数の測定者がどれだけ正確に同じ結果を出せるか）
 in vitro，in vivo       :非生体，生体（分野で細かい意味は変わってくる）
+
+
+
+[顎運動]
+profile                 :横顔
+temporomandibular       :顎関節
+incisors                :切歯
+mastification           :咀嚼
+trajectory              :軌跡（pathと違う？）
+Stomatognathic Function :顎口腔機能
