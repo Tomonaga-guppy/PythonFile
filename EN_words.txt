@@ -12,6 +12,7 @@ stroke                  :脳卒中
 ankle foot orthosis     :短下肢装具
 Ambulation              :歩行運動
 gait                    :歩き方、歩様
+stiffness               :剛性、強度
 
 
 
