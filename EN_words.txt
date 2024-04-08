@@ -12,14 +12,19 @@ stroke                  ；脳卒中
 ankle foot orthosis     ；短下肢装具
 Ambulation              ；歩行運動
 gait                    ；歩き方、歩様
+abnormal gait           ：異常歩行
 stiffness               ；剛性、強度
 prohibitive             ；（法外に）高額な，禁止するための
 validate                ：検証する
 leverages               ：活用する，使用する
 refine                  ：洗練する，向上する
 culminate               ：最高潮に達する
-Affinity                ：親和性
+affinity                ：親和性
 concatenate             ：連結する，つなぐ
+exploite                ：利用する，活用する
+discrete                ：離散
+respectively            ：それぞれ
+inlarge                 ：大規模に，概して，一般に
 
 
 
@@ -35,6 +40,7 @@ implementation          :実装
 Intrarater reliability  :再現性（一人の測定者がどれだけ正確に同じ結果を出せるか）
 interrater reliability  :再現性（複数の測定者がどれだけ正確に同じ結果を出せるか）
 in vitro，in vivo       :非生体，生体（分野で細かい意味は変わってくる）
+wrt                     ：～に関して with refference to の略
 
 
 
