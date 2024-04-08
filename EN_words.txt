@@ -1,18 +1,25 @@
 #論文などで出てきた英単語，熟語などの記録
 
-sparse                  :疎な，まばらな
-Brute-Force             :力任せ
-outperform              :優れている
-proportion              :割合
-lacal                   :局所的
-fiducial                :基準となる
-differentiate           :微分する
-musculoskeletal         :筋骨格系
-stroke                  :脳卒中
-ankle foot orthosis     :短下肢装具
-Ambulation              :歩行運動
-gait                    :歩き方、歩様
-stiffness               :剛性、強度
+sparse                  ；疎な，まばらな
+Brute-Force             ；力任せ
+outperform              ；優れている
+proportion              ；割合
+lacal                   ；局所的
+fiducial                ；基準となる
+differentiate           ；微分する
+musculoskeletal         ；筋骨格系
+stroke                  ；脳卒中
+ankle foot orthosis     ；短下肢装具
+Ambulation              ；歩行運動
+gait                    ；歩き方、歩様
+stiffness               ；剛性、強度
+prohibitive             ；（法外に）高額な，禁止するための
+validate                ：検証する
+leverages               ：活用する，使用する
+refine                  ：洗練する，向上する
+culminate               ：最高潮に達する
+Affinity                ：親和性
+concatenate             ：連結する，つなぐ
 
 
 
