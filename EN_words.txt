@@ -25,7 +25,7 @@ exploite                ：利用する，活用する
 discrete                ：離散
 respectively            ：それぞれ
 inlarge                 ：大規模に，概して，一般に
-
+interleaved             ：交互に
 
 
 [論文で多そうな表現]
