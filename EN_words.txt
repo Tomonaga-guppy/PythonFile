@@ -26,6 +26,28 @@ discrete                ：離散
 respectively            ：それぞれ
 inlarge                 ：大規模に，概して，一般に
 interleaved             ：交互に
+hemiplegic              ：片麻痺
+compensatory motion     ：代償運動
+multifactorial          ：多因子の
+quantifiable            ：定量化可能な
+tailor-made             ：オーダーメイドの
+intervention            ：介入
+efficacious             ：効き目のある，有効な
+Upper motor neuron syndrome     ：上位運動ニューロン症候群
+constellation           ：集まり
+sensorimotor impairment ：感覚運動障害
+ambulation              ：歩行運動
+nature                  ：性質（自然とかももちろんあるよ）
+impairment              ：障害
+consequence             ：連続的な（結果）
+departure               ：逸脱
+interlimb               ：中間肢
+equilibrium reaction    ：平衡感覚
+paretic                 ：麻痺のある
+pelvis                  ：骨盤
+prolonged               ：延長
+
+
 
 
 [論文で多そうな表現]
