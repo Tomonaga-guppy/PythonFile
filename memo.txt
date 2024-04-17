@@ -8,3 +8,25 @@
 ・代償動作（代償運動）：本来の動作や運動を行うのに必要な機能以外の機能で補って動作や運動を行うこと．
 ・随意運動：自分の意志で行う運動．　⇔　不随運動：自らが意図しない異常な規則的or不規則的運動
 ・
+
+
+MotiveとRealsense同期撮影
+    https://github.com/IntelRealSense/librealsense/issues/10281
+
+複数台RS使う場合
+    https://support.intelrealsense.com/hc/en-us/community/posts/360050894574-How-to-get-the-same-timestamp-data-from-two-cameras
+    https://github.com/IntelRealSense/librealsense/issues/9483
+    https://dev.intelrealsense.com/docs/multiple-depth-cameras-configuration?_ga=2.167609277.2004028818.1713331770-1768927003.1695192177#4-summary
+    https://support.intelrealsense.com/hc/en-us/community/posts/360050894574-How-to-get-the-same-timestamp-data-from-two-cameras
+
+
+eSync2仕様書 実際に使ってるのはesyncだけど古くて仕様書とかない
+https://www.optitrack.jp/products/accessories/hubs.html
+
+同期モードの説明
+https://v20.wiki.optitrack.com/index.php?title=Synchronization
+https://v20.wiki.optitrack.com/index.php?title=External_Device_Sync_Guide:_eSync
+
+
+D435iはデプスカメラしか同期機能ないかも？(p60. 3.7.4参照)　RealSense D435iのデータシート
+https://www.intelrealsense.com/depth-camera-d435i/  file:///C:/Users/Tomson/Downloads/Intel-RealSense-D400-Series-Datasheet-March-2024.pdf
