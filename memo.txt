@@ -17,16 +17,56 @@ MotiveとRealsense同期撮影
     https://support.intelrealsense.com/hc/en-us/community/posts/360050894574-How-to-get-the-same-timestamp-data-from-two-cameras
     https://github.com/IntelRealSense/librealsense/issues/9483
     https://dev.intelrealsense.com/docs/multiple-depth-cameras-configuration?_ga=2.167609277.2004028818.1713331770-1768927003.1695192177#4-summary
-    https://support.intelrealsense.com/hc/en-us/community/posts/360050894574-How-to-get-the-same-timestamp-data-from-two-cameras
 
 
 eSync2仕様書 実際に使ってるのはesyncだけど古くて仕様書とかない
-https://www.optitrack.jp/products/accessories/hubs.html
+https://www.optitrack.jp/dcms_media/other/esync_02.pdf https://www.optitrack.jp/products/accessories/hubs.html
 
 同期モードの説明
 https://v20.wiki.optitrack.com/index.php?title=Synchronization
 https://v20.wiki.optitrack.com/index.php?title=External_Device_Sync_Guide:_eSync
 
 
-D435iはデプスカメラしか同期機能ないかも？(p60. 3.7.4参照)　RealSense D435iのデータシート
+D435iはデプスカメラしか同期機能ないかも？(p60. 3.7.4参照) RealSense D435iのデータシート
 https://www.intelrealsense.com/depth-camera-d435i/  file:///C:/Users/Tomson/Downloads/Intel-RealSense-D400-Series-Datasheet-March-2024.pdf
+
+OptitrackのSDKはC++のサポートでpython使えないからできれば使いたくない． あと2.0.1みたいに古いverは問い合わせ必要
+https://mocap.jp/optitrack/motive/download_tool/
+https://dl.optitrack.jp/manual/NatNetUsersGuide_J.PDF
+
+一応サードパーティ製のライブラリでpython環境での実行はできるみたい
+https://github.com/ratcave/natnetclient
+http://www.acepoint.co.jp/15983201008908
+
+
+
+部品候補メモ
+Arduino関連
+・BNCオス → スクリュー端子台 https://akizukidenshi.com/catalog/g/g108854/
+・ジャンパーワイヤー
+
+RealSense関連
+・ハウジング https://www.digikey.com/en/products/detail/jst-sales-america-inc/SHR-09V-S-B/759873
+・コネクタ https://www.digikey.jp/ja/products/detail/jst-sales-america-inc/SSH-003T-P0-2-H/2804713
+
+
+いらなそう
+・Arduino，USB B-Aケーブル(ArduinoとPCつなぐ)
+・BNCメス → スクリュー端子台 https://akizukidenshi.com/catalog/g/g108870
+
+
+
+10こ JST コネクタハウジング 9極 ピッチ：1mm 1列 SHR-09V-S-B  https://jp.rs-online.com/web/p/wire-housings-plugs/3531147
+10こJST コネクタ端子 (圧着端子) メス SSHシリーズ 圧着 SSH-003T-P0.2-H  https://jp.rs-online.com/web/p/crimp-contacts/1613365?gb=s
+10こ ASSHSSH28K152 https://www.chip1stop.com/view/dispDetail/DispDetail?mpn=ASSHSSH28K152&partId=JST1-0022112&makerCd=JST1
+50個 Bourns 金属皮膜 抵抗器 20W 330Ω ±1%, PWR220T-20-3300F https://jp.rs-online.com/web/p/through-hole-resistors/1675255?gb=s
+10こ 日本ケミコン コンデンサ 22μF, ,50V dc, EKMG500ELL220ME11D  https://jp.rs-online.com/web/p/aluminium-capacitors/0374645?gb=s
+あとワイヤー
+
+1個 Clever Little Box 同軸アダプタ ストレート BNC ジャック - 端子台 https://www.monotaro.com/g/04449956/?t.q=bnc%20%E7%AB%AF%E5%AD%90%20%E5%8F%B0#
+
+
+
+
+抵抗器候補
+200個 Yageo 炭素皮膜抵抗器 1/4W 20kΩ 5%, CFR-25JT-52-20K https://jp.rs-online.com/web/p/through-hole-resistors/1991847
