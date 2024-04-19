@@ -46,7 +46,8 @@ equilibrium reaction    ：平衡感覚
 paretic                 ：麻痺のある
 pelvis                  ：骨盤
 prolonged               ：延長
-whitepaper              ：白書，機能解説をしている文書
+whitepaper              ：機能解説をしている文書，白書
+exposure                ：露光
 
 
 

@@ -1,7 +1,11 @@
 import subprocess
 
-input_path = r"c:\Users\Tomson\openpose\examples\media\video_copy.avi"
+input_path = r"c:\Users\Tomson\openpose\examples\media\video.avi"
 out_dir = r"c:\Users\Tomson\BRLAB\Stroke\pretest"
+
+gtcwd = r'c:\Users\Tomson\openpose'
+import os
+os.chdir(gtcwd)
 
 # OpenFaceで顔の推定
 command = r'c:\Users\Tomson\openpose '
