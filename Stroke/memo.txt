@@ -38,35 +38,3 @@ https://dl.optitrack.jp/manual/NatNetUsersGuide_J.PDF
 https://github.com/ratcave/natnetclient
 http://www.acepoint.co.jp/15983201008908
 
-
-
-部品候補メモ
-Arduino関連
-・BNCオス → スクリュー端子台 https://akizukidenshi.com/catalog/g/g108854/
-・ジャンパーワイヤー
-
-RealSense関連
-・ハウジング https://www.digikey.com/en/products/detail/jst-sales-america-inc/SHR-09V-S-B/759873
-・コネクタ https://www.digikey.jp/ja/products/detail/jst-sales-america-inc/SSH-003T-P0-2-H/2804713
-
-
-いらなそう
-・Arduino，USB B-Aケーブル(ArduinoとPCつなぐ)
-・BNCメス → スクリュー端子台 https://akizukidenshi.com/catalog/g/g108870
-
-
-
-10こ JST コネクタハウジング 9極 ピッチ：1mm 1列 SHR-09V-S-B  https://jp.rs-online.com/web/p/wire-housings-plugs/3531147
-10こJST コネクタ端子 (圧着端子) メス SSHシリーズ 圧着 SSH-003T-P0.2-H  https://jp.rs-online.com/web/p/crimp-contacts/1613365?gb=s
-10こ ASSHSSH28K152 https://www.chip1stop.com/view/dispDetail/DispDetail?mpn=ASSHSSH28K152&partId=JST1-0022112&makerCd=JST1
-50個 Bourns 金属皮膜 抵抗器 20W 330Ω ±1%, PWR220T-20-3300F https://jp.rs-online.com/web/p/through-hole-resistors/1675255?gb=s
-10こ 日本ケミコン コンデンサ 22μF, ,50V dc, EKMG500ELL220ME11D  https://jp.rs-online.com/web/p/aluminium-capacitors/0374645?gb=s
-あとワイヤー
-
-1個 Clever Little Box 同軸アダプタ ストレート BNC ジャック - 端子台 https://www.monotaro.com/g/04449956/?t.q=bnc%20%E7%AB%AF%E5%AD%90%20%E5%8F%B0#
-
-
-
-
-抵抗器候補
-200個 Yageo 炭素皮膜抵抗器 1/4W 20kΩ 5%, CFR-25JT-52-20K https://jp.rs-online.com/web/p/through-hole-resistors/1991847
