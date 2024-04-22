@@ -48,6 +48,11 @@ pelvis                  ：骨盤
 prolonged               ：延長
 whitepaper              ：機能解説をしている文書，白書
 exposure                ：露光
+orientation             ：方向，オリエンテーション
+HPE                     ：Human Pose Estimation 人の姿勢推定
+ergonomic               ：人間工学に基づいた
+skeletonization         ：骨格化
+triangulation           ：三角測量
 
 
 
