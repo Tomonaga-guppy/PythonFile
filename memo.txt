@@ -14,10 +14,12 @@ MotiveとRealsense同期撮影
     https://github.com/IntelRealSense/librealsense/issues/10281
 
 複数台RS使う場合
-    https://support.intelrealsense.com/hc/en-us/community/posts/360050894574-How-to-get-the-same-timestamp-data-from-two-cameras
-    https://github.com/IntelRealSense/librealsense/issues/9483
-    https://dev.intelrealsense.com/docs/multiple-depth-cameras-configuration?_ga=2.167609277.2004028818.1713331770-1768927003.1695192177#4-summary
+    公式wiki：https://dev.intelrealsense.com/docs/multiple-depth-cameras-configuration?_ga=2.167609277.2004028818.1713331770-1768927003.1695192177#4-summary
+    わかりやすいお手本2https://vcl3d.github.io/VolumetricCapture/docs/hardware/rs2_hardware/
+    お手本0：https://support.intelrealsense.com/hc/en-us/community/posts/360050894574-How-to-get-the-same-timestamp-data-from-two-cameras
+    プログラム：https://github.com/IntelRealSense/librealsense/issues/9483
 
+    GenLock同期：https://support.intelrealsense.com/hc/en-us/community/posts/360048505973-Connectors-needed-to-sync-multiple-cameras
 
 eSync2仕様書 実際に使ってるのはesyncだけど古くて仕様書とかない
 https://www.optitrack.jp/dcms_media/other/esync_02.pdf https://www.optitrack.jp/products/accessories/hubs.html
