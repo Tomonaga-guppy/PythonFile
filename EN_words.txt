@@ -53,6 +53,7 @@ HPE                     ：Human Pose Estimation 人の姿勢推定
 ergonomic               ：人間工学に基づいた
 skeletonization         ：骨格化
 triangulation           ：三角測量
+representation          ：表現
 
 
 
