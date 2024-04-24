@@ -16,7 +16,7 @@ MotiveとRealsense同期撮影
 複数台RS使う場合
     公式wiki：https://dev.intelrealsense.com/docs/multiple-depth-cameras-configuration?_ga=2.167609277.2004028818.1713331770-1768927003.1695192177#4-summary
     わかりやすいお手本2https://vcl3d.github.io/VolumetricCapture/docs/hardware/rs2_hardware/
-    お手本0：https://support.intelrealsense.com/hc/en-us/community/posts/360050894574-How-to-get-the-same-timestamp-data-from-two-cameras
+    お手本(回路の接続見えない)：https://support.intelrealsense.com/hc/en-us/community/posts/360050894574-How-to-get-the-same-timestamp-data-from-two-cameras
     プログラム：https://github.com/IntelRealSense/librealsense/issues/9483
 
     GenLock同期：https://support.intelrealsense.com/hc/en-us/community/posts/360048505973-Connectors-needed-to-sync-multiple-cameras
