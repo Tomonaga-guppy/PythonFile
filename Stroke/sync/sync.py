@@ -5,7 +5,8 @@ from threading import Thread
 import os
 import serial
 
-base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest"
+base_path = r"D:\Duser\Dbrlab\Desktop\tomonaga\pretest"
+# base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest"
 
 ser = serial.Serial('COM3', 9600)  # Windowsの場合
 
