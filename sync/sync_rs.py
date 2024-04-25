@@ -4,7 +4,8 @@ import numpy as np
 from threading import Thread
 import os
 
-base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest"
+base_path = r"D:\Duser\Dbrlab\Desktop\tomonaga\pretest"
+# base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest"
 
 if not os.path.exists(base_path + "/master_color"):
     os.makedirs(base_path + "/master_color")
