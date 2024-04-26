@@ -154,7 +154,7 @@ finally:
     slave_pipeline.stop()
     cv2.destroyAllWindows()
     #Arduinoに停止を通知してシリアルポートを閉じる
-    ser.write('1'.encode())  # データをエンコードして送信 string -> bytes
+    ser.write('2'.encode())  # データをエンコードして送信 string -> bytes
     ser.close()
     print(f"motive recording stop")
     
