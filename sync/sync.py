@@ -7,7 +7,7 @@ import serial
 import datetime
 
 
-base_path = r"D:\Duser\Dbrlab\Desktop\tomonaga\pretest"
+base_path = r"D:\Duser\Dbrlab\Desktop\tomonaga\pretest\RealSense"
 # base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest"
 
 ser = serial.Serial('COM3', 9600)  # Windowsの場合
@@ -74,6 +74,7 @@ try:
     
     ser.write('1'.encode())  # データをエンコードして送信 string -> bytes
     motive_start_time = datetime.datetime.now()
+    print(f"motive recording start at {motive_start_time}")
     while True:
         # フレームを取得
         master_frames = master_pipeline.wait_for_frames()
@@ -87,6 +88,7 @@ try:
         if frame_counter == 1:
             #日本時間で時刻を取得
             rs_start_time = datetime.datetime.now()
+            print(f"realsense recording start at {rs_start_time}")
 
         if not master_depth_frame or not slave_depth_frame or not master_color_frame or not slave_color_frame:
             continue
@@ -156,9 +158,5 @@ finally:
     #Arduinoに停止を通知してシリアルポートを閉じる
     ser.write('2'.encode())  # データをエンコードして送信 string -> bytes
     ser.close()
-    print(f"motive recording stop")
-    
-    print(f"motive start time: {motive_start_time.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-    print(f"realsense start time: {rs_start_time.strftime('%Y-%m-%d %H:%M:%S.%f')}")
     start_diff = rs_start_time - motive_start_time
     print(f"start time difference: {start_diff}")
