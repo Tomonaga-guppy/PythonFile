@@ -66,29 +66,30 @@ slave_pipeline.start(slave_config)
 
 try:
     frame_counter = 1
-    
+
     master_depth_timestamp_before = 0
     slave_depth_timestamp_before = 0
     master_color_timestamp_before = 0
     slave_color_timestamp_before = 0
-    
+
     ser.write('1'.encode())  # データをエンコードして送信 string -> bytes
-    motive_start_time = datetime.datetime.now()
-    print(f"motive recording start at {motive_start_time}")
+    motive_start_time = datetime.datetime.now()  # モーションキャプチャの開始時刻を取得
     while True:
         # フレームを取得
         master_frames = master_pipeline.wait_for_frames()
         slave_frames = slave_pipeline.wait_for_frames()
+
+        if frame_counter == 1:
+            #RealSenseの撮影開始時刻を取得
+            rs_start_time = datetime.datetime.now()
+
         # フレームから深度画像とカラー画像を取得
         master_depth_frame = master_frames.get_depth_frame()
         slave_depth_frame = slave_frames.get_depth_frame()
         master_color_frame = master_frames.get_color_frame()
         slave_color_frame = slave_frames.get_color_frame()
-        
-        if frame_counter == 1:
-            #日本時間で時刻を取得
-            rs_start_time = datetime.datetime.now()
-            print(f"realsense recording start at {rs_start_time}")
+
+
 
         if not master_depth_frame or not slave_depth_frame or not master_color_frame or not slave_color_frame:
             continue
@@ -131,7 +132,7 @@ try:
         Thread(target=save_image, args=(slave_depth_image, f"{base_path}/slave_depth/{frame_counter}.png")).start()
         Thread(target=save_image, args=(master_color_image, f"{base_path}/master_color/{frame_counter}.png")).start()
         Thread(target=save_image, args=(slave_color_image, f"{base_path}/slave_color/{frame_counter}.png")).start()
-        
+
         #4枚の画像を結合してサイズを1/4にして表示
         master_color_image = cv2.resize(master_color_image, (640, 360))
         slave_color_image = cv2.resize(slave_color_image, (640, 360))
@@ -143,7 +144,7 @@ try:
         #画像を2*2に結合
         images = np.hstack((np.vstack((master_color_image, master_depth_image)), np.vstack((slave_color_image, slave_depth_image))))
         cv2.imshow("Images", images)
-        
+
         frame_counter += 1
 
         # スペースキーが押されたら終了
@@ -159,4 +160,6 @@ finally:
     ser.write('2'.encode())  # データをエンコードして送信 string -> bytes
     ser.close()
     start_diff = rs_start_time - motive_start_time
+    print(f"motive recording end at {datetime.datetime.now()}")
+    print(f"realsense recording end at {datetime.datetime.now()}")
     print(f"start time difference: {start_diff}")
