@@ -70,14 +70,14 @@ def process_and_display_image(master_color_image, master_depth_image, slave_colo
     slave_color_image = cv2.resize(slave_color_image, (640, 360))
     master_depth_image = cv2.resize(master_depth_image, (640, 360))
     slave_depth_image = cv2.resize(slave_depth_image, (640, 360))
-    
+
     # 深度画像をカラー画像に変換
     master_depth_image = cv2.applyColorMap(cv2.convertScaleAbs(master_depth_image, alpha=0.03), cv2.COLORMAP_JET)
     slave_depth_image = cv2.applyColorMap(cv2.convertScaleAbs(slave_depth_image, alpha=0.03), cv2.COLORMAP_JET)
-    
+
     # 画像を2x2に結合
     images = np.hstack((np.vstack((master_color_image, master_depth_image)), np.vstack((slave_color_image, slave_depth_image))))
-    
+
     # 画像表示
     cv2.imshow("Images", images)
 
@@ -92,8 +92,8 @@ try:
     slave_depth_timestamp_before = 0
     master_color_timestamp_before = 0
     slave_color_timestamp_before = 0
-    
-    
+
+
 
     ser.write('1'.encode())  # データをエンコードして送信 string -> bytes
     motive_start_time = datetime.datetime.now()  # モーションキャプチャの開始時刻を取得
@@ -101,11 +101,11 @@ try:
         # フレームを取得
         master_frames = master_pipeline.wait_for_frames()
         slave_frames = slave_pipeline.wait_for_frames()
-        
+
         if frame_counter == 1:
             ser.write('1'.encode())  # データをエンコードして送信 string -> bytes
             motive_start_time = datetime.datetime.now()
-        
+
 
         if frame_counter == 1:
             #RealSenseの撮影開始時刻を取得
@@ -116,11 +116,11 @@ try:
         slave_depth_frame = slave_frames.get_depth_frame()
         master_color_frame = master_frames.get_color_frame()
         slave_color_frame = slave_frames.get_color_frame()
-        
+
         if frame_counter == 1:
             #日本時間で時刻を取得
             rs_start_time = datetime.datetime.now()
-            
+
 
 
 
@@ -184,7 +184,7 @@ try:
 
         if frame_counter == 1:
             imshow_time = datetime.datetime.now()
-        
+
 
         frame_counter += 1
 
