@@ -79,17 +79,18 @@ try:
         # フレームを取得
         master_frames = master_pipeline.wait_for_frames()
         slave_frames = slave_pipeline.wait_for_frames()
+        
+        if frame_counter == 1:
+            #日本時間で時刻を取得
+            rs_start_time = datetime.datetime.now()
+            print(f"realsense recording start at {rs_start_time}")
+            
         # フレームから深度画像とカラー画像を取得
         master_depth_frame = master_frames.get_depth_frame()
         slave_depth_frame = slave_frames.get_depth_frame()
         master_color_frame = master_frames.get_color_frame()
         slave_color_frame = slave_frames.get_color_frame()
         
-        if frame_counter == 1:
-            #日本時間で時刻を取得
-            rs_start_time = datetime.datetime.now()
-            print(f"realsense recording start at {rs_start_time}")
-
         if not master_depth_frame or not slave_depth_frame or not master_color_frame or not slave_color_frame:
             continue
 
