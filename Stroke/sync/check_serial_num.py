@@ -1,3 +1,5 @@
+#RealSense1台を接続して、シリアル番号を取得するプログラムです
+
 import pyrealsense2 as rs
 
 # RealSenseカメラを初期化
@@ -15,5 +17,5 @@ print(f"RealSenseカメラのシリアル番号: {serial_number}")
 # RealSenseカメラをシャットダウン
 pipeline.stop()
 
-# SER_NUM_1 = 947522071129
-# SER_NUM_2 = 947522072616
+# SER_NUM_1 = 233722072880
+# SER_NUM_2 = 231522070603

@@ -7,10 +7,10 @@ import serial
 import datetime
 
 
-base_path = r"D:\Duser\Dbrlab\Desktop\tomonaga\pretest\RealSense"
-# base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest"
+# base_path = r"D:\Duser\Dbrlab\Desktop\tomonaga\pretest\RealSense"
+base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
 
-ser = serial.Serial('COM3', 9600)  # Windowsの場合
+ser = serial.Serial('COM3', 9600)  # Arduinoのポートを指定
 
 for folder in ["master_color", "master_depth", "slave_color", "slave_depth"]:
     path = os.path.join(base_path, folder)
@@ -26,9 +26,9 @@ slave_pipeline = rs.pipeline()
 master_config = rs.config()
 slave_config = rs.config()
 
-# 使用するデバイスのシリアル番号を指定
-SERIAL_MASTER = '947522071129'  # マスターカメラ
-SERIAL_SLAVE = '947522072616'   # スレーブカメラ
+# 使用するデバイスのシリアル番号を指定(check_serial_num.pyで1台ずつ確認できます)
+SERIAL_MASTER = '233722072880'  # マスターカメラ
+SERIAL_SLAVE = '231522070603'   # スレーブカメラ
 master_config.enable_device(SERIAL_MASTER)
 slave_config.enable_device(SERIAL_SLAVE)
 
