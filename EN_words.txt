@@ -54,6 +54,9 @@ ergonomic               ：人間工学に基づいた
 skeletonization         ：骨格化
 triangulation           ：三角測量
 representation          ：表現
+oscilloscope            ：オシロスコープ
+synchronous             ：同期
+invocation              ：呼び出し
 
 
 
