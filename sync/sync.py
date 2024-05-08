@@ -93,8 +93,6 @@ try:
     master_color_timestamp_before = 0
     slave_color_timestamp_before = 0
 
-
-
     ser.write('1'.encode())  # データをエンコードして送信 string -> bytes
     motive_start_time = datetime.datetime.now()  # モーションキャプチャの開始時刻を取得
     while True:
