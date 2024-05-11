@@ -207,8 +207,7 @@ finally:
     start_diff = rs_start_time - motive_start_time
     print(f"motive recording start at {motive_start_time}")
     print(f"realsense recording start at {rs_start_time}")
-    print(f"motive recording end at {datetime.datetime.now()}")
-    print(f"realsense recording end at {datetime.datetime.now()}")
+    print(f"recording end at {datetime.datetime.now()}")
     print(f"start time difference: {start_diff}")
 
     print(f"imshow time: {imshow_time}")
