@@ -3,6 +3,7 @@ import pyrealsense2 as rs
 import os
 import numpy as np
 import serial
+import time
 
 base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
 interval = input("Arduinoの点灯間隔を入力してください (ms):")
@@ -41,6 +42,7 @@ slave_pipeline, slave_config = setup_camera(SERIAL_SLAVE, f'output_slave_{interv
 master_pipeline.start(master_config)
 slave_pipeline.start(slave_config)
 # ser.write('1'.encode())  # データをエンコードして送信 string -> bytes
+start_time = time.time()
 
 try:
     while True:
@@ -68,9 +70,14 @@ try:
         if cv2.waitKey(1) & 0xFF == ord(' '):
             break
 
+        #10秒経過したら終了
+        if time.time() - start_time > 10:
+            break
+
 finally:
     master_pipeline.stop()
     slave_pipeline.stop()
     cv2.destroyAllWindows()
     # ser.write('2'.encode())  # データをエンコードして送信 string -> bytes
+    print(f"record finished.")
 
