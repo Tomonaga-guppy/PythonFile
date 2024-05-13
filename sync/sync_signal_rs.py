@@ -7,15 +7,15 @@ import serial
 import datetime
 
 
-# base_path = r"D:\Duser\Dbrlab\Desktop\tomonaga\pretest\RealSense"
-base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
+# root_dir = r"D:\Duser\Dbrlab\Desktop\tomonaga\pretest\RealSense"
+root_dir = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
 
 # ser = serial.Serial('COM3', 9600)  # Arduinoのポートを指定
 
-for folder in ["master_color", "master_depth", "slave_color", "slave_depth"]:
-    path = os.path.join(base_path, folder)
-    if not os.path.exists(path):
-        os.makedirs(path)
+# for folder in ["master_color", "master_depth", "slave_color", "slave_depth"]:
+#     path = os.path.join(root_dir, folder)
+#     if not os.path.exists(path):
+#         os.makedirs(path)
 
 def save_image(image, path):
     cv2.imwrite(path, image)
@@ -162,10 +162,10 @@ try:
         # slave_color_image = cv2.cvtColor(slave_color_image, cv2.COLOR_RGB2BGR)
 
         # images_paths = [
-        #     (master_depth_image, f"{base_path}/master_depth/{frame_counter}.png"),
-        #     (slave_depth_image, f"{base_path}/slave_depth/{frame_counter}.png"),
-        #     (master_color_image, f"{base_path}/master_color/{frame_counter}.png"),
-        #     (slave_color_image, f"{base_path}/slave_color/{frame_counter}.png")
+        #     (master_depth_image, f"{root_dir}/master_depth/{frame_counter}.png"),
+        #     (slave_depth_image, f"{root_dir}/slave_depth/{frame_counter}.png"),
+        #     (master_color_image, f"{root_dir}/master_color/{frame_counter}.png"),
+        #     (slave_color_image, f"{root_dir}/slave_color/{frame_counter}.png")
         # ]
 
         # # スレッドを使用して画像を保存
@@ -204,11 +204,11 @@ finally:
     #Arduinoに停止を通知してシリアルポートを閉じる
     # ser.write('2'.encode())  # データをエンコードして送信 string -> bytes
     # ser.close()
-    start_diff = rs_start_time - motive_start_time
-    print(f"motive recording start at {motive_start_time}")
-    print(f"realsense recording start at {rs_start_time}")
-    print(f"recording end at {datetime.datetime.now()}")
-    print(f"start time difference: {start_diff}")
+    # start_diff = rs_start_time - motive_start_time
+    # print(f"motive recording start at {motive_start_time}")
+    # print(f"realsense recording start at {rs_start_time}")
+    # print(f"recording end at {datetime.datetime.now()}")
+    # print(f"start time difference: {start_diff}")
 
-    print(f"imshow time: {imshow_time}")
-    print(f"imshow time difference: {imshow_time - motive_start_time}")
+    # print(f"imshow time: {imshow_time}")
+    # print(f"imshow time difference: {imshow_time - motive_start_time}")

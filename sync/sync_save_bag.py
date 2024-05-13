@@ -4,20 +4,22 @@ import os
 import numpy as np
 import serial
 
-base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
-interval = input("Arduinoの点灯間隔を入力してください (ms):")
-# interval = int(30)
+# root_dir = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
+root_dir = r"D:\Duser\Dbrlab\Desktop\tomonaga\sync_test\rs-mocap"
 
-SERIAL_MASTER = '233722072880'
-SERIAL_SLAVE = '231522070603'
+# interval = input("Arduinoの点灯間隔を入力してください (ms):")
+interval = int(30000)
 
-# ser = serial.Serial('COM3', 9600)  # Arduinoのポートを指定
+SERIAL_MASTER = '231522070603'
+SERIAL_SLAVE = '233722072880'
+
+ser = serial.Serial('COM3', 9600)  # Arduinoのポートを指定
 
 def setup_camera(serial, file_name, sync_mode):
     pipeline = rs.pipeline()
     config = rs.config()
     config.enable_device(serial)
-    file_path = os.path.join(base_path, file_name)
+    file_path = os.path.join(root_dir, file_name)
     config.enable_record_to_file(file_path)
     config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
     config.enable_stream(rs.stream.color, 1280, 720, rs.format.rgb8, 30)
@@ -40,7 +42,7 @@ slave_pipeline, slave_config = setup_camera(SERIAL_SLAVE, f'output_slave_{interv
 #撮影開始
 master_pipeline.start(master_config)
 slave_pipeline.start(slave_config)
-# ser.write('1'.encode())  # データをエンコードして送信 string -> bytes
+ser.write('1'.encode())  # データをエンコードして送信 string -> bytes
 
 try:
     while True:
@@ -72,5 +74,5 @@ finally:
     master_pipeline.stop()
     slave_pipeline.stop()
     cv2.destroyAllWindows()
-    # ser.write('2'.encode())  # データをエンコードして送信 string -> bytes
+    ser.write('2'.encode())  # データをエンコードして送信 string -> bytes
 
