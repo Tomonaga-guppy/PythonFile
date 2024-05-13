@@ -7,13 +7,13 @@ import serial
 import datetime
 
 
-# base_path = r"D:\Duser\Dbrlab\Desktop\tomonaga\pretest\RealSense"
-base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
+# root_dir = r"D:\Duser\Dbrlab\Desktop\tomonaga\pretest\RealSense"
+root_dir = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
 
 ser = serial.Serial('COM3', 9600)  # Arduinoのポートを指定
 
 for folder in ["master_color", "master_depth", "slave_color", "slave_depth"]:
-    path = os.path.join(base_path, folder)
+    path = os.path.join(root_dir, folder)
     if not os.path.exists(path):
         os.makedirs(path)
 
@@ -159,10 +159,10 @@ try:
         slave_color_image = cv2.cvtColor(slave_color_image, cv2.COLOR_RGB2BGR)
 
         images_paths = [
-            (master_depth_image, f"{base_path}/master_depth/{frame_counter}.png"),
-            (slave_depth_image, f"{base_path}/slave_depth/{frame_counter}.png"),
-            (master_color_image, f"{base_path}/master_color/{frame_counter}.png"),
-            (slave_color_image, f"{base_path}/slave_color/{frame_counter}.png")
+            (master_depth_image, f"{root_dir}/master_depth/{frame_counter}.png"),
+            (slave_depth_image, f"{root_dir}/slave_depth/{frame_counter}.png"),
+            (master_color_image, f"{root_dir}/master_color/{frame_counter}.png"),
+            (slave_color_image, f"{root_dir}/slave_color/{frame_counter}.png")
         ]
 
         # スレッドを使用して画像を保存

@@ -5,7 +5,8 @@ import os
 import glob
 
 # root_dir = r"C:\Users\zutom\BRLAB\gait pattern\sync\test"
-root_dir = r"C:\Users\Tomson\BRLAB\gait_pattern\sync_test\rs-rs"
+# root_dir = r"C:\Users\Tomson\BRLAB\gait_pattern\sync_test\rs-rs"
+root_dir = r"D:\Duser\Dbrlab\Desktop\tomonaga\sync_test\rs-mocap"
 
 #input関数でターミナルに入力された番号を取得
 blinking_interval = input("点灯間隔を入力してください: ")

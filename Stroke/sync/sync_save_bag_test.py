@@ -5,7 +5,7 @@ import numpy as np
 import serial
 import time
 
-base_path = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
+root_dir = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
 interval = input("Arduinoの点灯間隔を入力してください (ms):")
 # interval = int(30)
 
@@ -18,7 +18,7 @@ def setup_camera(serial, file_name, sync_mode):
     pipeline = rs.pipeline()
     config = rs.config()
     config.enable_device(serial)
-    file_path = os.path.join(base_path, file_name)
+    file_path = os.path.join(root_dir, file_name)
     config.enable_record_to_file(file_path)
     config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
     config.enable_stream(rs.stream.color, 1280, 720, rs.format.rgb8, 30)
