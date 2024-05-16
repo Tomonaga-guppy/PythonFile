@@ -2,7 +2,7 @@ import serial
 import time
 
 # シリアルポートとボーレートを設定
-ser = serial.Serial('COM4', 115200)  # ポート名は使用している環境に応じて変更してください
+ser = serial.Serial('COM3', 115200)  
 time.sleep(2)  # Arduinoのリセット後の待機時間
 
 # Arduinoにコマンドを送信してからのラグを計測
