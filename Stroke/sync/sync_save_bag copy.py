@@ -3,6 +3,9 @@ import pyrealsense2 as rs
 import os
 import numpy as np
 import serial
+import threading
+import queue
+import time
 
 # root_dir = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
 root_dir = r"D:\Duser\Dbrlab\Desktop\tomonaga\sync_test\rs-mocap"
@@ -36,42 +39,50 @@ def setup_camera(serial, file_name, sync_mode):
         raise Exception(f"Device with serial number {serial} not found.")
     return pipeline, config
 
+def camera_thread(pipeline, config, image_queue):
+    pipeline.start(config)
+    try:
+        while True:
+            frames = pipeline.wait_for_frames()
+            color_frame = frames.get_color_frame()
+            if not color_frame:
+                continue
+            image = np.asanyarray(color_frame.get_data())
+            # RGB順をBGR順に変換
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            resized_image = cv2.resize(image, (640, 360))
+            image_queue.put(resized_image)
+    finally:
+        pipeline.stop()
+
 master_pipeline, master_config = setup_camera(SERIAL_MASTER, f'output_master_{interval}.bag', 1)
 slave_pipeline, slave_config = setup_camera(SERIAL_SLAVE, f'output_slave_{interval}.bag', 2)
 
-#撮影開始
-master_pipeline.start(master_config)
-slave_pipeline.start(slave_config)
-ser.write(b'\x01')  #撮影開始の信号をバイナリデータで送信
+master_queue = queue.Queue()
+slave_queue = queue.Queue()
+
+master_thread = threading.Thread(target=camera_thread, args=(master_pipeline, master_config, master_queue))
+slave_thread = threading.Thread(target=camera_thread, args=(slave_pipeline, slave_config, slave_queue))
+
+# スレッド開始
+master_thread.start()
+slave_thread.start()
+start_time = time.perf_counter_ns()  #3撮影開始の時間を計測
+ser.write(b'\x01')  # バイナリデータを送信
 
 try:
     while True:
-        master_frames = master_pipeline.wait_for_frames()
-        master_color_frame = master_frames.get_color_frame()
-        if not master_color_frame:
-            continue
-        master_image = np.asanyarray(master_color_frame.get_data())
-        #RGB順をBGR順に変換
-        master_image = cv2.cvtColor(master_image, cv2.COLOR_RGB2BGR)
-        resized_master_image = cv2.resize(master_image, (640, 360))
-
-        slave_frames = slave_pipeline.wait_for_frames()
-        slave_color_frame = slave_frames.get_color_frame()
-        if not slave_color_frame:
-            continue
-        slave_image = np.asanyarray(slave_color_frame.get_data())
-        slave_image = cv2.cvtColor(slave_image, cv2.COLOR_RGB2BGR)
-        resized_slave_image = cv2.resize(slave_image, (640, 360))
-
-        #結合
-        combined_image = np.hstack((resized_master_image, resized_slave_image))
-        cv2.imshow('camera_img', combined_image)
+        if not master_queue.empty() and not slave_queue.empty():
+            master_image = master_queue.get()
+            slave_image = slave_queue.get()
+            # 結合
+            combined_image = np.hstack((master_image, slave_image))
+            cv2.imshow('camera_img', combined_image)
 
         if cv2.waitKey(1) & 0xFF == ord(' '):
             break
-
 finally:
-    master_pipeline.stop()
-    slave_pipeline.stop()
+    ser.write(b'\x00')  # バイナリデータを送信
     cv2.destroyAllWindows()
-    ser.write(b'\x00')  #撮影終了の信号をバイナリデータを送信
+    master_thread.join()
+    slave_thread.join()
