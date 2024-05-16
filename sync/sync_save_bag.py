@@ -42,9 +42,10 @@ slave_pipeline, slave_config = setup_camera(SERIAL_SLAVE, f'output_slave_{interv
 
 #撮影開始
 master_pipeline.start(master_config)
-print(f"master star at {time.perf_counter_ns()}")
+master_start_time = time.perf_counter_ns()
 slave_pipeline.start(slave_config)
-print(f"slave star at {time.perf_counter_ns()}")
+slave_start_time = time.perf_counter_ns()
+print(f"start_diff = {(slave_start_time - master_start_time)*1e-6} ms")
 ser.write(b'\x01')  #撮影開始の信号をバイナリデータで送信
 
 try:
