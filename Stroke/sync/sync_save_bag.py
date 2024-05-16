@@ -8,7 +8,7 @@ import serial
 root_dir = r"D:\Duser\Dbrlab\Desktop\tomonaga\sync_test\rs-mocap"
 
 # interval = input("Arduinoの点灯間隔を入力してください (ms):")
-interval = int(30000) 
+interval = int(30000)
 
 SERIAL_MASTER = '231522070603'
 SERIAL_SLAVE = '233722072880'
@@ -27,7 +27,7 @@ def setup_camera(serial, file_name, sync_mode):
     devices = ctx.query_devices()
     device_found = False
     for device in devices:
-        if device.get_info(rs.camera_info.serial_number) == serial:  
+        if device.get_info(rs.camera_info.serial_number) == serial:
             device_found = True
             sensor = device.first_depth_sensor()
             sensor.set_option(rs.option.inter_cam_sync_mode, sync_mode)
@@ -68,7 +68,7 @@ try:
         cv2.imshow('camera_img', combined_image)
 
         if cv2.waitKey(1) & 0xFF == ord(' '):
-            break  
+            break
 
 finally:
     master_pipeline.stop()

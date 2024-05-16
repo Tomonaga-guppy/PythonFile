@@ -1,203 +1,70 @@
-# sample code: https://teratail.com/questions/218884
-
 import pyrealsense2 as rs
 import numpy as np
 import cv2
-import glob
 import os
-import sys
-import csv
+import glob
 
-root_dir = "C:/Users/zutom/BRLAB/tooth/Temporomandibular_movement/movie/2023_12_20"
+# root_dir = r"C:\Users\zutom\BRLAB\gait pattern\sync\test"
+root_dir = r"C:\Users\Tomson\BRLAB\gait_pattern\sync_test\rs-rs"
 
-pattern = os.path.join(root_dir, '*a.bag')
-bag_files = glob.glob(pattern, recursive=True)
+#input関数でターミナルに入力された番号を取得
+blinking_interval = input("点灯間隔を入力してください: ")
 
-error_bagfiles = []  #読み取れなかったbagファイル記録用
+bag_file_path_list = glob.glob(os.path.join(root_dir, f'*.bag'))
 
-#RGBとDepthで撮影タイミングがごく僅かに違うため別々で保存
-for progress, bagfile in enumerate(bag_files):
-    timestamp_RBG = []  #IMUデータの取得時間調整用
-    imu_filename = os.path.dirname(bagfile) + '/' + os.path.basename(bagfile).split('.')[0] + '/accel_data.npy'
-    # if os.path.isfile(imu_filename):  #すでに加速度ファイルがある場合は処理をスキップ
-    #     continue
+for bag_file_path in bag_file_path_list:
 
+    # # .bagファイルのパスa
+    # bag_file_path = os.path.join(root_dir, f'output_solo_{blinking_interval}.bag')
 
-    # Save RGB image
-    id = os.path.basename(bagfile).split('.')[0]
-    path = os.path.dirname(bagfile) + '/' + os.path.basename(bagfile).split('.')[0]
-    # print(path)
-    if not os.path.exists(path):
-        os.mkdir(path)
+    # 出力ディレクトリの作成
+    print(f"Processing {bag_file_path}")
+    output_dir = os.path.join(root_dir, f'{os.path.basename(bag_file_path)[:-4]}')
+    os.makedirs(output_dir, exist_ok=True)
 
-    mp4file = path + '/' + os.path.basename(bagfile).split('.')[0] + '_original.mp4'
-
-    RGB_path = path + '/RGB_image'
-    if not os.path.exists(RGB_path):
-        os.mkdir(RGB_path)
-
-    config = rs.config()
-    config.enable_device_from_file(bagfile)
-
+    # パイプライン設定
     pipeline = rs.pipeline()
+    config = rs.config()
+
+    # .bagファイルからのデータの読み込みを設定
+    config.enable_device_from_file(bag_file_path, repeat_playback=False)
+
     try:
+        # パイプライン開始
         profile = pipeline.start(config)
-    except RuntimeError:
-        error_bagfiles.append(bagfile)
-        continue
+        playback = profile.get_device().as_playback()
+        playback.set_real_time(False)  # リアルタイム再生を無効化
 
-    # create Align Object
-    align_to = rs.stream.color
-    align = rs.align(align_to)
+        # フレーム取得用のアライメントオブジェクト
+        align_to = rs.stream.color
+        align = rs.align(align_to)
 
-    device = profile.get_device()
-    playback = device.as_playback()
-    playback.set_real_time(False)  #リアルタイム再生をオフにするとフレームごとに処理が終わるまで待機してくれる
+        frame_count = 1  # フレーム番号を初期化
 
-    for stream in profile.get_streams():
-        vprof = stream.as_video_stream_profile()
-        if  vprof.format() == rs.format.rgb8:
-            frame_rate = vprof.fps()
-            size = (vprof.width(), vprof.height())
-
-    fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') # ファイル形式(ここではmp4)
-    writer = cv2.VideoWriter(mp4file, fmt, frame_rate, size) # ライター作成
-
-    print('{}/{}: '.format(progress+1, len(bag_files)),bagfile, "size =",size, "frame_rate =",frame_rate)
-    fps_count = 1
-
-    try:
-        pre_time = 0
         while True:
+            # フレームセットを待つ
             frames = pipeline.wait_for_frames()
+            if not frames:
+                break  # フレームがもうない場合はループを抜ける
 
+            # アライメント処理
             aligned_frames = align.process(frames)
+
+            # RGBフレームの取得
             color_frame = aligned_frames.get_color_frame()
+            if not color_frame:
+                break
 
+            # Numpy配列への変換
             color_image = np.asanyarray(color_frame.get_data())
-            color_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR)
 
-            cur_time = playback.get_position()  #再生時間の取得 単位はナノ秒
-
-            if cur_time < pre_time:  #前フレームより再生時間が進んでいなかったら終了
-                break
-
-            if fps_count > 900:  #900フレーム以上のデータは保存しない
-                break
-
-            cv2.imwrite('{}/{}.png'.format(RGB_path, str(fps_count).zfill(4)), color_image)
-            writer.write(color_image)
-
-            timestamp_RBG.append(pre_time)
-            pre_time = cur_time
-
-            print(id, "RGB", fps_count)
-            fps_count += 1
+            # ファイル名を連番で生成し、画像を保存
+            frame_id = f'{frame_count:04d}'  # 4桁のファイル番号
+            output_filename = os.path.join(output_dir, f'image_{frame_id}.jpg')
+            cv2.imwrite(output_filename, color_image)
+            frame_count += 1
 
     finally:
-        print(f'RGB_fps_count = {fps_count - 1}')
+        # パイプライン停止
         pipeline.stop()
-        writer.release()
-        cv2.destroyAllWindows()
-
-
-
-
-    # #Save Depth image
-    # Depth_path = os.path.dirname(bagfile)  + '/' + os.path.basename(bagfile).split('.')[0]+ '/Depth_image'
-    # if not os.path.exists(Depth_path):
-    #     os.mkdir(Depth_path)
-
-
-    # config = rs.config()
-    # config.enable_device_from_file(bagfile)
-
-    # pipeline = rs.pipeline()
-    # profile = pipeline.start(config)
-
-    # # create Align Object
-    # align_to = rs.stream.color
-    # align = rs.align(align_to)
-
-    # device = profile.get_device()
-    # playback = device.as_playback()
-    # playback.set_real_time(False)  #リアルタイム再生をオフにするとフレームごとに処理が終わるまで待機してくれる
-
-    # #depthデータに欠損があるのでholefillingをかける https://qiita.com/keoitate/items/efe4212b0074e10378ec
-    # """
-    # # decimarion_filterのパラメータ
-    # decimate = rs.decimation_filter()
-    # decimate.set_option(rs.option.filter_magnitude, 1)
-    # # spatial_filterのパラメータ
-    # spatial = rs.spatial_filter()
-    # spatial.set_option(rs.option.filter_magnitude, 1)
-    # spatial.set_option(rs.option.filter_smooth_alpha, 0.25)
-    # spatial.set_option(rs.option.filter_smooth_delta, 50)
-    # """
-    # # hole_filling_filterのパラメータ
-    # hole_filling = rs.hole_filling_filter(2)
-    # """
-    # # disparity
-    # depth_to_disparity = rs.disparity_transform(True)
-    # disparity_to_depth = rs.disparity_transform(False)
-    # """
-
-    # fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-
-    # for stream in profile.get_streams():
-    #     vprof = stream.as_video_stream_profile()
-    #     if  vprof.format() == rs.format.rgb8:
-    #         frame_rate = vprof.fps()
-    #         size = (vprof.width(), vprof.height())
-
-    # # print('{}/{}: '.format(progress+1, len(bag_files)),bagfile, size, frame_rate)
-
-    # try:
-    #     fps_count = 1
-    #     pre_time = 0
-    #     while True:
-    #         frames = pipeline.wait_for_frames()
-
-    #         aligned_frames = align.process(frames)
-    #         # color_frame = aligned_frames.get_color_frame()
-    #         depth_frame = aligned_frames.get_depth_frame()
-
-    #         #depthデータの後処理(フィルター)
-    #         #filter_frame = decimate.process(depth_frame)
-    #         #filter_frame = depth_to_disparity.process(filter_frame)
-    #         #filter_frame = spatial.process(filter_frame)
-    #         #filter_frame = disparity_to_depth.process(filter_frame)
-
-    #         filter_frame = hole_filling.process(depth_frame)
-    #         result_frame = filter_frame.as_depth_frame()
-
-    #         cur_time = playback.get_position()  #再生時間の取得 単位はナノ秒
-    #         if cur_time < pre_time:
-    #             break
-
-    #         if fps_count > 900:  #900フレーム以上のデータは保存しない
-    #             break
-
-    #         #depth_scale = device.first_depth_sensor().get_depth_scale()
-    #         # depth_scale = depth_frame.get_units()
-    #         # print(fps_count, "depth_data *",depth_scale,"= meter")
-
-    #         # Make depth image
-    #         depth_image = np.asanyarray(result_frame.get_data())
-    #         cv2.imwrite('{}/{}.png'.format(Depth_path, str(fps_count).zfill(4)), depth_image)
-    #         # depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.08), cv2.COLORMAP_JET)
-    #         # cv2.imwrite('{}{}.png'.format(Depth_path + "/", str(fps_count).zfill(4)), depth_colormap)
-
-    #         pre_time = cur_time
-
-    #         print(id, "Depth", fps_count)
-    #         fps_count += 1
-
-    # finally:
-    #     print(f'Depth_fps_count = {fps_count - 1}')
-    #     pipeline.stop()
-
-if not len(error_bagfiles) == 0:
-    print(f"以下のファイルが読み取れませんでした。ファイルが破損している可能性があります")
-    for i in range(len(error_bagfiles)):
-        print(f"・{error_bagfiles[i]}")
+        print(f"Saved {frame_count - 1} images to {output_dir}")
