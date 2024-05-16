@@ -3,6 +3,7 @@ import pyrealsense2 as rs
 import os
 import numpy as np
 import serial
+import time
 
 # root_dir = r"C:\Users\Tomson\BRLAB\Stroke\pretest\RealSense"
 root_dir = r"D:\Duser\Dbrlab\Desktop\tomonaga\sync_test\rs-mocap"
@@ -41,7 +42,9 @@ slave_pipeline, slave_config = setup_camera(SERIAL_SLAVE, f'output_slave_{interv
 
 #撮影開始
 master_pipeline.start(master_config)
+print(f"master star at {time.perf_counter_ns()}")
 slave_pipeline.start(slave_config)
+print(f"slave star at {time.perf_counter_ns()}")
 ser.write(b'\x01')  #撮影開始の信号をバイナリデータで送信
 
 try:
