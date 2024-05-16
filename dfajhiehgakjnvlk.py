@@ -1,36 +1,32 @@
-import pyrealsense2 as rs
+import concurrent.futures
 import time
+import threading
 
-# RealSenseパイプラインを作成
-pipeline = rs.pipeline()
+def task(n, start_times):
+    start_time = time.perf_counter()  #秒単位の時間を取得
+    start_times[n] = start_time
+    print(f'Task {n} started at {start_time}')
+    time.sleep(1)
+    print(f'Task {n} finished')
 
-# コンフィギュレーションを設定
-config = rs.config()
-config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+start_times = {}
 
-# スタート時間を記録
-start_time = time.time()
+# ロックオブジェクトを使用して start_times へのアクセスを保護します
+lock = threading.Lock()
 
-# パイプラインを開始
-pipeline.start(config)
+def synchronized_task(n):
+    with lock:
+        task(n, start_times)
 
-# 最初のフレームを取得するまでの時間を計測
-frames = pipeline.wait_for_frames()
+with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+    futures = [executor.submit(synchronized_task, i) for i in range(3)]
 
-# 初めのフレーム取得時間を記録
-first_frame_time = time.time()
-time_to_first_frame = first_frame_time - start_time
+# Wait for all futures to complete
+concurrent.futures.wait(futures)
 
-# 次のフレームを取得するまでの時間を計測
-next_frames = pipeline.wait_for_frames()
+# タスクの開始時間の差を計算して表示します
+start_times_list = [start_times[i] for i in range(len(start_times))]
+time_differences = [start_times_list[i] - start_times_list[0] for i in range(1, len(start_times_list))]
 
-# 次のフレーム取得時間を記録
-second_frame_time = time.time()
-time_to_second_frame = second_frame_time - first_frame_time
-
-print(f"Time to first frame: {time_to_first_frame:.4f} seconds")
-print(f"Time to next frame: {time_to_second_frame:.4f} seconds")
-
-# パイプラインを停止
-pipeline.stop()
+print(f"Start times: {start_times_list}")
+print(f"Time differences: {time_differences}")
