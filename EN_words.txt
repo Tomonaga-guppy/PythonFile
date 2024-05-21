@@ -57,7 +57,7 @@ representation          ：表現
 oscilloscope            ：オシロスコープ
 synchronous             ：同期
 invocation              ：呼び出し
-
+extrinsic               ：外部の
 
 
 [論文で多そうな表現]
