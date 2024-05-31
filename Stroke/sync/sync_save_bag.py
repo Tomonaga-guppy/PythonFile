@@ -11,6 +11,8 @@ import glob
 
 root_dir = r"C:\Users\Tomson\BRLAB\gait_pattern\sync_test\rs-mocap"
 # root_dir = r"D:\Duser\Dbrlab\Desktop\tomonaga\sync_test\rs-mocap"
+# root_dir = r"c:\Users\tus\Desktop\record\recorded_data\realsense"
+
 
 input_name = 'test'
 SERIAL_MASTER = '231522070603'
