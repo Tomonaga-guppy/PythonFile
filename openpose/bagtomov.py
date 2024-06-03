@@ -5,7 +5,7 @@ import glob
 import os
 
 bagsfolder = r"C:\Users\Tomson\BRLAB\gait_pattern\first_test\recorded_data\realsense\two_dev"
-bagfiles = glob.glob(os.path.join(bagsfolder, '*device1*5*.bag'),recursive=True)
+bagfiles = glob.glob(os.path.join(bagsfolder, '*6*.bag'),recursive=True)
 
 
 for progress, bagfile in enumerate(bagfiles):
@@ -18,7 +18,7 @@ for progress, bagfile in enumerate(bagfiles):
     if not os.path.exists(RGB_path):
         os.mkdir(RGB_path)
 
-    mp4file = path + '/' + os.path.basename(bagfile).split('.')[0] + '_original.mp4'
+    mp4file = path + '/original.mp4'
 
     config = rs.config()
     config.enable_device_from_file(bagfile)
@@ -40,6 +40,7 @@ for progress, bagfile in enumerate(bagfiles):
             frame_rate = vprof.fps()
             size = (vprof.width(), vprof.height())
 
+    print(f"frame_rate = {frame_rate}, size = {size}")
     fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') # ファイル形式(ここではmp4)
     writer = cv2.VideoWriter(mp4file, fmt, frame_rate, size) # ライター作成
 
@@ -51,26 +52,27 @@ for progress, bagfile in enumerate(bagfiles):
         while True:
             frames = pipeline.wait_for_frames()
 
+            cur_time = playback.get_position()  #再生時間の取得 単位はナノ秒
+
+            #前フレームより再生時間が進んでいない or 想定フレーム以上になったら終了
+            if cur_time < pre_time:# or fps_count > 300:
+                break
+
+            if cur_time - pre_time <= 30000000:
+                continue
+
+            pre_time = cur_time
+
             aligned_frames = align.process(frames)
             color_frame = aligned_frames.get_color_frame()
 
             color_image = np.asanyarray(color_frame.get_data())
             color_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR)
 
-            cur_time = playback.get_position()  #再生時間の取得 単位はナノ秒
-
-            if cur_time < pre_time:  #前フレームより再生時間が進んでいなかったら終了
-                break
-
-            # if fps_count > 900:  #900フレーム以上のデータは保存しない
-            #     break
-
             cv2.imwrite('{}/{}.png'.format(RGB_path, str(fps_count).zfill(4)), color_image)
             writer.write(color_image)
 
-            pre_time = cur_time
-
-            print(id, "RGB", fps_count)
+            print("RGB fps_count", fps_count)
             fps_count += 1
 
     finally:
