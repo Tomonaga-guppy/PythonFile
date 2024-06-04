@@ -3,7 +3,7 @@ import subprocess
 import glob
 
 root_dir = r"c:\Users\Tomson\BRLAB\gait_pattern\first_test\recorded_data\realsense\two_dev"
-keyward = "test"
+keyward = "test_[7-8]"
 ori_mov_paths = glob.glob(os.path.join(root_dir, ("*" + keyward + "*"), 'original.mp4'))
 
 os.chdir(r"c:\Users\Tomson\openpose")###OpenPoseのあるところにカレントディレクトリを変更
@@ -22,7 +22,7 @@ for i, ori_mov_path in enumerate(ori_mov_paths):
     pre_video_place= " --video " + dir_name +"/original.mp4"
     after_video_place= " --write_video " + dir_name + "/estimated.avi"  #動画で出力
     after_json_place= " --write_json " + dir_name + "/estimated.json"  #各キーポイントの座標をjsonで出力
-    other_order= " --number_people_max 2  --num_gpu -1 --scale_number 2 --scale_gap 0.2"
+    other_order= " --number_people_max 2 --scale_number 2 --scale_gap 0.2"
     cmd =program + pre_video_place + after_video_place + after_json_place + other_order
     ######OpenPoseへの命令作成終了
 
