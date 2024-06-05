@@ -29,10 +29,10 @@
 #課題8,9
 import torch
 import numpy as np
-train_images=np.load("C:\\Users\\zutom\\PythonDataFile\\train_images.npy")
-train_labels=np.load("C:\\Users\\zutom\\PythonDataFile\\train_labels.npy")
-test_images=np.load("C:\\Users\\zutom\\PythonDataFile\\test_images.npy")
-test_labels=np.load("C:\\Users\\zutom\\PythonDataFile\\test_labels.npy")
+# train_images=np.load(r"C:\Users\zutom\.vscode\PythonDataFile\test_images.npy")
+train_labels=np.load(r"C:\Users\zutom\.vscode\PythonDataFile\test_images.npy")
+# test_images=np.load(r"C:\Users\zutom\.vscode\PythonDataFile\test_images.npy")
+# test_labels=np.load(r"C:\Users\zutom\.vscode\PythonDataFile\test_images.npy")
 
 # 課題10
 # print("train_images.npyの次元数",train_images.ndim,"train_images.npyの形状",train_images.shape)
@@ -47,6 +47,13 @@ import matplotlib.pyplot as plt
 
 #課題12
 # print("学習用教師データ1個目",train_labels[0])
+import cv2
+from PIL import Image
+#npyファイルをcv2で読み込むために変換
+images = Image.fromarray(train_labels[0])
+cv2.imshow("image", np.array(images))
+cv2.waitKey(0)
+exit()
 
 #課題13
 train_images=torch.from_numpy(train_images)
@@ -92,7 +99,7 @@ train_dataloader = DataLoader(
     shuffle = True)             #ミニバッチの取り出しをランダムにするか
 
 test_dataloader = DataLoader(
-    test_datasets,     
+    test_datasets,
     batch_size = num_batch,
     shuffle = True)
 
@@ -101,9 +108,9 @@ class Net(nn.Module):
     def __init__(self,input_size,output_size):
         super().__init__()                                  #super().__init__()で基底クラス（継承元）のコンストラクタをオーバーライドする
         self.fc1=nn.Linear(input_size,hidenlayer_size)      #28*28の入力数から196個のへ線形変換
-        self.fc2=nn.Linear(hidenlayer_size,output_size) 
+        self.fc2=nn.Linear(hidenlayer_size,output_size)
     #順伝播の設定
-    def forward(self,x): 
+    def forward(self,x):
         x=self.fc1(x)
         x=torch.relu(x)      #活性化関数の設定 ReLu関数を使用.line94のF.cross_functionでsoftmax関数も一緒に計算
         x=self.fc2(x)
@@ -112,11 +119,11 @@ class Net(nn.Module):
 # ニューラルネットワークの生成
 model = Net(input_size, output_size).to(device)
 
-#誤差関数の設定 交差エントロピー関数を使用. 
+#誤差関数の設定 交差エントロピー関数を使用.
 error_f=nn.CrossEntropyLoss()
 
 #最適化手法の設定 最急降下法を使用
-optimizer=torch.optim.SGD(model.parameters(),lr) 
+optimizer=torch.optim.SGD(model.parameters(),lr)
 
 #計算グラフの表示 pip install torchviz, pip install Ipython
 from torchviz import make_dot
@@ -130,9 +137,9 @@ test_loss_value=[]
 model.train() #モデルを訓練モードに
 
 for epoch in range(num_epochs): #学習回数分繰り返す
-    train_loss_sum =0                 
+    train_loss_sum =0
 
-    for inputs,labels in train_dataloader: 
+    for inputs,labels in train_dataloader:
 
         #指定したデバイス(GPUかCPU)にデータを送る
         inputs=inputs.to(device)
@@ -195,7 +202,7 @@ with torch.no_grad():
 
 print(f"Loss: {test_loss_sum.item() / len(test_dataloader)}, Accuracy: {100*correct/len(test_datasets)}% ({correct}/{len(test_datasets)})")
 
-#グラフの描写 
+#グラフの描写
 train_loss_value = torch.tensor(train_loss_value).detach()
 test_loss_value = torch.tensor(test_loss_value).detach()
 
