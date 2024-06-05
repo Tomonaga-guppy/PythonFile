@@ -4,6 +4,7 @@ import cv2
 import glob
 import os
 
+#RealSenseで撮影したbagファイルを再生してRGB画像，動画を保存する Depth画像も保存する場合も同様の流れ
 bagsfolder = r"C:\Users\Tomson\BRLAB\gait_pattern\first_test\recorded_data\realsense\two_dev"
 bagfiles = glob.glob(os.path.join(bagsfolder, '*6*.bag'),recursive=True)
 
