@@ -1,11 +1,12 @@
-N = int(input())
+def main():
+    f_name ="山田"
+    l_name = "太郎"
+    age = 20
 
-A = list(map(int, input().split()))
+    print(f_name + l_name + "さんは" + str(age) + "歳です。")
 
-count = 0
+    print(f"{f_name}{l_name}さんは{age}歳です。")
 
-while all(a % 2 == 0 for a in A):
-    A = [a // 2 for a in A]
-    count += 1
 
-print(count)
+if __name__ == '__main__':
+    main()
