@@ -11,14 +11,12 @@ def get_image_from_k4a(k4a):
     max_val = np.max(ir_image)
     print(f"Max value: {max_val}")
 
-    # 16ビットのままグレースケール表示用に正規化せずに8ビットに変換
-    ir_image_8bit = (ir_image / 256).astype(np.uint8)
+    cv2.imshow("IR Image", ir_image)
 
-    # 8ビットのIR画像をOpen3Dで表示
-    o3d_image = o3d.geometry.Image(ir_image_8bit)
-    o3d.visualization.draw_geometries([o3d_image])
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-    return ir_image_8bit
+    return ir_image
 
 def main():
     # Azure Kinectの設定
@@ -36,6 +34,8 @@ def main():
             ir_image = get_image_from_k4a(k4a)
         except Exception as e:
             print(f"An error occurred: {e}")
+            break
+        except KeyboardInterrupt:
             break
 
     # クリーンアップ
