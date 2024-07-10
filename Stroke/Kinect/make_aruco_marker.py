@@ -1,9 +1,12 @@
 import cv2
 import os
-from fpdf import FPDF
 
 # マーカー画像を保存するディレクトリ
-marker_dir = os.path.dirname(__file__) + "/Aruco_markers"
+current_dir = os.path.dirname(os.path.abspath(__file__))
+relative_path_to_target = r"..\..\..\PythonDataFile\stroke\Aruco_markers"
+marker_dir = os.path.abspath(os.path.join(current_dir, relative_path_to_target))
+
+# marker_dir = os.path.dirname(__file__) + "/Aruco_markers"
 print(f"marker_dir = {marker_dir}")
 
 # ArUcoのライブラリを導入
@@ -13,7 +16,6 @@ aruco = cv2.aruco
 dictionary = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
 
 def main():
-    pdf = FPDF()
 
     # 10枚のマーカーを作るために10回繰り返す
     for i in range(10):
@@ -24,15 +26,6 @@ def main():
 
         fileName = marker_dir + "/ar" + str(i).zfill(2) + ".png"  # ファイル名を "ar0x.png" の様に作る
         cv2.imwrite(fileName, ar_image)  # マーカー画像を保存する
-
-        pdf.add_page()
-        pdf.image(fileName, x=10, y=10, w=100)  # マーカー画像をPDFに配置
-        print(f"saved {fileName} and added to PDF")
-
-    # まとめたPDFファイルを保存
-    pdfFileName = marker_dir + "/all_markers.pdf"
-    pdf.output(pdfFileName)
-    print(f"saved all markers in {pdfFileName}")
 
 if __name__ == "__main__":
     main()  # メイン関数を実行

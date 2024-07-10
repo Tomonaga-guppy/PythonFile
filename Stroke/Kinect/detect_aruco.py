@@ -4,10 +4,9 @@ from pyk4a import PyK4APlayback, CalibrationType
 import os
 import sys
 
-# OpenCVのバージョンを表示して確認
-print("OpenCV version:", cv2.__version__)
-
-save_root_dir = r"C:\Users\zutom\.vscode\PythonDataFile\stroke"
+current_dir = os.path.dirname(os.path.abspath(__file__))
+relative_path_to_target = r"..\..\..\PythonDataFile\stroke"
+save_dir = os.path.abspath(os.path.join(current_dir, relative_path_to_target))
 
 # ArUcoのライブラリを導入
 aruco = cv2.aruco
@@ -65,8 +64,8 @@ def main():
 
     detector = aruco.ArucoDetector(dictionary, parameters)
 
-    if not os.path.exists(save_root_dir+"/aruco_images"):
-        os.makedirs(save_root_dir+"/aruco_images")
+    if not os.path.exists(save_dir+"/aruco_images"):
+        os.makedirs(save_dir+"/aruco_images")
 
     # 録画したMKVファイルのパス
     mkv_file_path = r"C:\Users\zutom\aruco_test1.mkv"
@@ -124,7 +123,7 @@ def main():
         # print(f"aruco9_3d = {aruco9_3d}")
         print(f"x= {aruco5_3d[0]} y= {aruco1_3d[1]}")
 
-        save_path = f"{save_root_dir}/aruco_images/{frame_count}.png"
+        save_path = f"{save_dir}/aruco_images/{frame_count}.png"
 
         # キーが押されるまで待機
         if cv2.waitKey(1) & 0xFF == ord('q'):
