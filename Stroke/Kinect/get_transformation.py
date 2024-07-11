@@ -114,13 +114,9 @@ def main():
         #テスト
         aruco1_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco1_3d_cam, 1))
         aruco5_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco5_3d_cam, 1))
-        aruco9_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco9_3d_cam, 1))
 
-        # print(f"norm 5-9 = {np.linalg.norm(aruco5_3d_cam - aruco9_3d_cam)}")
-        # print(F"norm 1-9 = {np.linalg.norm(aruco1_3d_cam - aruco9_3d_cam)}")
         # print(f"aruco1_3d = {aruco1_3d}")
         # print(f"aruco5_3d = {aruco5_3d}")
-        # print(f"aruco9_3d = {aruco9_3d}")
         print(f"x= {aruco5_3d[0]} y= {aruco1_3d[1]}")
 
         save_path = f"{save_dir}/aruco_images/{frame_count}.png"
