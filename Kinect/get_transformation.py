@@ -75,8 +75,12 @@ def main():
     playback.open()
     calibration = playback.calibration
 
+    #デバイスのシリアルナンバーを取得---------------------------------------------------------------
+    serial_number = playback.configuration["serial_number"]
+
     frame_count = 1
-    max_framecount = 30
+    max_framecount = 100
+    transformation_matrix_sum = np.zeros((4,4))
     target_ids = [1, 5, 9]  # 検出したいマーカーID
 
     while frame_count < max_framecount+1:
@@ -111,15 +115,9 @@ def main():
         # print(f"basex = {basex} basey = {basey} basez = {basez} t = {t}")
         # print(f"transformation_matrix = {transformation_matrix}")
 
-        #テスト
-        aruco1_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco1_3d_cam, 1))
-        aruco5_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco5_3d_cam, 1))
+        transformation_matrix_sum += transformation_matrix
 
-        # print(f"aruco1_3d = {aruco1_3d}")
-        # print(f"aruco5_3d = {aruco5_3d}")
-        print(f"x= {aruco5_3d[0]} y= {aruco1_3d[1]}")
-
-        save_path = f"{save_dir}/aruco_images/{frame_count}.png"
+        # save_path = f"{save_dir}/aruco_images/{frame_count}.png"
 
         # キーが押されるまで待機
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -131,6 +129,23 @@ def main():
     # クリーンアップ
     playback.close()
     cv2.destroyAllWindows()
+
+    #transformation_matrixの平均を計算
+    transformation_matrix_mean = transformation_matrix_sum / max_framecount
+    #transformation_matrix_meanを保存
+    np.save(f"{save_dir}/transformation_matrix.npy", transformation_matrix_mean)
+
+
+    # # #テスト
+    # aruco1_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco1_3d_cam, 1))
+    # aruco5_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco5_3d_cam, 1))
+    # aruco1_3d_mean = np.dot(np.linalg.inv(transformation_matrix_mean), np.append(aruco1_3d_cam, 1))
+    # aruco5_3d_mean = np.dot(np.linalg.inv(transformation_matrix_mean), np.append(aruco5_3d_cam, 1))
+
+    # # print(f"aruco1_3d = {aruco1_3d}")
+    # # print(f"aruco5_3d = {aruco5_3d}")
+    # print(f"x= {aruco5_3d[0]} y= {aruco1_3d[1]}")
+    # print(f"x= {aruco5_3d_mean[0]} y= {aruco1_3d_mean[1]}")
 
 if __name__ == "__main__":
     main()
