@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from pyk4a import PyK4APlayback, CalibrationType
+from pyk4a import PyK4A, connected_device_count,  PyK4APlayback, CalibrationType
 import os
 import sys
 
@@ -11,17 +11,18 @@ save_dir = os.path.abspath(os.path.join(current_dir, relative_path_to_target))
 # ArUcoのライブラリを導入
 aruco = cv2.aruco
 
-helpers_dir = r"C:\Users\zutom\pyk4a\example"
+# helpers_dir = r"C:\Users\zutom\pyk4a\example"
+helpers_dir = r"C:\Users\tus\pyk4a\example"
 os.chdir(helpers_dir)
 sys.path.append(helpers_dir)
 from helpers import convert_to_bgra_if_required
 
 def target_aruco_frame(rgb_image, target_ids, detector):
-    corners, ids, rejectedCandidates = detector.detectMarkers(rgb_image)
-
+    corners, ids, __ = detector.detectMarkers(rgb_image)
+    selected_corners = []
+    selected_ids = []
+    
     if ids is not None:
-        selected_corners = []
-        selected_ids = []
         for i in range(len(ids)):
             if ids[i][0] in target_ids:
                 selected_corners.append(corners[i])
@@ -68,7 +69,8 @@ def main():
         os.makedirs(save_dir+"/aruco_images")
 
     # 録画したMKVファイルのパス
-    mkv_file_path = r"C:\Users\zutom\aruco_test1.mkv"
+    mkv_file_path = r"C:\Users\tus\.vscode\python_scripts\calibration_2.mkv"
+    # mkv_file_path = r"C:\Users\zutom\aruco_test1.mkv"
 
     # MKVファイルの再生
     playback = PyK4APlayback(mkv_file_path)
@@ -76,14 +78,15 @@ def main():
     calibration = playback.calibration
 
     #デバイスのシリアルナンバーを取得---------------------------------------------------------------
-    serial_number = playback.configuration["serial_number"]
+    serial_number = playback.connected_device_count()
+    print(f"serial_number = {serial_number}")
 
     frame_count = 1
     max_framecount = 100
     transformation_matrix_sum = np.zeros((4,4))
     target_ids = [1, 5, 9]  # 検出したいマーカーID
 
-    while frame_count < max_framecount+1:
+    while frame_count < max_framecount+1:  #100フレーム分正常にデータを取得したら終了
         # 画像をキャプチャ
         capture = playback.get_next_capture()
 
@@ -99,10 +102,12 @@ def main():
         rgb_image = convert_to_bgra_if_required(playback.configuration["color_format"], capture.color)
         depth_image = capture.transformed_depth
 
-        annotated_frame, select_corners, select_ids = target_aruco_frame(rgb_image, target_ids, detector)
-
-        centroid = calculate_3d_centroid(select_corners,select_ids, depth_image, calibration)
-        aruco1_3d_cam, aruco5_3d_cam, aruco9_3d_cam = centroid[0], centroid[1], centroid[2]
+        try:
+            __, select_corners, select_ids = target_aruco_frame(rgb_image, target_ids, detector)
+            centroid = calculate_3d_centroid(select_corners,select_ids, depth_image, calibration)
+            aruco1_3d_cam, aruco5_3d_cam, aruco9_3d_cam = centroid[0], centroid[1], centroid[2]
+        except:
+            continue
 
         basex = (aruco5_3d_cam - aruco9_3d_cam)/np.linalg.norm(aruco5_3d_cam - aruco9_3d_cam)
         basey = (aruco1_3d_cam - aruco9_3d_cam)/np.linalg.norm(aruco1_3d_cam - aruco9_3d_cam)
