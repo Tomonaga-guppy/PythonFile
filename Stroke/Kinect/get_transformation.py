@@ -4,6 +4,9 @@ from pyk4a import PyK4A, connected_device_count,  PyK4APlayback, CalibrationType
 import os
 import sys
 
+# import k4a_module
+# print(f"module = {k4a_module.__file__}")
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 relative_path_to_target = r"..\..\..\PythonDataFile\stroke"
 save_dir = os.path.abspath(os.path.join(current_dir, relative_path_to_target))
@@ -11,8 +14,8 @@ save_dir = os.path.abspath(os.path.join(current_dir, relative_path_to_target))
 # ArUcoのライブラリを導入
 aruco = cv2.aruco
 
-# helpers_dir = r"C:\Users\zutom\pyk4a\example"
-helpers_dir = r"C:\Users\tus\pyk4a\example"
+helpers_dir = r"C:\Users\zutom\pyk4a\example"
+# helpers_dir = r"C:\Users\tus\pyk4a\example"
 os.chdir(helpers_dir)
 sys.path.append(helpers_dir)
 from helpers import convert_to_bgra_if_required
@@ -21,7 +24,7 @@ def target_aruco_frame(rgb_image, target_ids, detector):
     corners, ids, __ = detector.detectMarkers(rgb_image)
     selected_corners = []
     selected_ids = []
-    
+
     if ids is not None:
         for i in range(len(ids)):
             if ids[i][0] in target_ids:
@@ -69,8 +72,8 @@ def main():
         os.makedirs(save_dir+"/aruco_images")
 
     # 録画したMKVファイルのパス
-    mkv_file_path = r"C:\Users\tus\.vscode\python_scripts\calibration_2.mkv"
-    # mkv_file_path = r"C:\Users\zutom\aruco_test1.mkv"
+    # mkv_file_path = r"C:\Users\tus\.vscode\python_scripts\calibration_2.mkv"
+    mkv_file_path = r"C:\Users\zutom\BRLAB\gait_pattern\test\20240712\calibration_2.mkv"
 
     # MKVファイルの再生
     playback = PyK4APlayback(mkv_file_path)
@@ -78,6 +81,7 @@ def main():
     calibration = playback.calibration
 
     #デバイスのシリアルナンバーを取得---------------------------------------------------------------
+    device_serial_list = [000767101412, 000723201412, 000795793812] #進行方向を正面として右斜め前、左斜め前、左
     serial_number = playback.connected_device_count()
     print(f"serial_number = {serial_number}")
 
