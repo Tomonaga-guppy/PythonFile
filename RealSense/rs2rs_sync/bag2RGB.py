@@ -5,11 +5,10 @@ import os
 import glob
 
 # root_dir = r"C:\Users\zutom\BRLAB\gait pattern\sync\test"
-# root_dir = r"C:\Users\Tomson\BRLAB\gait_pattern\sync_test\rs-rs"
-root_dir = r"D:\Duser\Dbrlab\Desktop\tomonaga\sync_test\rs-mocap"
+root_dir = r"F:\Tomson\gait_pattern\20240607"
 
-#input関数でターミナルに入力された番号を取得
-blinking_interval = input("点灯間隔を入力してください: ")
+# #input関数でターミナルに入力された番号を取得
+# blinking_interval = input("点灯間隔を入力してください: ")
 
 bag_file_path_list = glob.glob(os.path.join(root_dir, f'*.bag'))
 
