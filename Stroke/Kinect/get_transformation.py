@@ -4,9 +4,6 @@ from pyk4a import PyK4A, connected_device_count,  PyK4APlayback, CalibrationType
 import os
 import sys
 
-# import k4a_module
-# print(f"module = {k4a_module.__file__}")
-
 current_dir = os.path.dirname(os.path.abspath(__file__))
 relative_path_to_target = r"..\..\..\PythonDataFile\stroke"
 save_dir = os.path.abspath(os.path.join(current_dir, relative_path_to_target))
@@ -14,7 +11,7 @@ save_dir = os.path.abspath(os.path.join(current_dir, relative_path_to_target))
 # ArUcoのライブラリを導入
 aruco = cv2.aruco
 
-helpers_dir = r"C:\Users\zutom\pyk4a\example"
+helpers_dir = r"C:\Users\pyk4a\example"
 # helpers_dir = r"C:\Users\tus\pyk4a\example"
 os.chdir(helpers_dir)
 sys.path.append(helpers_dir)
