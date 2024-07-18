@@ -6,7 +6,7 @@ import glob
 
 root_dir = r"F:\Tomson\gait_pattern\first_test\recorded_data\realsense\two_dev"
 
-bag_file_path_list = glob.glob(os.path.join(root_dir, f'*device1*7.bag'))
+bag_file_path_list = glob.glob(os.path.join(root_dir, f'*test_[7-8].bag'))
 
 for i, bag_file_path in enumerate(bag_file_path_list):
 
@@ -32,6 +32,9 @@ for i, bag_file_path in enumerate(bag_file_path_list):
         align_to = rs.stream.color
         align = rs.align(align_to)
 
+        # hole_filling_filterのパラメータ
+        hole_filling = rs.hole_filling_filter(2)
+
         frame_count = 1  # フレーム番号を初期化
 
         for stream in profile.get_streams():
@@ -40,7 +43,7 @@ for i, bag_file_path in enumerate(bag_file_path_list):
                 frame_rate = vprof.fps()
                 size = (vprof.width(), vprof.height())
 
-        mp4file = output_dir + "/original.mp4"
+        mp4file = output_dir + "/original_depth.mp4"
         fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') # ファイル形式(ここではmp4)
         writer = cv2.VideoWriter(mp4file, fmt, frame_rate, size) # ライター作成
 
@@ -54,23 +57,32 @@ for i, bag_file_path in enumerate(bag_file_path_list):
                 # アライメント処理
                 aligned_frames = align.process(frames)
 
-                # RGBフレームの取得
-                color_frame = aligned_frames.get_color_frame()
-                if not color_frame:
+                # depthフレームの取得
+                depth_frame = aligned_frames.get_depth_frame()
+                if not depth_frame:
                     break
+                filter_frame = hole_filling.process(depth_frame)
+                result_frame = filter_frame.as_depth_frame()
+
 
                 # Numpy配列への変換 OpenCVはBGR形式のため変換
-                color_image = cv2.cvtColor(np.asanyarray(color_frame.get_data()), cv2.COLOR_RGB2BGR)
+                depth_image = np.asanyarray(result_frame.get_data())
 
-                # # ファイル名を連番で生成し、画像を保存
-                # frame_id = f'{frame_count:04d}'  # 4桁のファイル番号
-                # output_filename = os.path.join(output_dir, f'image_{frame_id}.jpg')
-                # cv2.imwrite(output_filename, color_image)
+                depth_dir = output_dir + '/depth_image'
+                if not os.path.exists(depth_dir):
+                    os.makedirs(depth_dir)
 
-                # cv2.imshow("RGB Image", color_image)
-                # cv2.waitKey(1)
+                # ファイル名を連番で生成し、画像を保存
+                depth_image_path = os.path.join(depth_dir, f"{str(frame_count).zfill(4)}.png")
+                cv2.imwrite(depth_image_path, depth_image)
 
-                writer.write(color_image)
+                cv2.imshow("depth Image", depth_image)
+                cv2.waitKey(1)
+
+                # depth_imageをカラー画像に変換
+                depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+
+                writer.write(depth_colormap)
                 print(f"進捗：{i+1}/{len(bag_file_path_list)} フレーム番号：{frame_count}")
                 frame_count += 1
             except RuntimeError:
