@@ -11,8 +11,9 @@ sys.path.append(helpers_dir)
 from helpers import convert_to_bgra_if_required
 
 def main():
-    mkv_folder = r"C:\Users\Tomson\BRLAB\gait_pattern\20240712"
-    mkv_files = glob.glob(os.path.join(mkv_folder, '*.mkv'),recursive=True)
+    mkv_folder = r"F:\Tomson\gait_pattern\20240712"
+    mkv_files = glob.glob(os.path.join(mkv_folder, '*0_Tpose_0.mkv'))
+    print(f"mkv_files = {mkv_files}")
 
     for i, mkv_file_path in enumerate(mkv_files):
 
@@ -27,7 +28,7 @@ def main():
 
         frame_count = 1
 
-        mp4file = folder_path + "/" +os.path.basename(mkv_file_path).split('.')[0] + '_original.mp4'
+        mp4file = folder_path + "/original.mp4"
         fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') # ファイル形式(ここではmp4)
         fps = 30.0
         size = (1920,1080)

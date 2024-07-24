@@ -52,6 +52,7 @@ def main():
 
         success_frame_list = []
 
+        #すべてのマーカーが検出できているフレームのみを抽出
         for frame in range(0, len(marker_set_df)):
             if not marker_set_df.iloc[frame].isna().any():
                 success_frame_list.append(frame)
@@ -67,48 +68,77 @@ def main():
 
         '''
         表示の順番
-        columns = MultiIndex([(   'MarkerSet 01:C7', 'X'),
-                    ( 'MarkerSet 01:CLAV', 'X'),
-                    ( 'MarkerSet 01:LANK', 'X'),
-                    ('MarkerSet 01:LANK2', 'X'),
-                    ( 'MarkerSet 01:LASI', 'X'),
-                    ( 'MarkerSet 01:LHEE', 'X'),
-                    ( 'MarkerSet 01:LKNE', 'X'),
-                    ('MarkerSet 01:LKNE2', 'X'),
-                    ( 'MarkerSet 01:LPSI', 'X'),
-                    ( 'MarkerSet 01:LSHO', 'X'),
-                    ( 'MarkerSet 01:LTHI', 'X'),
-                    ( 'MarkerSet 01:LTIB', 'X'),
-                    ( 'MarkerSet 01:LTOE', 'X'),
-                    ( 'MarkerSet 01:RANK', 'X'),
-                    ('MarkerSet 01:RANK2', 'X'),
-                    ( 'MarkerSet 01:RASI', 'X'),
-                    ( 'MarkerSet 01:RBAK', 'X'),
-                    ( 'MarkerSet 01:RHEE', 'X'),
-                    ( 'MarkerSet 01:RKNE', 'X'),
-                    ('MarkerSet 01:RKNE2', 'X'),
-                    ( 'MarkerSet 01:RPSI', 'X'),
-                    ( 'MarkerSet 01:RSHO', 'X'),
-                    ( 'MarkerSet 01:RTHI', 'X'),
-                    ( 'MarkerSet 01:RTIB', 'X'),
-                    ( 'MarkerSet 01:RTOE', 'X'),
-                    ( 'MarkerSet 01:STRN', 'X'),
-                    (  'MarkerSet 01:T10', 'X'),
+        columns = MultiIndex([(   'MarkerSet 01:C7', 'X'), 0
+                    ( 'MarkerSet 01:CLAV', 'X'), 1
+                    ( 'MarkerSet 01:LANK', 'X'), 2
+                    ('MarkerSet 01:LANK2', 'X'), 3
+                    ( 'MarkerSet 01:LASI', 'X'), 4
+                    ( 'MarkerSet 01:LHEE', 'X'), 5
+                    ( 'MarkerSet 01:LKNE', 'X'), 6
+                    ('MarkerSet 01:LKNE2', 'X'), 7
+                    ( 'MarkerSet 01:LPSI', 'X'), 8
+                    ( 'MarkerSet 01:LSHO', 'X'), 9
+                    ( 'MarkerSet 01:LTHI', 'X'), 10
+                    ( 'MarkerSet 01:LTIB', 'X'), 11
+                    ( 'MarkerSet 01:LTOE', 'X'), 12
+                    ( 'MarkerSet 01:RANK', 'X'), 13
+                    ('MarkerSet 01:RANK2', 'X'), 14
+                    ( 'MarkerSet 01:RASI', 'X'), 15
+                    ( 'MarkerSet 01:RBAK', 'X'), 16
+                    ( 'MarkerSet 01:RHEE', 'X'), 17
+                    ( 'MarkerSet 01:RKNE', 'X'), 18
+                    ('MarkerSet 01:RKNE2', 'X'), 19
+                    ( 'MarkerSet 01:RPSI', 'X'), 20
+                    ( 'MarkerSet 01:RSHO', 'X'), 21
+                    ( 'MarkerSet 01:RTHI', 'X'), 22
+                    ( 'MarkerSet 01:RTIB', 'X'), 23
+                    ( 'MarkerSet 01:RTOE', 'X'), 24
+                    ( 'MarkerSet 01:STRN', 'X'), 25
+                    (  'MarkerSet 01:T10', 'X'), 26
                 )
         '''
 
         keypoints = interpolate_success_df.values
         # print(f"keypoints = {keypoints}")
         keypoints = keypoints.reshape(-1, len(marker_set), 3)  #xyzで組になるように変形
-        print(f"keypoints = {keypoints.shape}")
+        # print(f"keypoints = {keypoints}")
+        # print(f"keypoints = {keypoints.shape}")
 
         # animate_3d_mocap(keypoints, save_path=os.path.join(os.path.dirname(motive_folder), f"interpolated_{os.path.basename(csv_path)}.mp4"))
 
         right_ground_frame = []
         left_ground_frame = []
 
-        mid_psi = (keypoints[:, 2] + keypoints[:, 8]) / 2
+        mid_psi = (keypoints[:, 20, :] + keypoints[:, 8, :]) / 2  #RPSIとLPSIの中間点
+        r_heel = keypoints[:, 17, :] #RHEE
+        l_heel = keypoints[:, 5, :] #LHEE
 
+        r_length = np.linalg.norm(mid_psi - r_heel, axis=1)
+        l_length = np.linalg.norm(mid_psi - l_heel, axis=1)
+
+        # print(f"r_length = {r_length}")
+        # print(f"l_length = {l_length}")
+
+        # r_length_df = pd.DataFrame(r_length, l_length, columns=["R_length" "L_length"])
+        # r_length_df.index= full_range
+
+        ground_length_df = pd.DataFrame({"R_length": r_length, "L_length": l_length}, index=full_range)
+        # print(f"ground_length_df = {ground_length_df}")
+
+        # # R_lengthが小さい順にソート
+        # sorted_r_df = ground_length_df.sort_values(by='R_length')
+        # sorted_l_df = ground_length_df.sort_values(by='L_length')
+        # print(f"sorted_r_df = {sorted_r_df}")
+        # print(f"sorted_l_df = {sorted_l_df}")
+
+        heel_length_df = pd.DataFrame({"R_heel_x": r_heel[:,0], "R_heel_y": r_heel[:,1], "R_heel_z": r_heel[:,2],
+                                       "L_heel_x": l_heel[:,0],"L_heel_y": l_heel[:,1], "L_heel_z": l_heel[:,2]}, index=full_range)
+        # print(f"heel_length_df = {heel_length_df}")
+
+        sorted_r_heel_length_df = heel_length_df.sort_values(by='R_heel_y')["R_heel_y"]
+        sorted_l_heel_length_df = heel_length_df.sort_values(by='L_heel_y')["L_heel_y"]
+        print(f"sorted_r_heel_length_df = {sorted_r_heel_length_df.head(20)}")
+        print(f"sorted_l_heel_length_df = {sorted_l_heel_length_df.head(20)}")
 
 
 
