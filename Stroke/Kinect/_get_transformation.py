@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from pyk4a import PyK4A, connected_device_count,  PyK4APlayback, CalibrationType
+from pyk4a import PyK4A, connected_device_count,  PyK4APlayback, CalibrationType, Calibration
 import os
 import sys
 import glob
@@ -69,7 +69,6 @@ def main():
         os.makedirs(aruco_dir+"/aruco_images")
 
     # 録画したMKVファイルのパス
-    # mkv_file_path = r"C:\Users\zutom\BRLAB\gait_pattern\test\20240712\calibration_2.mkv"
     mkv_file_paths = glob.glob(os.path.join(root_dir, f'*{keyward}*.mkv'),recursive=True)
 
     for mkv_file_path in mkv_file_paths:
@@ -91,6 +90,7 @@ def main():
         start_frame_caount = 60
         record_framecount = 60
         transformation_matrix_sum = np.zeros((4,4))
+        transformation_matrix_2d_sum = np.zeros((3,3))
         target_ids = [0, 1, 3]  # 検出したいマーカーID
 
         while True:
@@ -122,6 +122,11 @@ def main():
                     __, select_corners, select_ids = target_aruco_frame(rgb_image, target_ids, detector, aruco)
                     centroid = calculate_3d_centroid(select_corners,select_ids, depth_image, calibration)
                     aruco0_3d_cam, aruco1_3d_cam, aruco3_3d_cam = centroid[0], centroid[1], centroid[2]
+
+                    print(f"selected_corners = {select_corners}")
+                    aruco0_2d_cam = np.array([select_corners[0][:,0].mean(), select_corners[0][:,1].mean()])
+                    aruco1_2d_cam = np.array([select_corners[1][:,0].mean(), select_corners[1][:,1].mean()])
+                    aruco3_2d_cam = np.array([select_corners[2][:,0].mean(), select_corners[2][:,1].mean()])
                 except:
                     continue
 
@@ -129,7 +134,14 @@ def main():
                 basey = (aruco1_3d_cam - aruco0_3d_cam)/np.linalg.norm(aruco1_3d_cam - aruco0_3d_cam)
                 basex = np.cross(basey, basez)/np.linalg.norm(np.cross(basey, basez))
                 t1 = aruco0_3d_cam
-                t2 = [-0.41, -0.446, -0.055]
+                t2 = [-410, -446, -55]
+
+                basex_2d = (aruco0_2d_cam - aruco3_2d_cam)/np.linalg.norm(aruco0_2d_cam - aruco3_2d_cam)
+                basey_2d = (aruco1_2d_cam - aruco0_2d_cam)/np.linalg.norm(aruco1_2d_cam - aruco0_2d_cam)
+
+                transformation_matrix_2d = np.array([[basex_2d[0], basey_2d[0], 0,],
+                                                    [basex_2d[1], basey_2d[1], 0],
+                                                    [0, 0, 1]])
 
             if id == "1" or id == "2":
                 try:
@@ -143,7 +155,7 @@ def main():
                 basey = (aruco1_3d_cam - aruco0_3d_cam)/np.linalg.norm(aruco1_3d_cam - aruco0_3d_cam)
                 basez = np.cross(basex, basey)/np.linalg.norm(np.cross(basex, basey))
                 t1 = aruco0_3d_cam
-                t2 = [-0.245, -0.446, 0]
+                t2 = [-245, -446, 0]
 
 
             transformation_matrix_1 = np.array([[basex[0], basey[0], basez[0], t1[0]],
@@ -161,6 +173,8 @@ def main():
 
             transformation_matrix_sum += transformation_matrix_1
 
+            transformation_matrix_2d_sum += transformation_matrix_2d
+
             # save_path = f"{save_dir}/aruco_images/{frame_count}.png"
 
             # キーが押されるまで待機
@@ -176,10 +190,11 @@ def main():
 
         #transformation_matrixの平均を計算
         transformation_matrix_mean = transformation_matrix_sum / record_framecount
+        transformation_matrix_2d_mean = transformation_matrix_2d_sum / record_framecount
         #transformation_matrix_meanを保存
         npy_save_path = os.path.join(os.path.dirname(mkv_file_path) ,f"transformation_matrix_{id}.npz")
         print(f"npy_save_path = {npy_save_path}")
-        np.savez(npy_save_path, a1 = transformation_matrix_mean, a2 = transformation_matrix_2)
+        np.savez(npy_save_path, a1 = transformation_matrix_mean, a2 = transformation_matrix_2, a_2d = transformation_matrix_2d)
 
     # # #テスト
     # aruco1_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco1_3d_cam, 1))
