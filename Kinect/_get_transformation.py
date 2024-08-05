@@ -75,6 +75,7 @@ def main():
         print(f"mkv_file_path = {mkv_file_path}")
         id = (os.path.basename(mkv_file_path).split('.')[0]).split('_')[-1]
         print(f"id = {id}")
+
         # MKVファイルの再生
         playback = PyK4APlayback(mkv_file_path)
         playback.open()
@@ -92,6 +93,8 @@ def main():
         transformation_matrix_sum = np.zeros((4,4))
         transformation_matrix_2d_sum = np.zeros((3,3))
         target_ids = [0, 1, 3]  # 検出したいマーカーID
+        aruco0_3d_sum, aruco1_3d_sum, aruco3_3d_sum = np.zeros(3), np.zeros(3), np.zeros(3)
+        aruco0_2d_sum, aruco1_2d_sum, aruco3_2d_sum = np.zeros(2), np.zeros(2), np.zeros(2)
 
         while True:
             # 60フレーム目から60フレーム分のデータを取得
@@ -117,89 +120,80 @@ def main():
             rgb_image = convert_to_bgra_if_required(playback.configuration["color_format"], capture.color)
             depth_image = capture.transformed_depth
 
-            if id == "0":
-                try:
-                    __, select_corners, select_ids = target_aruco_frame(rgb_image, target_ids, detector, aruco)
-                    centroid = calculate_3d_centroid(select_corners,select_ids, depth_image, calibration)
-                    aruco0_3d_cam, aruco1_3d_cam, aruco3_3d_cam = centroid[0], centroid[1], centroid[2]
+            try:
+                __, select_corners, select_ids = target_aruco_frame(rgb_image, target_ids, detector, aruco)
+                centroid = calculate_3d_centroid(select_corners,select_ids, depth_image, calibration)
 
-                    print(f"selected_corners = {select_corners}")
-                    aruco0_2d_cam = np.array([select_corners[0][:,0].mean(), select_corners[0][:,1].mean()])
-                    aruco1_2d_cam = np.array([select_corners[1][:,0].mean(), select_corners[1][:,1].mean()])
-                    aruco3_2d_cam = np.array([select_corners[2][:,0].mean(), select_corners[2][:,1].mean()])
-                except:
-                    continue
+                aruco0_3d_sum += centroid[0]
+                aruco1_3d_sum += centroid[1]
+                aruco3_3d_sum += centroid[2]
 
-                basez = (aruco0_3d_cam - aruco3_3d_cam)/np.linalg.norm(aruco0_3d_cam - aruco3_3d_cam)
-                basey = (aruco1_3d_cam - aruco0_3d_cam)/np.linalg.norm(aruco1_3d_cam - aruco0_3d_cam)
-                basex = np.cross(basey, basez)/np.linalg.norm(np.cross(basey, basez))
-                t1 = aruco0_3d_cam
-                t2 = [-410, -446, -55]
+                sorted_indices = np.argsort(select_ids.flatten()) #idが小さい方から順に番号を振る
+                sorted_select_corners = [select_corners[i] for i in sorted_indices] #idが昇順になるようにcornersを並び替える
+                aruco0_2d_sum += np.mean(sorted_select_corners[0][0], axis=0)
+                aruco1_2d_sum += np.mean(sorted_select_corners[1][0], axis=0)
+                aruco3_2d_sum += np.mean(sorted_select_corners[2][0], axis=0)
 
-                basex_2d = (aruco0_2d_cam - aruco3_2d_cam)/np.linalg.norm(aruco0_2d_cam - aruco3_2d_cam)
-                basey_2d = (aruco1_2d_cam - aruco0_2d_cam)/np.linalg.norm(aruco1_2d_cam - aruco0_2d_cam)
-
-                transformation_matrix_2d = np.array([[basex_2d[0], basey_2d[0], 0,],
-                                                    [basex_2d[1], basey_2d[1], 0],
-                                                    [0, 0, 1]])
-
-            if id == "1" or id == "2":
-                try:
-                    __, select_corners, select_ids = target_aruco_frame(rgb_image, target_ids, detector, aruco)
-                    centroid = calculate_3d_centroid(select_corners,select_ids, depth_image, calibration)
-                    aruco0_3d_cam, aruco1_3d_cam, aruco3_3d_cam = centroid[0], centroid[1], centroid[2]
-                except:
-                    continue
-
-                basex = (aruco3_3d_cam - aruco0_3d_cam)/np.linalg.norm(aruco3_3d_cam - aruco0_3d_cam)
-                basey = (aruco1_3d_cam - aruco0_3d_cam)/np.linalg.norm(aruco1_3d_cam - aruco0_3d_cam)
-                basez = np.cross(basex, basey)/np.linalg.norm(np.cross(basex, basey))
-                t1 = aruco0_3d_cam
-                t2 = [-245, -446, 0]
-
-
-            transformation_matrix_1 = np.array([[basex[0], basey[0], basez[0], t1[0]],
-                                                [basex[1], basey[1], basez[1], t1[1]],
-                                                [basex[2], basey[2], basez[2], t1[2]],
-                                                [0,       0,       0,       1]])
-
-            transformation_matrix_2 = np.array([[1, 0, 0, t2[0]],
-                                                [0, 1, 0, t2[1]],
-                                                [0, 0, 1, t2[2]],
-                                                [0, 0, 0, 1]])
-
-            # print(f"basex = {basex} basey = {basey} basez = {basez} t = {t}")
-            # print(f"transformation_matrix = {transformation_matrix}")
-
-            transformation_matrix_sum += transformation_matrix_1
-
-            transformation_matrix_2d_sum += transformation_matrix_2d
-
-            # save_path = f"{save_dir}/aruco_images/{frame_count}.png"
-
-            # キーが押されるまで待機
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            except:
+                continue
 
             print(f"frame_count = {frame_count}")
             frame_count += 1
+
+        aruco0_3d, aruco1_3d, aruco3_3d = aruco0_3d_sum / record_framecount, aruco1_3d_sum / record_framecount, aruco3_3d_sum / record_framecount
+        aruco0_2d, aruco1_2d, aruco3_2d = aruco0_2d_sum / record_framecount, aruco1_2d_sum / record_framecount, aruco3_2d_sum / record_framecount
+
+        print(f"aruco0_2d = {aruco0_2d}, aruco1_2d = {aruco1_2d}, aruco3_2d = {aruco3_2d}")
+
+        if id == "0":
+            basez = (aruco0_3d - aruco3_3d)/np.linalg.norm(aruco0_3d - aruco3_3d)
+            basey = (aruco1_3d - aruco0_3d)/np.linalg.norm(aruco1_3d - aruco0_3d)
+            basex = np.cross(basey, basez)/np.linalg.norm(np.cross(basey, basez))
+            t1 = aruco0_3d
+            t2 = [-410, -446, -55]
+
+            basex_2d = (aruco0_2d - aruco3_2d)/np.linalg.norm(aruco0_2d - aruco3_2d)
+            basey_2d = (aruco1_2d - aruco0_2d)/np.linalg.norm(aruco1_2d - aruco0_2d)
+            t1_2d = aruco0_2d
+
+
+        elif id == "1" or id == "2":
+            basex = (aruco3_3d - aruco0_3d)/np.linalg.norm(aruco3_3d - aruco0_3d)
+            basey = (aruco1_3d - aruco0_3d)/np.linalg.norm(aruco1_3d - aruco0_3d)
+            basez = np.cross(basex, basey)/np.linalg.norm(np.cross(basex, basey))
+            t1 = aruco0_3d
+            t2 = [-245, -446, 0]
+
+        transformation_matrix_1 = np.array([[basex[0], basey[0], basez[0], t1[0]],
+                                            [basex[1], basey[1], basez[1], t1[1]],
+                                            [basex[2], basey[2], basez[2], t1[2]],
+                                            [0,       0,       0,       1]])
+
+        transformation_matrix_2 = np.array([[1, 0, 0, t2[0]],
+                                            [0, 1, 0, t2[1]],
+                                            [0, 0, 1, t2[2]],
+                                            [0, 0, 0, 1]])
+
+        transformation_matrix_2d = np.array([[basex_2d[0], basey_2d[0], t1_2d[0]],
+                        [basex_2d[1], basey_2d[1], t1_2d[1]],
+                        [0, 0, 1]])
 
         # クリーンアップ
         playback.close()
         cv2.destroyAllWindows()
 
-        #transformation_matrixの平均を計算
-        transformation_matrix_mean = transformation_matrix_sum / record_framecount
-        transformation_matrix_2d_mean = transformation_matrix_2d_sum / record_framecount
         #transformation_matrix_meanを保存
         npy_save_path = os.path.join(os.path.dirname(mkv_file_path) ,f"transformation_matrix_{id}.npz")
         print(f"npy_save_path = {npy_save_path}")
-        np.savez(npy_save_path, a1 = transformation_matrix_mean, a2 = transformation_matrix_2, a_2d = transformation_matrix_2d)
+        np.savez(npy_save_path, a1 = transformation_matrix_1, a2 = transformation_matrix_2, a_2d = transformation_matrix_2d)
 
-    # # #テスト
-    # aruco1_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco1_3d_cam, 1))
+    #テスト
+    print(f"aruco0_2d = {aruco0_2d}")
+    aruco0_2d_henkan = np.dot(transformation_matrix_2d, np.append(aruco0_2d, 1))
+    print(f"aruco0_2d_henkan = {aruco0_2d_henkan}")
+    # aruco1_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco1_3d, 1))
     # aruco5_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco5_3d_cam, 1))
-    # aruco1_3d_mean = np.dot(np.linalg.inv(transformation_matrix_mean), np.append(aruco1_3d_cam, 1))
+    # aruco1_3d_mean = np.dot(np.linalg.inv(transformation_matrix_mean), np.append(aruco1_3d, 1))
     # aruco5_3d_mean = np.dot(np.linalg.inv(transformation_matrix_mean), np.append(aruco5_3d_cam, 1))
 
     # # print(f"aruco1_3d = {aruco1_3d}")
