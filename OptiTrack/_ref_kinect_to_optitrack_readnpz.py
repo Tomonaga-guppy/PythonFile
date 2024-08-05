@@ -19,8 +19,11 @@ def butter_lowpass_filter(data, order, cutoff_freq):  #4次のバターワース
     nyquist_freq = sampling_freq / 2
     normal_cutoff = cutoff_freq / nyquist_freq
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    # data内にnanがある場合は線形補間してからフィルター
+    if np.any(np.isnan(data)):
+        nans, x = np.isnan(data), lambda z: z.nonzero()[0]
+        data[nans] = np.interp(x(nans), x(~nans), data[~nans])
     y = lfilter(b, a, data, axis=0)
-    # y = data
     return y
 
 def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配列を入力
@@ -31,7 +34,6 @@ def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配�
         angle = np.arctan2(np.linalg.norm(cross_product), dot_product)
         angle = angle * 180 / np.pi
         angle_list.append(angle)
-
     return angle_list
 
 def main():
@@ -67,8 +69,6 @@ def main():
         thigh_vector_l_mocap_ori = (keypoints_mocap[frame_range, 6, :] + keypoints_mocap[frame_range, 7, :]) / 2 - (keypoints_mocap[frame_range, 4, :] + keypoints_mocap[frame_range, 8, :]) / 2 #LASIとLPSIの中点→LKNEとLKNE2の中点
         lower_vector_l_mocap_ori = (keypoints_mocap[frame_range, 2, :] + keypoints_mocap[frame_range, 3, :]) / 2 - (keypoints_mocap[frame_range, 6, :] + keypoints_mocap[frame_range, 7, :]) / 2 #LKNEとLKNE2の中点→LANKとLANK2の中点
         foot_vector_l_mocap_ori = keypoints_mocap[frame_range, 13, :] - keypoints_mocap[frame_range, 12, :] #LTOE→LHEE
-
-
 
         #フィルター後
         mid_hip_sagttal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[frame_range, 8, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
@@ -158,9 +158,6 @@ def main():
         knee_angle_mocap_ori = calculate_angle(thigh_vector_l_mocap_ori, lower_vector_l_mocap_ori)
         ankle_angle_mocap_ori = calculate_angle(lower_vector_l_mocap_ori, foot_vector_l_mocap_ori)
 
-
-
-
         #フィルター後
         hip_angle_sagittal_2d = calculate_angle(trunk_vector_sagittal_2d, thigh_vector_l_sagittal_2d)
         knee_angle_sagittal_2d = calculate_angle(thigh_vector_l_sagittal_2d, lower_leg_vector_l_sagittal_2d)
@@ -176,53 +173,31 @@ def main():
 
         if np.any(np.isnan(hip_angle_frontal_3d)):
             print(f"hip_angle_frontal_3dにnanが含まれている")
-
         if np.any(np.isnan(hip_angle_mocap)):
             print(f"hip_angle_mocapにnanが含まれている")
-
         if np.any(np.isnan(hip_angle_sagittal_2d)):
             print(f"hip_angle_sagittal_2dにnanが含まれている")
-
         if np.any(np.isnan(knee_angle_frontal_3d)):
             print(f"knee_angle_frontal_3dにnanが含まれている")
-
         if np.any(np.isnan(knee_angle_mocap)):
             print(f"knee_angle_mocapにnanが含まれている")
-
         if np.any(np.isnan(knee_angle_sagittal_2d)):
             print(f"knee_angle_sagittal_2dにnanが含まれている")
-
         if np.any(np.isnan(ankle_angle_frontal_3d)):
             print(f"ankle_angle_frontal_3dにnanが含まれている")
-
         if np.any(np.isnan(ankle_angle_mocap)):
             print(f"ankle_angle_mocapにnanが含まれている")
-
         if np.any(np.isnan(ankle_angle_sagittal_2d)):
             print(f"ankle_angle_sagittal_2dにnanが含まれている")
 
-        # print(f"len(ankle_angle_sagittal_2d) = {len(ankle_angle_sagittal_2d)}")
-        # print(f"len(ankle_angle_sagittal_2d_ori) = {len(ankle_angle_sagittal_2d_ori)}")
-        # print(f"len(ankle_angle_frontal_3d) = {len(ankle_angle_frontal_3d)}")
-        # print(f"len(ankle_angle_frontal_3d_ori) = {len(ankle_angle_frontal_3d_ori)}")
-        print(f"len(ankle_angle_mocap) = {len(ankle_angle_mocap)}")
-        print(f"len(ankle_angle_mocap_ori) = {len(ankle_angle_mocap_ori)}")
-        print(f"frame_range = {frame_range}")
-
-        print(f"lower_vector_l_mocap = {lower_vector_l_mocap}")
-        print(f"lower_vector_l_mocap_ori = {lower_vector_l_mocap_ori}")
-        print(f"foot_vector_l_mocap = {foot_vector_l_mocap}")
-        print(f"foot_vector_l_mocap_ori = {foot_vector_l_mocap_ori}")
 
         df_ankle = pd.DataFrame({
-            # 'ankle_angle_sagittal_2d': ankle_angle_sagittal_2d,
-            # 'ankle_angle_sagittal_2d_ori': ankle_angle_sagittal_2d_ori,
-            # 'ankle_angle_frontal_3d': ankle_angle_frontal_3d,
-            # 'ankle_angle_frontal_3d_ori': ankle_angle_frontal_3d_ori,
+            'ankle_angle_sagittal_2d': ankle_angle_sagittal_2d,
+            'ankle_angle_sagittal_2d_ori': ankle_angle_sagittal_2d_ori,
+            'ankle_angle_frontal_3d': ankle_angle_frontal_3d,
+            'ankle_angle_frontal_3d_ori': ankle_angle_frontal_3d_ori,
             'ankle_angle_mocap': ankle_angle_mocap,
-
             'ankle_angle_mocap_ori': ankle_angle_mocap_ori,
-
         })
         df_ankle.to_csv(os.path.join(root_dir, f"{condition}_ankle_angle.csv"))
 
@@ -268,48 +243,6 @@ def main():
         plt.savefig(os.path.join(root_dir, f"{condition}_ankle_angle_try.png"))
         # plt.show()
         plt.cla()
-
-        # plt.plot(frame_range, [hip_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
-        # plt.plot(frame_range, [hip_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        # plt.plot(frame_range, [hip_angle_mocap, label="Mocap", color='#2ca02c')
-        # plt.plot(frame_range, [hip_angle_sagittal_2d_ori, label="2D sagittal_ori", color='#1f77b4', alpha=0.5)
-        # plt.plot(frame_range, [hip_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        # plt.plot(frame_range, [hip_angle_mocap_ori, label="Mocap_ori", color='#2ca02c', alpha=0.5)
-        # plt.title("Hip Angle")
-        # plt.legend()
-        # plt.xlabel("frame [-]")
-        # plt.ylabel("angle [°]")
-        # plt.savefig(os.path.join(root_dir, f"{condition}_hip_angle_try.png"))
-        # # plt.show()
-        # plt.cla()
-
-        # plt.plot(frame_range, [knee_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
-        # plt.plot(frame_range, [knee_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        # plt.plot(frame_range, [knee_angle_mocap, label="Mocap", color='#2ca02c')
-        # plt.plot(frame_range, [knee_angle_sagittal_2d_ori, label="2D sagittal_ori", color='#1f77b4', alpha=0.5)
-        # plt.plot(frame_range, [knee_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        # plt.plot(frame_range, [knee_angle_mocap_ori, label="Mocap_ori", color='#2ca02c', alpha=0.5)
-        # plt.title("Knee Angle")
-        # plt.legend()
-        # plt.xlabel("frame [-]")
-        # plt.ylabel("angle [°]")
-        # plt.savefig(os.path.join(root_dir, f"{condition}_knee_angle_try.png"))
-        # # plt.show()
-        # plt.cla()
-
-        # plt.plot(frame_range, [ankle_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
-        # plt.plot(frame_range, [ankle_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        # plt.plot(frame_range, [ankle_angle_mocap, label="Mocap", color='#2ca02c')
-        # plt.plot(frame_range, [ankle_angle_sagittal_2d_ori, label="2D sagittal_ori", color='#1f77b4', alpha=0.5)
-        # plt.plot(frame_range, [ankle_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        # plt.plot(frame_range, [ankle_angle_mocap_ori, label="Mocap_ori", color='#2ca02c', alpha=0.5)
-        # plt.title("Ankle Angle")
-        # plt.legend()
-        # plt.xlabel("frame [-]")
-        # plt.ylabel("angle [°]")
-        # plt.savefig(os.path.join(root_dir, f"{condition}_ankle_angle_try.png"))
-        # # plt.show()
-        # plt.cla()
 
 if __name__ == "__main__":
     main()
