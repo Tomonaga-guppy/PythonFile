@@ -8,6 +8,7 @@ import math
 import cv2
 import matplotlib.pyplot as plt
 from scipy.signal import butter, lfilter
+from sklearn.metrics import mean_absolute_error
 
 root_dir = r"F:\Tomson\gait_pattern\20240712"
 condition_list = ["0_Tpose", "1_walk", "2_walk_slow", "3_comp_walk", "4_comp_walk_slow"]
@@ -22,7 +23,10 @@ def load_keypoints_for_frame(frame_number, json_folder_path):
 
     with open(json_file_path, 'r') as f:
         json_data = json.load(f)
-        keypoints_data = np.array(json_data['people'][0]['pose_keypoints_2d']).reshape((25, 3))
+        if len(json_data['people']) < 1:
+            keypoints_data = np.zeros((25, 3))
+        else:
+            keypoints_data = np.array(json_data['people'][0]['pose_keypoints_2d']).reshape((25, 3))
 
     return keypoints_data
 
@@ -103,6 +107,7 @@ def get_3d_coordinates(pixel, depth_image, calibration):
     return point
 
 def read_2d_openpose(mkv_file):
+    # print(f"mkv_file = {mkv_file}")
     json_folder_path = os.path.join(os.path.dirname(mkv_file), os.path.basename(mkv_file).split('.')[0], 'estimated.json')
     all_keypoints_2d = []  # 各フレームの2Dキーポイントを保持するリスト
     for i, json_file in enumerate(glob.glob(os.path.join(json_folder_path, "*.json"))):
@@ -265,6 +270,29 @@ def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配�
 
     return angle_list
 
+def check_point_frame(keypoints, check_list):
+    check_frame_list = []
+    for frame in range(len(keypoints)):
+        if all(keypoints[frame][check_point] != 0 for check_point in check_list):
+            check_frame_list.append(frame)
+    return check_frame_list
+
+def check_opti_frame(opti_list, keypoints_mocap):
+    valid_frames = []
+    for frame in range(keypoints_mocap.shape[0]):
+        if all(not np.isnan(keypoints_mocap[frame, point, :]).any() for point in opti_list):
+            valid_frames.append(frame)
+    valid_frames = range(min(valid_frames), max(valid_frames) + 1)
+    return valid_frames
+
+def check_openpose_frame(openpose_list, keypoints):
+    valid_frames = []
+    for frame in range(keypoints.shape[0]):
+        if all(np.nonzero(keypoints[frame, point, :]) for point in openpose_list):
+            valid_frames.append(frame)
+    valid_frames = range(min(valid_frames), max(valid_frames) + 1)
+    return valid_frames
+
 def main():
     for condition in condition_key:
         print(f"condition = {condition}")
@@ -277,6 +305,9 @@ def main():
 
         keypoints_sagittal_2d = read_2d_openpose(mkv_sagittal)
         keypoints_sagittal_3d = read_3d_openpose(mkv_sagittal)
+
+        keypoints_diagonal_right_2d = read_2d_openpose(mkv_diagonal_right)
+        keypoints_diagonal_left_2d = read_2d_openpose(mkv_diagonal_left)
 
         keypoints_diagonal_right = read_3d_openpose(mkv_diagonal_right)
         keypoints_diagonal_left = read_3d_openpose(mkv_diagonal_left)
@@ -295,64 +326,74 @@ def main():
             print(f"Optitrackのデータがないため読み込み終了")
             break
 
-        cam_stop_frame = min(keypoints_sagittal_3d.shape[0], keypoints_diagonal_right.shape[0], keypoints_diagonal_left.shape[0], keypoints_mocap.shape[0])
-        frame_range = range(full_range.start, min(full_range.stop, cam_stop_frame))
+        check_openpose_list = [1, 8, 12, 13, 14, 19, 20, 21]
+        check_opti_list = [2, 3, 4, 5, 6, 7, 8, 9, 12, 15, 20, 21]
+        sagi_frame = check_openpose_frame(check_openpose_list, keypoints_sagittal_2d)
+        dia_right_frame = check_openpose_frame(check_openpose_list, keypoints_diagonal_right_2d)
+        dia_left_frame = check_openpose_frame(check_openpose_list, keypoints_diagonal_left_2d)
+        mocap_frame = check_opti_frame(check_opti_list, keypoints_mocap)
 
-        trunk_vector_sagittal_2d_ori = keypoints_sagittal_2d[frame_range, 1, :] - keypoints_sagittal_2d[frame_range, 8, :]
-        thigh_vector_l_sagittal_2d_ori = keypoints_sagittal_2d[frame_range, 10, :] - keypoints_sagittal_2d[frame_range, 9, :]
-        lower_leg_vector_l_sagittal_2d_ori = keypoints_sagittal_2d[frame_range, 11, :] - keypoints_sagittal_2d[frame_range, 10, :]
-        foot_vector_l_sagittal_2d_ori = keypoints_sagittal_2d[frame_range, 24, :]  - (keypoints_sagittal_2d[frame_range, 22, :] + keypoints_sagittal_2d[frame_range, 23, :]) / 2
+        print(f"sagi_frame = {sagi_frame}")
+        print(f"dia_right_frame = {dia_right_frame}")
+        print(f"dia_left_frame = {dia_left_frame}")
+        print(f"mocap_frame = {mocap_frame}")
+        common_frame_stop = min(sagi_frame.stop, dia_right_frame.stop, dia_left_frame.stop, mocap_frame.stop)
+        common_frame = sorted(list(set(sagi_frame) & set(dia_right_frame) & set(dia_left_frame) & set(mocap_frame)))[:common_frame_stop-1]
 
-        trunk_vector_3d_frontal_ori = keypoints_frontal[frame_range, 1, :] - keypoints_frontal[frame_range, 8, :]
-        thigh_vector_l_3d_frontal_ori = keypoints_frontal[frame_range, 10, :] - keypoints_frontal[frame_range, 9, :]
-        lower_leg_vector_l_3d_frontal_ori = keypoints_frontal[frame_range, 11, :] - keypoints_frontal[frame_range, 10, :]
-        foot_vector_l_3d_frontal_ori = keypoints_frontal[frame_range, 24, :]  - (keypoints_frontal[frame_range, 22, :] + keypoints_frontal[frame_range, 23, :]) / 2
+        trunk_vector_sagittal_2d_ori = keypoints_sagittal_2d[common_frame, 1, :] - keypoints_sagittal_2d[common_frame, 8, :] #neck - mid_hip
+        thigh_vector_l_sagittal_2d_ori = keypoints_sagittal_2d[common_frame, 13, :] - keypoints_sagittal_2d[common_frame, 12, :] #knee - hip
+        lower_leg_vector_l_sagittal_2d_ori = keypoints_sagittal_2d[common_frame, 14, :] - keypoints_sagittal_2d[common_frame, 13, :] #ankle - knee
+        foot_vector_l_sagittal_2d_ori = keypoints_sagittal_2d[common_frame, 21, :]  - (keypoints_sagittal_2d[common_frame, 19, :] + keypoints_sagittal_2d[common_frame, 20, :]) / 2 #heel - (bigtoe + smalltoe) / 2
 
-        trunk_vector_mocap_ori = (keypoints_mocap[frame_range, 21, :] + keypoints_mocap[frame_range, 9, :]) / 2 - (keypoints_mocap[frame_range, 20, :] + keypoints_mocap[frame_range, 8, :] + keypoints_mocap[frame_range, 15, :] + keypoints_mocap[frame_range, 4, :]) / 4
-        thigh_vector_l_mocap_ori = (keypoints_mocap[frame_range, 6, :] + keypoints_mocap[frame_range, 7, :]) / 2 - (keypoints_mocap[frame_range, 4, :] + keypoints_mocap[frame_range, 8, :]) / 2
-        lower_vector_l_mocap_ori = (keypoints_mocap[frame_range, 2, :] + keypoints_mocap[frame_range, 3, :]) / 2 - (keypoints_mocap[frame_range, 6, :] + keypoints_mocap[frame_range, 7, :]) / 2
-        foot_vector_l_mocap_ori = keypoints_mocap[frame_range, 13, :] - keypoints_mocap[frame_range, 12, :]
+        trunk_vector_3d_frontal_ori = keypoints_frontal[common_frame, 1, :] - keypoints_frontal[common_frame, 8, :]
+        thigh_vector_l_3d_frontal_ori = keypoints_frontal[common_frame, 13, :] - keypoints_frontal[common_frame, 12, :]
+        lower_leg_vector_l_3d_frontal_ori = keypoints_frontal[common_frame, 14, :] - keypoints_frontal[common_frame, 13, :]
+        foot_vector_l_3d_frontal_ori = keypoints_frontal[common_frame, 21, :]  - (keypoints_frontal[common_frame, 19, :] + keypoints_frontal[common_frame, 20, :]) / 2
 
-        mid_hip_sagttal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[frame_range, 8, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        neck_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[frame_range, 1, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lhip_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[frame_range, 9, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lknee_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[frame_range, 10, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lankle_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[frame_range, 11, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lbigtoe_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[frame_range, 22, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lsmalltoe_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[frame_range, 23, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lheel_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[frame_range, 24, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
+        trunk_vector_mocap_ori = (keypoints_mocap[common_frame, 21, :] + keypoints_mocap[common_frame, 9, :]) / 2 - (keypoints_mocap[common_frame, 20, :] + keypoints_mocap[common_frame, 8, :] + keypoints_mocap[common_frame, 15, :] + keypoints_mocap[common_frame, 4, :]) / 4
+        thigh_vector_l_mocap_ori = (keypoints_mocap[common_frame, 6, :] + keypoints_mocap[common_frame, 7, :]) / 2 - (keypoints_mocap[common_frame, 4, :] + keypoints_mocap[common_frame, 8, :]) / 2
+        lower_vector_l_mocap_ori = (keypoints_mocap[common_frame, 2, :] + keypoints_mocap[common_frame, 3, :]) / 2 - (keypoints_mocap[common_frame, 6, :] + keypoints_mocap[common_frame, 7, :]) / 2
+        foot_vector_l_mocap_ori = keypoints_mocap[common_frame, 5, :] - keypoints_mocap[common_frame, 12, :]
 
-        mid_hip_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[frame_range, 8, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        neck_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[frame_range, 1, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lhip_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[frame_range, 9, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lknee_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[frame_range, 10, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lankle_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[frame_range, 11, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lbigtoe_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[frame_range, 22, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lsmalltoe_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[frame_range, 23, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lheel_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[frame_range, 24, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        mid_hip_sagttal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 8, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
+        neck_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 1, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
+        lhip_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 12, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
+        lknee_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 13, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
+        lankle_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 14, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
+        lbigtoe_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 19, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
+        lsmalltoe_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 20, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
+        lheel_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 21, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
 
-        mid_hip_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[frame_range, 8, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        neck_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[frame_range, 1, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lhip_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[frame_range, 9, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lknee_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[frame_range, 10, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lankle_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[frame_range, 11, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lbigtoe_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[frame_range, 22, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lsmalltoe_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[frame_range, 23, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lheel_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[frame_range, 24, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        mid_hip_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 8, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        neck_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 1, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lhip_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 12, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lknee_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 13, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lankle_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 14, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lbigtoe_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 19, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lsmalltoe_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 20, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lheel_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 21, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
 
-        clav = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 1, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        rsho = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 21, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        lsho = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 9, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        rpsi = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 20, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        lpsi = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 8, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        rasi = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 15, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        lasi = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 4, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        lknee = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 6, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        lknee2 = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 7, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        lank = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 2, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        lank2 = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 3, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        ltoe = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 12, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        lhee = np.array([butter_lowpass_filter(keypoints_mocap[frame_range, 13, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        mid_hip_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 8, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        neck_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 1, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lhip_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 12, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lknee_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 13, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lankle_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 14, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lbigtoe_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 19, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lsmalltoe_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 20, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        lheel_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 21, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+
+        rsho = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 21, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        lsho = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 9, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        rpsi = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 20, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        lpsi = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 8, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        rasi = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 15, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        lasi = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 4, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        lknee = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 6, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        lknee2 = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 7, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        lank = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 2, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        lank2 = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 3, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        ltoe = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 12, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        lhee = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 5, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
 
 
         trunk_vector_sagittal_2d = neck_sagittal_2d - mid_hip_sagttal_2d
@@ -404,39 +445,12 @@ def main():
         knee_angle_mocap = calculate_angle(thigh_vector_l_mocap, lower_vector_l_mocap)
         ankle_angle_mocap = calculate_angle(lower_vector_l_mocap, foot_vector_l_mocap)
 
-        if np.any(np.isnan(hip_angle_frontal_3d)):
-            print(f"hip_angle_frontal_3dにnanが含まれている")
-
-        if np.any(np.isnan(hip_angle_mocap)):
-            print(f"hip_angle_mocapにnanが含まれている")
-
-        if np.any(np.isnan(hip_angle_sagittal_2d)):
-            print(f"hip_angle_sagittal_2dにnanが含まれている")
-
-        if np.any(np.isnan(knee_angle_frontal_3d)):
-            print(f"knee_angle_frontal_3dにnanが含まれている")
-
-        if np.any(np.isnan(knee_angle_mocap)):
-            print(f"knee_angle_mocapにnanが含まれている")
-
-        if np.any(np.isnan(knee_angle_sagittal_2d)):
-            print(f"knee_angle_sagittal_2dにnanが含まれている")
-
-        if np.any(np.isnan(ankle_angle_frontal_3d)):
-            print(f"ankle_angle_frontal_3dにnanが含まれている")
-
-        if np.any(np.isnan(ankle_angle_mocap)):
-            print(f"ankle_angle_mocapにnanが含まれている")
-
-        if np.any(np.isnan(ankle_angle_sagittal_2d)):
-            print(f"ankle_angle_sagittal_2dにnanが含まれている")
-
-        plt.plot(frame_range, hip_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
-        plt.plot(frame_range, hip_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        plt.plot(frame_range, hip_angle_mocap, label="Mocap", color='#2ca02c')
-        plt.plot(frame_range, hip_angle_sagittal_2d_ori, label="2D sagittal_ori", color='#1f77b4', alpha=0.5)
-        plt.plot(frame_range, hip_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.plot(frame_range, hip_angle_mocap_ori, label="Mocap_ori", color='#2ca02c', alpha=0.5)
+        plt.plot(common_frame, hip_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
+        plt.plot(common_frame, hip_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
+        plt.plot(common_frame, hip_angle_mocap, label="Mocap", color='#2ca02c')
+        plt.plot(common_frame, hip_angle_sagittal_2d_ori, label="2D sagittal_ori", color='#1f77b4', alpha=0.5)
+        plt.plot(common_frame, hip_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
+        plt.plot(common_frame, hip_angle_mocap_ori, label="Mocap_ori", color='#2ca02c', alpha=0.5)
         plt.title("Hip Angle")
         plt.legend()
         plt.xlabel("frame [-]")
@@ -444,12 +458,12 @@ def main():
         plt.savefig(os.path.join(root_dir, f"{condition}_hip_angle.png"))
         plt.cla()
 
-        plt.plot(frame_range, knee_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
-        plt.plot(frame_range, knee_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        plt.plot(frame_range, knee_angle_mocap, label="Mocap", color='#2ca02c')
-        plt.plot(frame_range, knee_angle_sagittal_2d_ori, label="2D sagittal_ori", color='#1f77b4', alpha=0.5)
-        plt.plot(frame_range, knee_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.plot(frame_range, knee_angle_mocap_ori, label="Mocap_ori", color='#2ca02c', alpha=0.5)
+        plt.plot(common_frame, knee_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
+        plt.plot(common_frame, knee_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
+        plt.plot(common_frame, knee_angle_mocap, label="Mocap", color='#2ca02c')
+        plt.plot(common_frame, knee_angle_sagittal_2d_ori, label="2D sagittal_ori", color='#1f77b4', alpha=0.5)
+        plt.plot(common_frame, knee_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
+        plt.plot(common_frame, knee_angle_mocap_ori, label="Mocap_ori", color='#2ca02c', alpha=0.5)
         plt.title("Knee Angle")
         plt.legend()
         plt.xlabel("frame [-]")
@@ -457,12 +471,12 @@ def main():
         plt.savefig(os.path.join(root_dir, f"{condition}_knee_angle.png"))
         plt.cla()
 
-        plt.plot(frame_range, ankle_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
-        plt.plot(frame_range, ankle_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        plt.plot(frame_range, ankle_angle_mocap, label="Mocap", color='#2ca02c')
-        plt.plot(frame_range, ankle_angle_sagittal_2d_ori, label="2D sagittal_ori", color='#1f77b4', alpha=0.5)
-        plt.plot(frame_range, ankle_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.plot(frame_range, ankle_angle_mocap_ori, label="Mocap_ori", color='#2ca02c', alpha=0.5)
+        plt.plot(common_frame, ankle_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
+        plt.plot(common_frame, ankle_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
+        plt.plot(common_frame, ankle_angle_mocap, label="Mocap", color='#2ca02c')
+        plt.plot(common_frame, ankle_angle_sagittal_2d_ori, label="2D sagittal_ori", color='#1f77b4', alpha=0.5)
+        plt.plot(common_frame, ankle_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
+        plt.plot(common_frame, ankle_angle_mocap_ori, label="Mocap_ori", color='#2ca02c', alpha=0.5)
         plt.title("Ankle Angle")
         plt.legend()
         plt.xlabel("frame [-]")
@@ -470,8 +484,23 @@ def main():
         plt.savefig(os.path.join(root_dir, f"{condition}_ankle_angle.png"))
         plt.cla()
 
+        mae_hip_sagittal = mean_absolute_error(hip_angle_sagittal_2d, hip_angle_mocap)
+        mae_hip_frontal = mean_absolute_error(hip_angle_frontal_3d, hip_angle_mocap)
+        mae_knee_sagittal = mean_absolute_error(knee_angle_sagittal_2d, knee_angle_mocap)
+        mae_knee_frontal = mean_absolute_error(knee_angle_frontal_3d, knee_angle_mocap)
+        mae_ankle_sagittal = mean_absolute_error(ankle_angle_sagittal_2d, ankle_angle_mocap)
+        mae_ankle_frontal = mean_absolute_error(ankle_angle_frontal_3d, ankle_angle_mocap)
+
+        print(f"mae_hip_sagittal = {mae_hip_sagittal}")
+        print(f"mae_knee_sagittal = {mae_knee_sagittal}")
+        print(f"mae_ankle_sagittal = {mae_ankle_sagittal}")
+
+        print(f"mae_hip_frontal = {mae_hip_frontal}")
+        print(f"mae_knee_frontal = {mae_knee_frontal}")
+        print(f"mae_ankle_frontal = {mae_ankle_frontal}")
+
         npz_path = os.path.join(os.path.dirname(mkv_files[0]), f"{os.path.basename(mkv_files[0]).split('.')[0].split('_')[0]}_keypoints&frame.npz")
-        np.savez(npz_path, diagonal_right=keypoints_diagonal_right, diagonal_left=keypoints_diagonal_left, frontal=keypoints_frontal, mocap=keypoints_mocap, frame_range=frame_range, sagittal_3d=keypoints_sagittal_3d, sagittal_2d=keypoints_sagittal_2d)
+        np.savez(npz_path, diagonal_right=keypoints_diagonal_right, diagonal_left=keypoints_diagonal_left, frontal=keypoints_frontal, mocap=keypoints_mocap, common_frame=common_frame, sagittal_3d=keypoints_sagittal_3d, sagittal_2d=keypoints_sagittal_2d)
 
 if __name__ == "__main__":
     main()
