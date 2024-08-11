@@ -11,11 +11,12 @@ sys.path.append(helpers_dir)
 from helpers import convert_to_bgra_if_required
 
 def main():
-    # mkv_folder = r"F:\Tomson\gait_pattern\20240808"
-    mkv_folder = r"F:\Tomson\gait_pattern\20240712"
+    mkv_folder = r"F:\Tomson\gait_pattern\20240808"
+    # mkv_folder = r"F:\Tomson\gait_pattern\20240712"
     mkv_files = glob.glob(os.path.join(mkv_folder, '[0-9]*.mkv'))
 
     for i, mkv_file_path in enumerate(mkv_files):
+
 
         folder_path = os.path.dirname(mkv_file_path) + '/' + os.path.basename(mkv_file_path).split('.')[0]
         if os.path.exists(folder_path) == False:
@@ -39,6 +40,8 @@ def main():
             os.mkdir(timestampfolder)
 
         while True:  #100フレーム分正常にデータを取得したら終了
+            print(f"{i+1}/{len(mkv_files)} mkv_file = {mkv_file_path}:frame_count = {frame_count}")
+
             try:
                 # 画像をキャプチャ
                 capture = playback.get_next_capture()
@@ -60,11 +63,10 @@ def main():
             color_timestamp = capture._color_timestamp_usec
             cv2.putText(rgb_image_mini, f"frame_count:{str(frame_count)}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
             cv2.putText(rgb_image_mini, f"timestamp:{str(color_timestamp)}", (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-            # cv2.imshow("RGB Image", rgb_image_mini)
 
             depth_image = capture.transformed_depth
             if depth_image is None:
-                depth_image_mini_3ch = np.zeros((480, 720, 3), dtype=np.uint8)
+                depth_image_mini = np.zeros((480, 720, 3), dtype=np.uint8)
             else:
                 depth_image = cv2.normalize(depth_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
                 depth_image_mini = cv2.resize(depth_image, (720, 480))
@@ -80,7 +82,6 @@ def main():
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-            print(f"{i+1}/{len(mkv_files)} frame_count = {frame_count}")
             # writer.write(rgb_image)
             frame_count += 1
 
