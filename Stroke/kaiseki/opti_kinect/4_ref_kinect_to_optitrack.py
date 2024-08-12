@@ -68,9 +68,9 @@ def cubic_spline_interpolation(keypoints_set, frame_range):
 def linear_interpolation(x, x0, x1, y0, y1):
     return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
 
-def get_3d_coordinates(pixel, depth_image, calibration):
+def get_3d_coordinates(pixel, depth_image, calibration, i):
     if np.all(pixel == (0, 0)):
-        # print(f"Openposeで検出できてない")
+        print(f"    キーポイント{i} :Openposeで検出できてない")
         return [0, 0, 0]
 
     pixel_x, pixel_y = pixel[0], pixel[1]
@@ -80,7 +80,7 @@ def get_3d_coordinates(pixel, depth_image, calibration):
     height, width = depth_image.shape
 
     if not (0 <= x0 < width and 0 <= x1 < width and 0 <= y0 < height and 0 <= y1 < height):
-        print(f"Coordinates {(x0, y0)} or {(x1, y1)} are out of bounds for image of size (width={width}, height={height})")
+        print(f"    keypoint_id = {i} Coordinates {(x0, y0)} or {(x1, y1)} are out of bounds for image of size (width={width}, height={height})")
         return [0, 0, 0]
 
     depth_value_x0_y0 = depth_image[y0, x0]
@@ -88,22 +88,14 @@ def get_3d_coordinates(pixel, depth_image, calibration):
     depth_value_x0_y1 = depth_image[y1, x0]
     depth_value_x1_y1 = depth_image[y1, x1]
 
-    if depth_value_x0_y0 <= 0 or np.isnan(depth_value_x0_y0):
-        return [0, 0, 0]
-    if depth_value_x1_y0 <= 0 or np.isnan(depth_value_x1_y0):
-        return [0, 0, 0]
-    if depth_value_x0_y1 <= 0 or np.isnan(depth_value_x0_y1):
-        return [0, 0, 0]
-    if depth_value_x1_y1 <= 0 or np.isnan(depth_value_x1_y1):
-        return [0, 0, 0]
-
     try:
         point_x0_y0 = calibration.convert_2d_to_3d(coordinates=(x0, y0), depth=depth_value_x0_y0, source_camera=CalibrationType.COLOR)
         point_x1_y0 = calibration.convert_2d_to_3d(coordinates=(x1, y0), depth=depth_value_x1_y0, source_camera=CalibrationType.COLOR)
         point_x0_y1 = calibration.convert_2d_to_3d(coordinates=(x0, y1), depth=depth_value_x0_y1, source_camera=CalibrationType.COLOR)
         point_x1_y1 = calibration.convert_2d_to_3d(coordinates=(x1, y1), depth=depth_value_x1_y1, source_camera=CalibrationType.COLOR)
     except ValueError as e:
-        print(f"Error converting to 3D coordinates: {e}")
+        print(f"    {i} Error converting to 3D coordinates: {e}")
+        # print(f"depth_value_x0_y0 = {depth_value_x0_y0}, depth_value_x1_y0 = {depth_value_x1_y0}, depth_value_x0_y1 = {depth_value_x0_y1}, depth_value_x1_y1 = {depth_value_x1_y1}")
         return [0, 0, 0]
 
     point_y0 = [linear_interpolation(pixel_x, x0, x1, point_x0_y0[i], point_x1_y0[i]) for i in range(3)]
@@ -118,6 +110,7 @@ def read_2d_openpose(mkv_file):
     id = os.path.basename(mkv_file).split('.')[0].split('_')[-1]
     json_folder_path = os.path.join(os.path.dirname(mkv_file), os.path.basename(mkv_file).split('.')[0], 'estimated.json')
     all_keypoints_2d = []  # 各フレームの2Dキーポイントを保持するリスト
+    all_keypoints_2d_tf = []
     check_openpose_list = [1, 8, 12, 13, 14, 19, 20, 21]
     valid_frames = []
     for i, json_file in enumerate(glob.glob(os.path.join(json_folder_path, "*.json"))):
@@ -136,21 +129,26 @@ def read_2d_openpose(mkv_file):
         transformation_matrix_path = os.path.join(os.path.dirname(mkv_file), f'tf_matrix_calibration_{id}.npz')
         transformation_matrix = np.load(transformation_matrix_path)['a_2d']
 
-        keypoints_data = [np.dot(np.linalg.inv(transformation_matrix), np.array([keypoints_data[keypoint_num][0], keypoints_data[keypoint_num][1], 1]).T)[:2] for keypoint_num in range(len(keypoints_data))]
+        keypoints_data_tf = [np.dot(np.linalg.inv(transformation_matrix), np.array([keypoints_data[keypoint_num][0], keypoints_data[keypoint_num][1], 1]).T)[:2] for keypoint_num in range(len(keypoints_data))]
 
         all_keypoints_2d.append(keypoints_data)
+        all_keypoints_2d_tf.append(keypoints_data_tf)
     keypoints_2d_openpose = np.array(all_keypoints_2d)
+    keypoints_2d_openpose_tf = np.array(all_keypoints_2d_tf)
 
-    return keypoints_2d_openpose, valid_frames
+    return keypoints_2d_openpose, keypoints_2d_openpose_tf, valid_frames
 
 def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
-    keypoints_data = keypoint_array_2d
+    keypoints_data = np.nan_to_num(keypoint_array_2d)  #[frame, 25, 2]
     playback = PyK4APlayback(mkv_file)
     playback.open()
     calibration = playback.calibration
 
     frame_count = 0
     all_keypoints_3d = []  # 各フレームの3Dキーポイントを保持するリスト
+    valid_frame_list = [] #Openposeでキーポイントが検出されたフレームを記録
+    check_openpose_list = [1, 8, 12, 13, 14, 19, 20, 21]
+
 
     id = os.path.basename(mkv_file).split('.')[0].split('_')[-1]
     transform_matrix_path = os.path.join(os.path.dirname(mkv_file), f'tf_matrix_calibration_{id}.npz')
@@ -177,23 +175,64 @@ def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
 
         # 画像を取得
         depth_image = capture.transformed_depth
+        # 深度画像の欠損値を近傍の最小値で補間
+        mask = depth_image == 0
+        interpolated_depth_image = depth_image.copy()
+        shifted_list = []
+        kernel_size = 5
+        # 行方向と列方向にシフトした画像を作成
+        for x_shift in range(-int((kernel_size-1)/2),  int((kernel_size-1)/2 + 1)):
+            for y_shift in range(int((kernel_size-1)/2), -int((kernel_size-1)/2 + 1), -1):
+                if x_shift == 0 and y_shift == 0:
+                    continue
+                shifted = np.roll(depth_image, (x_shift, y_shift), axis=(0, 1))
+                shifted_list.append(shifted)
+        # シフトした画像の中で0以外の最小値を取得
+        min_values = np.full(depth_image.shape, np.inf)  # 初期値を無限大に設定
+        for shifted in shifted_list:
+            non_zero_mask = shifted != 0
+            min_values[non_zero_mask] = np.minimum(min_values[non_zero_mask], shifted[non_zero_mask])
+        # 無限大が残っている場所はすべて0（欠損値）だった場所なので、0に置き換える
+        min_values[min_values == np.inf] = 0
+        # 欠損値の位置に最小値を代入
+        interpolated_depth_image[mask] = min_values[mask]
+
+        depth_map = cv2.normalize(depth_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        depth_map = cv2.resize(depth_map, (720, 480))
+        depth_map = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
+        interpolated_depth_map = cv2.normalize(interpolated_depth_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        interpolated_depth_map = cv2.resize(interpolated_depth_map, (720, 480))
+        interpolated_depth_map = cv2.applyColorMap(interpolated_depth_map, cv2.COLORMAP_JET)
+
+        # print(f"depthmapの欠損値の数 = {np.sum(depth_image == 0)}")
+        # print(f"interpolated_depth_mapの欠損値の数 = {np.sum(interpolated_depth_image == 0)}")
+        # depth_map_hstack = cv2.hconcat([depth_map, interpolated_depth_map])
+        # cv2.imshow("depth_map", depth_map_hstack)
+        # cv2.waitKey(0)
 
         frame_keypoints_3d = []
 
-        for keypoint_id, keypoint in enumerate(keypoints_data):
-            pixel = np.array(keypoint)
-            coordinates_cam = get_3d_coordinates(pixel, depth_image, calibration)  #カメラ座標系での3D座標
+        for i, pixel in enumerate(keypoints_data[frame_count, :, :]):  #keypoints_data = [frame, 25, 2]
+            coordinates_cam = get_3d_coordinates(pixel, interpolated_depth_image, calibration, i)  #カメラ座標系での3D座標
+            if coordinates_cam == [0, 0, 0]:
+                frame_keypoints_3d.append([0, 0, 0])
+                continue
             A1_inv = np.linalg.inv(a1)
             coordinates_aruco = np.dot(A1_inv, np.array([coordinates_cam[0], coordinates_cam[1], coordinates_cam[2], 1]).T)[:3]  #Arucoマーカー座標系での3D座標
             A2_inv = np.linalg.inv(a2)
             coordinates = np.dot(A2_inv, np.array([coordinates_aruco[0], coordinates_aruco[1], coordinates_aruco[2], 1]).T)[:3]  #Optitrack座標系での3D座標
             frame_keypoints_3d.append(coordinates)
 
-        all_keypoints_3d.append(frame_keypoints_3d)
+
+        # all_non_zero = all(np.any(frame_keypoints_3d[id][:2] != 0) for id in check_openpose_list)
+        # if all_non_zero:
+        #     valid_frame_list.append(frame_count)
 
         frame_count += 1
 
     keypoints_openpose = np.array(all_keypoints_3d) / 1000  #単位をmmからmに変換
+
+    # return keypoints_openpose, valid_frame_list
     return keypoints_openpose
 
 def read_3d_optitrack(csv_path):
@@ -287,18 +326,18 @@ def main():
         # print(f"csv_files = {csv_files}")
 
         #2d上でのキーポイントを取得"
-        keypoints_sagittal_2d, sagi_frame_2d = read_2d_openpose(mkv_sagittal)  #[frame, 25, 3]
-        keypoints_diagonal_right_2d, dia_right_frame_2d = read_2d_openpose(mkv_diagonal_right)
-        keypoints_diagonal_left_2d, dia_left_frame_2d = read_2d_openpose(mkv_diagonal_left)
+        keypoints_sagittal_2d, keypoints_sagittal_2d_tf, sagi_frame_2d = read_2d_openpose(mkv_sagittal)  #[frame, 25, 3]
+        keypoints_diagonal_right_2d, keypoints_diagonal_right_2d_tf, dia_right_frame_2d = read_2d_openpose(mkv_diagonal_right)
+        keypoints_diagonal_left_2d, keypoints_diagonal_left_2d_tf, dia_left_frame_2d = read_2d_openpose(mkv_diagonal_left)
 
-        mid_hip_sagttal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 8, :], sagi_frame_2d)
-        neck_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 1, :], sagi_frame_2d)
-        lhip_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 12, :], sagi_frame_2d)
-        lknee_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 13, :], sagi_frame_2d)
-        lankle_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 14, :], sagi_frame_2d)
-        lbigtoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 19, :], sagi_frame_2d)
-        lsmalltoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 20, :], sagi_frame_2d)
-        lheel_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 21, :], sagi_frame_2d)
+        mid_hip_sagttal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 8, :], sagi_frame_2d)
+        neck_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 1, :], sagi_frame_2d)
+        lhip_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 12, :], sagi_frame_2d)
+        lknee_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 13, :], sagi_frame_2d)
+        lankle_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 14, :], sagi_frame_2d)
+        lbigtoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 19, :], sagi_frame_2d)
+        lsmalltoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 20, :], sagi_frame_2d)
+        lheel_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 21, :], sagi_frame_2d)
 
         mid_hip_sagttal_2d_filltered = np.array([butter_lowpass_fillter(mid_hip_sagttal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
         neck_sagittal_2d_filltered = np.array([butter_lowpass_fillter(neck_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
@@ -314,14 +353,14 @@ def main():
         lower_leg_vector_l_sagittal_2d = lankle_sagittal_2d_filltered - lknee_sagittal_2d_filltered
         foot_vector_l_sagittal_2d = lheel_sagittal_2d_filltered - (lbigtoe_sagittal_2d_filltered + lsmalltoe_sagittal_2d_filltered) / 2
 
-        mid_hip_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 8, :], dia_right_frame_2d)
-        neck_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 1, :], dia_right_frame_2d)
-        lhip_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 12, :], dia_right_frame_2d)
-        lknee_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 13, :], dia_right_frame_2d)
-        lankle_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 14, :], dia_right_frame_2d)
-        lbigtoe_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 19, :], dia_right_frame_2d)
-        lsmalltoe_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 20, :], dia_right_frame_2d)
-        lheel_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 21, :], dia_right_frame_2d)
+        mid_hip_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d_tf[:, 8, :], dia_right_frame_2d)
+        neck_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d_tf[:, 1, :], dia_right_frame_2d)
+        lhip_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d_tf[:, 12, :], dia_right_frame_2d)
+        lknee_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d_tf[:, 13, :], dia_right_frame_2d)
+        lankle_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d_tf[:, 14, :], dia_right_frame_2d)
+        lbigtoe_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d_tf[:, 19, :], dia_right_frame_2d)
+        lsmalltoe_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d_tf[:, 20, :], dia_right_frame_2d)
+        lheel_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d_tf[:, 21, :], dia_right_frame_2d)
 
         mid_hip_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(mid_hip_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
         neck_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(neck_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
@@ -332,14 +371,14 @@ def main():
         lsmalltoe_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(lsmalltoe_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
         lheel_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(lheel_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
 
-        mid_hip_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 8, :], dia_left_frame_2d)
-        neck_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 1, :], dia_left_frame_2d)
-        lhip_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 12, :], dia_left_frame_2d)
-        lknee_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 13, :], dia_left_frame_2d)
-        lankle_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 14, :], dia_left_frame_2d)
-        lbigtoe_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 19, :], dia_left_frame_2d)
-        lsmalltoe_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 20, :], dia_left_frame_2d)
-        lheel_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 21, :], dia_left_frame_2d)
+        mid_hip_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d_tf[:, 8, :], dia_left_frame_2d)
+        neck_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d_tf[:, 1, :], dia_left_frame_2d)
+        lhip_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d_tf[:, 12, :], dia_left_frame_2d)
+        lknee_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d_tf[:, 13, :], dia_left_frame_2d)
+        lankle_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d_tf[:, 14, :], dia_left_frame_2d)
+        lbigtoe_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d_tf[:, 19, :], dia_left_frame_2d)
+        lsmalltoe_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d_tf[:, 20, :], dia_left_frame_2d)
+        lheel_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d_tf[:, 21, :], dia_left_frame_2d)
 
         mid_hip_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(mid_hip_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
         neck_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(neck_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
@@ -351,9 +390,12 @@ def main():
         lheel_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(lheel_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
 
         #3d上でのキーポイントを取得
-        keypoints_sagittal_3d, sagi_frame_3d = read_3d_openpose(keypoints_sagittal_2d, sagi_frame_2d, mkv_sagittal)
-        keypoints_diagonal_right, dia_right_frame_3d = read_3d_openpose(keypoints_diagonal_right_2d, dia_right_frame_2d, mkv_diagonal_right)
-        keypoints_diagonal_left, dia_left_frame_3d = read_3d_openpose(keypoints_diagonal_left_2d, dia_left_frame_2d, mkv_diagonal_left)
+        keypoints_sagittal_3d = read_3d_openpose(keypoints_sagittal_2d, sagi_frame_2d, mkv_sagittal)
+        keypoints_diagonal_right = read_3d_openpose(keypoints_diagonal_right_2d, dia_right_frame_2d, mkv_diagonal_right)
+        keypoints_diagonal_left = read_3d_openpose(keypoints_diagonal_left_2d, dia_left_frame_2d, mkv_diagonal_left)
+        # keypoints_sagittal_3d, sagi_frame_3d = read_3d_openpose(keypoints_sagittal_2d, sagi_frame_2d, mkv_sagittal)
+        # keypoints_diagonal_right, dia_right_frame_3d = read_3d_openpose(keypoints_diagonal_right_2d, dia_right_frame_2d, mkv_diagonal_right)
+        # keypoints_diagonal_left, dia_left_frame_3d = read_3d_openpose(keypoints_diagonal_left_2d, dia_left_frame_2d, mkv_diagonal_left)
 
         if keypoints_diagonal_right.shape[0] > keypoints_diagonal_left.shape[0]:
             keypoints_diagonal_right = keypoints_diagonal_right[:keypoints_diagonal_left.shape[0]]
@@ -369,6 +411,9 @@ def main():
         #     break
 
         #すべてで記録できているフレームを抽出
+        print(f"sagi_frame_2d = {sagi_frame_2d}")
+        print(f"dia_right_frame_3d = {dia_right_frame_3d}")
+        print(f"dia_left_frame_3d = {dia_left_frame_3d}")
         # mocap_frame = check_opti_frame(keypoints_mocap)
         # common_frame = sorted(list(set(sagi_frame_2d) & set(dia_right_frame_3d) & set(dia_left_frame_3d) & set(mocap_frame)))
         common_frame = sorted(list(set(sagi_frame_2d) & set(dia_right_frame_3d) & set(dia_left_frame_3d)))
@@ -379,9 +424,9 @@ def main():
 
         # keypoints_frontal.shape[0] より大きい要素を除外 openpose_3dでは最後のフレームが取得できていないため
         common_frame = [frame for frame in common_frame if frame < keypoints_frontal.shape[0]]
-        # print(f"common_frame = {common_frame}")
+        print(f"common_frame = {common_frame}")
 
-        # continue
+        continue
 
         trunk_vector_sagittal_2d = keypoints_sagittal_2d[:, 1, :] - keypoints_sagittal_2d[:, 8, :] #neck - mid_hip
         thigh_vector_l_sagittal_2d = keypoints_sagittal_2d[:, 13, :] - keypoints_sagittal_2d[:, 12, :] #knee - hip
