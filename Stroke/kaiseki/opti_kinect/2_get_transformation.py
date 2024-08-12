@@ -11,10 +11,9 @@ os.chdir(helpers_dir)
 sys.path.append(helpers_dir)
 from helpers import convert_to_bgra_if_required
 
-# root_dir = r"F:\Tomson\gait_pattern\20240712"
-root_dir = r"F:\Tomson\gait_pattern\20240807test"
+root_dir = r"F:\Tomson\gait_pattern\20240808"
 aruco_dir = os.path.dirname(root_dir)
-keyward = "calibration"
+keyward = "calibration_0"
 
 def target_aruco_frame(rgb_image, target_ids, detector, aruco):
     corners, ids, __ = detector.detectMarkers(rgb_image)
@@ -72,8 +71,8 @@ def main():
     # 録画したMKVファイルのパス
     mkv_file_paths = glob.glob(os.path.join(root_dir, f'*{keyward}*.mkv'),recursive=True)
 
-    for mkv_file_path in mkv_file_paths:
-        print(f"mkv_file_path = {mkv_file_path}")
+    for i, mkv_file_path in enumerate(mkv_file_paths):
+        print(f" {i+1}/{len(mkv_file_paths)} mkv_file_path = {mkv_file_path}")
         id = (os.path.basename(mkv_file_path).split('.')[0]).split('_')[-1]
         print(f"id = {id}")
 
@@ -82,23 +81,19 @@ def main():
         playback.open()
         calibration = playback.calibration
 
-        # #デバイスのシリアルナンバーを取得---------------------------------------------------------------
-        # device_serial_list = [000767101412, 000723201412, 000795793812] #進行方向を正面として右斜め前、左斜め前、左
-        # serial_number = playback.connected_device_count()
-        # print(f"serial_number = {serial_number}")
-
         frame_count = 1
 
         start_frame_caount = 60
         record_framecount = 60
-        transformation_matrix_sum = np.zeros((4,4))
-        transformation_matrix_2d_sum = np.zeros((3,3))
         target_ids = [0, 1, 3]  # 検出したいマーカーID
         aruco0_3d_sum, aruco1_3d_sum, aruco3_3d_sum = np.zeros(3), np.zeros(3), np.zeros(3)
         aruco0_2d_sum, aruco1_2d_sum, aruco3_2d_sum = np.zeros(2), np.zeros(2), np.zeros(2)
+        t1, t2 = np.zeros(3), np.zeros(3)
+        t_2d = np.zeros(2)
+
 
         while True:
-            # 60フレーム目から60フレーム分のデータを取得
+            # 60フレーム目から60フレーム分のデータから取得
             if frame_count < start_frame_caount:
                 frame_count += 1
                 continue
@@ -147,19 +142,23 @@ def main():
         print(f"aruco0_2d = {aruco0_2d}, aruco1_2d = {aruco1_2d}, aruco3_2d = {aruco3_2d}")
 
         if id == "0":
-            basez = (aruco0_3d - aruco3_3d)/np.linalg.norm(aruco0_3d - aruco3_3d)
+            basez_0 = (aruco0_3d - aruco3_3d)/np.linalg.norm(aruco0_3d - aruco3_3d)
             basey = (aruco1_3d - aruco0_3d)/np.linalg.norm(aruco1_3d - aruco0_3d)
-            basex = np.cross(basey, basez)/np.linalg.norm(np.cross(basey, basez))
+            basex = np.cross(basey, basez_0)/np.linalg.norm(np.cross(basey, basez_0))
+            basez = np.cross(basex, basey)/np.linalg.norm(np.cross(basex, basey))
             t1 = aruco0_3d
             t2 = [-410, -446, -55]
 
+            rot_90 = np.array([[0, 1], [-1, 0]]).T
             basex_2d = (aruco0_2d - aruco3_2d)/np.linalg.norm(aruco0_2d - aruco3_2d)
-            basey_2d = (aruco1_2d - aruco0_2d)/np.linalg.norm(aruco1_2d - aruco0_2d)
-            t1_2d = aruco0_2d
+            basey_2d = np.dot(rot_90, basex_2d)
+            # basey_2d = (aruco1_2d - aruco0_2d)/np.linalg.norm(aruco1_2d - aruco0_2d)
+            t_2d = aruco0_2d
 
 
         elif id == "1" or id == "2":
             basex = (aruco3_3d - aruco0_3d)/np.linalg.norm(aruco3_3d - aruco0_3d)
+
             basey = (aruco1_3d - aruco0_3d)/np.linalg.norm(aruco1_3d - aruco0_3d)
             basez = np.cross(basex, basey)/np.linalg.norm(np.cross(basex, basey))
             t1 = aruco0_3d
@@ -175,23 +174,25 @@ def main():
                                             [0, 0, 1, t2[2]],
                                             [0, 0, 0, 1]])
 
-        transformation_matrix_2d = np.array([[basex_2d[0], basey_2d[0], t1_2d[0]],
-                        [basex_2d[1], basey_2d[1], t1_2d[1]],
-                        [0, 0, 1]])
+        transformation_matrix_2d = np.array([[basex_2d[0], basey_2d[0], t_2d[0]],
+                                            [basex_2d[1], basey_2d[1], t_2d[1]],
+                                            [0, 0, 1]])
 
         # クリーンアップ
         playback.close()
         cv2.destroyAllWindows()
 
         #transformation_matrix_meanを保存
-        npy_save_path = os.path.join(os.path.dirname(mkv_file_path) ,f"transformation_matrix_{id}.npz")
+        npy_save_path = os.path.join(os.path.dirname(mkv_file_path) ,f"tf_matrix_calibration_{id}.npz")
         print(f"npy_save_path = {npy_save_path}")
         np.savez(npy_save_path, a1 = transformation_matrix_1, a2 = transformation_matrix_2, a_2d = transformation_matrix_2d)
 
     #テスト
-    print(f"aruco0_2d = {aruco0_2d}")
-    aruco0_2d_henkan = np.dot(transformation_matrix_2d, np.append(aruco0_2d, 1))
-    print(f"aruco0_2d_henkan = {aruco0_2d_henkan}")
+    # print(f"aruco0_2d = {aruco0_2d}")
+    # print(f"transformation_matrix_2d = {transformation_matrix_2d}")
+    # aruco0_2d_henkan = np.dot(np.linalg.inv(transformation_matrix_2d), np.append(aruco0_2d, 1))
+    # print(f"aruco0_2d_henkan = {aruco0_2d_henkan}")
+
     # aruco1_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco1_3d, 1))
     # aruco5_3d = np.dot(np.linalg.inv(transformation_matrix), np.append(aruco5_3d_cam, 1))
     # aruco1_3d_mean = np.dot(np.linalg.inv(transformation_matrix_mean), np.append(aruco1_3d, 1))

@@ -7,16 +7,14 @@ import json
 import math
 import cv2
 import matplotlib.pyplot as plt
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, filtfilt
+from scipy.interpolate import CubicSpline
 from sklearn.metrics import mean_absolute_error
 
-# root_dir = r"F:\Tomson\gait_pattern\20240712"
+root_dir = r"F:\Tomson\gait_pattern\20240808"
 
-# condition_list = ["0_Tpose", "1_walk", "2_walk_slow", "3_comp_walk", "4_comp_walk_slow"]
-# condition_key = condition_list[:]
-
-root_dir = r"F:\Tomson\gait_pattern\20240807test"
-condition_key = ["test"]
+condition_list = ["0", "1", "2", "3", "4"]  #0がTポーズ,1が通常歩行, 2が通常歩行（遅）, 3が疑似麻痺歩行, 4が疑似麻痺歩行（遅）
+condition_keynum = condition_list[1]
 
 def load_keypoints_for_frame(frame_number, json_folder_path):
     json_file_name = f"original_{frame_number:012d}_keypoints.json"
@@ -27,43 +25,48 @@ def load_keypoints_for_frame(frame_number, json_folder_path):
 
     with open(json_file_path, 'r') as f:
         json_data = json.load(f)
-        if len(json_data['people']) < 1:
-            keypoints_data = np.zeros((25, 3))
+        if len(json_data['people']) < 1:  #人が検出されなかった場合はnanで埋める
+            # keypoints_data = np.zeros((25, 3))
+            keypoints_data = np.full((25, 3), np.nan)
         else:
             keypoints_data = np.array(json_data['people'][0]['pose_keypoints_2d']).reshape((25, 3))
 
     return keypoints_data
 
-def is_keypoint_missing(keypoint):
-    return keypoint[2] == 0.0 or np.isnan(keypoint[0]) or np.isnan(keypoint[1])
-
-def interpolate_missing_keypoints(current_frame, previous_frame, next_frame):
-    interpolated_frame = current_frame.copy()
-    for i, keypoint in enumerate(current_frame):
-        if is_keypoint_missing(keypoint):
-            if not is_keypoint_missing(previous_frame[i]) and not is_keypoint_missing(next_frame[i]):
-                interpolated_frame[i][:2] = (previous_frame[i][:2] + next_frame[i][:2]) / 2
-                interpolated_frame[i][2] = (previous_frame[i][2] + next_frame[i][2]) / 2
-            elif not is_keypoint_missing(previous_frame[i]):
-                interpolated_frame[i] = previous_frame[i]
-            elif not is_keypoint_missing(next_frame[i]):
-                interpolated_frame[i] = next_frame[i]
-    return interpolated_frame
-
-def linear_interpolation(x, x0, x1, y0, y1):
-    return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
-
-def butter_lowpass_filter(data, order, cutoff_freq):  #4次のバターワースローパスフィルタ
+def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバターワースローパスフィルタ
     sampling_freq = 30
     nyquist_freq = sampling_freq / 2
     normal_cutoff = cutoff_freq / nyquist_freq
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    # data内にnanがある場合は線形補間してからフィルター
-    if np.any(np.isnan(data)):
-        nans, x = np.isnan(data), lambda z: z.nonzero()[0]
-        data[nans] = np.interp(x(nans), x(~nans), data[~nans])
-    y = lfilter(b, a, data)
-    return y
+    # # data内にnanがある場合は線形補間してからフィルター
+    # if np.any(np.isnan(data)):
+    #     nans, x = np.isnan(data), lambda z: z.nonzero()[0]
+    #     data[nans] = np.interp(x(nans), x(~nans), data[~nans])
+    y = filtfilt(b, a, data[frame_list])
+    data_fillter = np.copy(data)
+    data_fillter[frame_list] = y
+    return data_fillter
+
+def cubic_spline_interpolation(keypoints_set, frame_range):
+    # 新しい配列を作成して補間結果を保持します
+    interpolated_keypoints = np.copy(keypoints_set)
+
+    for axis in range(keypoints_set.shape[1]):
+        # 指定されたフレーム範囲のデータを取り出す
+        frames = frame_range
+        values = np.nan_to_num(keypoints_set[frames, axis])
+
+        # フレーム範囲のフレームを基準に3次スプラインを構築
+        spline = CubicSpline(frames, values)
+
+        # 補間した値をその範囲のフレームに再適用
+        interpolated_values = spline(frames)
+        interpolated_keypoints[frames, axis] = interpolated_values
+
+    return interpolated_keypoints
+
+def linear_interpolation(x, x0, x1, y0, y1):
+    return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
 
 def get_3d_coordinates(pixel, depth_image, calibration):
     if np.all(pixel == (0, 0)):
@@ -110,46 +113,47 @@ def get_3d_coordinates(pixel, depth_image, calibration):
 
     return point
 
-def check_openpose_frame(openpose_list, keypoints):
-    valid_frames = []
-    print(f"keypoints = {keypoints}")
-    for frame in range(keypoints.shape[0]):
-        if all(np.nonzero(keypoints[frame, point, :]) for point in openpose_list):
-            valid_frames.append(frame)
-    return valid_frames
-
 def read_2d_openpose(mkv_file):
     # print(f"mkv_file = {mkv_file}")
+    id = os.path.basename(mkv_file).split('.')[0].split('_')[-1]
     json_folder_path = os.path.join(os.path.dirname(mkv_file), os.path.basename(mkv_file).split('.')[0], 'estimated.json')
     all_keypoints_2d = []  # 各フレームの2Dキーポイントを保持するリスト
     check_openpose_list = [1, 8, 12, 13, 14, 19, 20, 21]
     valid_frames = []
     for i, json_file in enumerate(glob.glob(os.path.join(json_folder_path, "*.json"))):
         keypoints_data = load_keypoints_for_frame(i, json_folder_path)[:, :2]
+        # print(f"i = {i} mkv = {mkv_file} keypoints_data = {keypoints_data}")
 
         # キーポイント抽出が出来ているフレームを記録
-        if all(np.all(keypoints_data[point, :] != 0) for point in check_openpose_list):
+        if all(not np.all(np.isnan(keypoints_data[point, :])) for point in check_openpose_list):
             valid_frames.append(i)
+        # if all(np.all(keypoints_data[point, :] != 0) for point in check_openpose_list):
+        #     valid_frames.append(i)
 
-        transformation_matrix_path = os.path.join(os.path.dirname(mkv_file), f'transformation_matrix_0.npz')
+        #keypoints_dataの0をnanに変換
+        keypoints_data[keypoints_data == 0] = np.nan
+
+        transformation_matrix_path = os.path.join(os.path.dirname(mkv_file), f'tf_matrix_calibration_{id}.npz')
         transformation_matrix = np.load(transformation_matrix_path)['a_2d']
 
         keypoints_data = [np.dot(np.linalg.inv(transformation_matrix), np.array([keypoints_data[keypoint_num][0], keypoints_data[keypoint_num][1], 1]).T)[:2] for keypoint_num in range(len(keypoints_data))]
 
         all_keypoints_2d.append(keypoints_data)
     keypoints_2d_openpose = np.array(all_keypoints_2d)
+
     return keypoints_2d_openpose, valid_frames
 
-def read_3d_openpose(mkv_file):
+def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
+    keypoints_data = keypoint_array_2d
     playback = PyK4APlayback(mkv_file)
     playback.open()
     calibration = playback.calibration
 
     frame_count = 0
-    json_folder_path = os.path.join(os.path.dirname(mkv_file), os.path.basename(mkv_file).split('.')[0], 'estimated.json')
     all_keypoints_3d = []  # 各フレームの3Dキーポイントを保持するリスト
 
-    transform_matrix_path = os.path.join(os.path.dirname(mkv_file), f'transformation_matrix_{os.path.basename(mkv_file).split(".")[0].split("_")[-1]}.npz')
+    id = os.path.basename(mkv_file).split('.')[0].split('_')[-1]
+    transform_matrix_path = os.path.join(os.path.dirname(mkv_file), f'tf_matrix_calibration_{id}.npz')
     transform_matrix = np.load(transform_matrix_path)
     a1 = transform_matrix['a1']  #Arucoマーカーまでの変換行列
     a2 = transform_matrix['a2']  #Optitrackまでの変換行列(平行移動のみ)
@@ -161,6 +165,10 @@ def read_3d_openpose(mkv_file):
             print("再生を終了します")
             break
 
+        if frame_count not in valid_frame:
+            frame_count += 1
+            continue
+
         if capture.color is None or capture.transformed_depth is None:
             print(f"Frame {frame_count} has no image data.")
             continue
@@ -168,42 +176,12 @@ def read_3d_openpose(mkv_file):
         print(f"frame_count = {frame_count} mkvfile = {mkv_file} ")
 
         # 画像を取得
-        color_image = capture.color
         depth_image = capture.transformed_depth
-
-        depth_images_folder = os.path.join(os.path.dirname(mkv_file), os.path.basename(mkv_file).split('.')[0], 'depth_images')
-        if not os.path.exists(depth_images_folder):
-            os.makedirs(depth_images_folder)
-
-        depth_image_path = os.path.join(depth_images_folder, f"depth_{frame_count:012d}.png")
-        cv2.imwrite(depth_image_path, depth_image)
-
-        keypoints_data = load_keypoints_for_frame(frame_count, json_folder_path)
-        if keypoints_data is None:
-            print(f"Frame {frame_count}: JSON file not found, exiting loop.")
-            break
-
-        if any(is_keypoint_missing(keypoint) for keypoint in keypoints_data):
-            previous_keypoints_data = load_keypoints_for_frame(frame_count - 1, json_folder_path) if frame_count > 0 else keypoints_data
-            if previous_keypoints_data is None:
-                print(f"Previous frame {frame_count - 1}: JSON file not found, exiting loop.")
-                break
-
-            try:
-                next_keypoints_data = load_keypoints_for_frame(frame_count + 1, json_folder_path)
-                if next_keypoints_data is None:
-                    print(f"Next frame {frame_count + 1}: JSON file not found, exiting loop.")
-                    break
-            except IndexError:
-                print(f"Next frame {frame_count + 1}: people not found, exiting loop.")
-                break
-
-            keypoints_data = interpolate_missing_keypoints(keypoints_data, previous_keypoints_data, next_keypoints_data)
 
         frame_keypoints_3d = []
 
-        for i, keypoint in enumerate(keypoints_data):
-            pixel = np.array(keypoint[:2])
+        for keypoint_id, keypoint in enumerate(keypoints_data):
+            pixel = np.array(keypoint)
             coordinates_cam = get_3d_coordinates(pixel, depth_image, calibration)  #カメラ座標系での3D座標
             A1_inv = np.linalg.inv(a1)
             coordinates_aruco = np.dot(A1_inv, np.array([coordinates_cam[0], coordinates_cam[1], coordinates_cam[2], 1]).T)[:3]  #Arucoマーカー座標系での3D座標
@@ -287,14 +265,6 @@ def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配�
 
     return angle_list
 
-def check_point_frame(keypoints):
-    check_openpose_list = [1, 8, 12, 13, 14, 19, 20, 21]
-    check_frame_list = []
-    for frame in range(len(keypoints)):
-        if all(keypoints[frame][check_point] != 0 for check_point in check_openpose_list):
-            check_frame_list.append(frame)
-    return check_frame_list
-
 def check_opti_frame(keypoints_mocap):
     check_opti_list = [2, 3, 4, 5, 6, 7, 8, 9, 12, 15, 20, 21]
     valid_frames = []
@@ -304,26 +274,86 @@ def check_opti_frame(keypoints_mocap):
     return valid_frames
 
 
-
 def main():
-    for condition in condition_key:
-        print(f"condition = {condition}")
-        mkv_files = glob.glob(os.path.join(root_dir, f"*{condition}*.mkv"))
+    for condition_num in condition_keynum:
+        print(f"condition = {condition_num}")
+        # mkv_files = glob.glob(os.path.join(root_dir, f"*{condition_num}*.mkv"))
+        mkv_files = glob.glob(os.path.join(root_dir, f"{condition_num}*.mkv"))
         mkv_sagittal = mkv_files[0]
         mkv_diagonal_right = mkv_files[1]
         mkv_diagonal_left = mkv_files[2]
 
-        csv_files = glob.glob(os.path.join(root_dir, f"Motive/{condition}*.csv"))
+        # csv_files = glob.glob(os.path.join(root_dir, f"Motive/{condition_num}*.csv"))
+        # print(f"csv_files = {csv_files}")
 
-        keypoints_sagittal_2d, sagi_frame = read_2d_openpose(mkv_sagittal)
+        #2d上でのキーポイントを取得"
+        keypoints_sagittal_2d, sagi_frame_2d = read_2d_openpose(mkv_sagittal)  #[frame, 25, 3]
+        keypoints_diagonal_right_2d, dia_right_frame_2d = read_2d_openpose(mkv_diagonal_right)
+        keypoints_diagonal_left_2d, dia_left_frame_2d = read_2d_openpose(mkv_diagonal_left)
 
-        keypoints_diagonal_right_2d, dia_right_frame = read_2d_openpose(mkv_diagonal_right)
-        keypoints_diagonal_left_2d, dia_left_frame = read_2d_openpose(mkv_diagonal_left)
+        mid_hip_sagttal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 8, :], sagi_frame_2d)
+        neck_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 1, :], sagi_frame_2d)
+        lhip_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 12, :], sagi_frame_2d)
+        lknee_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 13, :], sagi_frame_2d)
+        lankle_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 14, :], sagi_frame_2d)
+        lbigtoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 19, :], sagi_frame_2d)
+        lsmalltoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 20, :], sagi_frame_2d)
+        lheel_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 21, :], sagi_frame_2d)
 
-        keypoints_sagittal_3d = read_3d_openpose(mkv_sagittal)
+        mid_hip_sagttal_2d_filltered = np.array([butter_lowpass_fillter(mid_hip_sagttal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+        neck_sagittal_2d_filltered = np.array([butter_lowpass_fillter(neck_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+        lhip_sagittal_2d_filltered = np.array([butter_lowpass_fillter(lhip_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+        lknee_sagittal_2d_filltered = np.array([butter_lowpass_fillter(lknee_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+        lankle_sagittal_2d_filltered = np.array([butter_lowpass_fillter(lankle_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+        lbigtoe_sagittal_2d_filltered = np.array([butter_lowpass_fillter(lbigtoe_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+        lsmalltoe_sagittal_2d_filltered = np.array([butter_lowpass_fillter(lsmalltoe_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+        lheel_sagittal_2d_filltered = np.array([butter_lowpass_fillter(lheel_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
 
-        keypoints_diagonal_right = read_3d_openpose(mkv_diagonal_right)
-        keypoints_diagonal_left = read_3d_openpose(mkv_diagonal_left)
+        trunk_vector_sagittal_2d = neck_sagittal_2d_filltered - mid_hip_sagttal_2d_filltered
+        thigh_vector_l_sagittal_2d = lknee_sagittal_2d_filltered - lhip_sagittal_2d_filltered
+        lower_leg_vector_l_sagittal_2d = lankle_sagittal_2d_filltered - lknee_sagittal_2d_filltered
+        foot_vector_l_sagittal_2d = lheel_sagittal_2d_filltered - (lbigtoe_sagittal_2d_filltered + lsmalltoe_sagittal_2d_filltered) / 2
+
+        mid_hip_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 8, :], dia_right_frame_2d)
+        neck_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 1, :], dia_right_frame_2d)
+        lhip_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 12, :], dia_right_frame_2d)
+        lknee_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 13, :], dia_right_frame_2d)
+        lankle_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 14, :], dia_right_frame_2d)
+        lbigtoe_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 19, :], dia_right_frame_2d)
+        lsmalltoe_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 20, :], dia_right_frame_2d)
+        lheel_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 21, :], dia_right_frame_2d)
+
+        mid_hip_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(mid_hip_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
+        neck_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(neck_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
+        lhip_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(lhip_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
+        lknee_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(lknee_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
+        lankle_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(lankle_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
+        lbigtoe_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(lbigtoe_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
+        lsmalltoe_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(lsmalltoe_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
+        lheel_diagonal_right_2d_filltered = np.array([butter_lowpass_fillter(lheel_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
+
+        mid_hip_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 8, :], dia_left_frame_2d)
+        neck_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 1, :], dia_left_frame_2d)
+        lhip_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 12, :], dia_left_frame_2d)
+        lknee_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 13, :], dia_left_frame_2d)
+        lankle_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 14, :], dia_left_frame_2d)
+        lbigtoe_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 19, :], dia_left_frame_2d)
+        lsmalltoe_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 20, :], dia_left_frame_2d)
+        lheel_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 21, :], dia_left_frame_2d)
+
+        mid_hip_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(mid_hip_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
+        neck_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(neck_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
+        lhip_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(lhip_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
+        lknee_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(lknee_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
+        lankle_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(lankle_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
+        lbigtoe_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(lbigtoe_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
+        lsmalltoe_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(lsmalltoe_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
+        lheel_diagonal_left_2d_filltered = np.array([butter_lowpass_fillter(lheel_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
+
+        #3d上でのキーポイントを取得
+        keypoints_sagittal_3d, sagi_frame_3d = read_3d_openpose(keypoints_sagittal_2d, sagi_frame_2d, mkv_sagittal)
+        keypoints_diagonal_right, dia_right_frame_3d = read_3d_openpose(keypoints_diagonal_right_2d, dia_right_frame_2d, mkv_diagonal_right)
+        keypoints_diagonal_left, dia_left_frame_3d = read_3d_openpose(keypoints_diagonal_left_2d, dia_left_frame_2d, mkv_diagonal_left)
 
         if keypoints_diagonal_right.shape[0] > keypoints_diagonal_left.shape[0]:
             keypoints_diagonal_right = keypoints_diagonal_right[:keypoints_diagonal_left.shape[0]]
@@ -332,7 +362,6 @@ def main():
 
         keypoints_frontal = (keypoints_diagonal_right + keypoints_diagonal_left) / 2
 
-        print(f"csv_files = {csv_files}")
         # try:
         #     keypoints_mocap, full_range = read_3d_optitrack(csv_files[0])
         # except IndexError:
@@ -341,11 +370,11 @@ def main():
 
         #すべてで記録できているフレームを抽出
         # mocap_frame = check_opti_frame(keypoints_mocap)
-        # common_frame = sorted(list(set(sagi_frame) & set(dia_right_frame) & set(dia_left_frame) & set(mocap_frame)))
-        common_frame = sorted(list(set(sagi_frame) & set(dia_right_frame) & set(dia_left_frame)))
-        # print(f"sagi_frame = {sagi_frame}")
-        # print(f"dia_right_frame = {dia_right_frame}")
-        # print(f"dia_left_frame = {dia_left_frame}")
+        # common_frame = sorted(list(set(sagi_frame_2d) & set(dia_right_frame_3d) & set(dia_left_frame_3d) & set(mocap_frame)))
+        common_frame = sorted(list(set(sagi_frame_2d) & set(dia_right_frame_3d) & set(dia_left_frame_3d)))
+        # print(f"sagi_frame_2d = {sagi_frame_2d}")
+        # print(f"dia_right_frame_2d = {dia_right_frame_2d}")
+        # print(f"dia_left_frame_2d = {dia_left_frame_2d}")
         # print(f"mocap_frame = {mocap_frame}")
 
         # keypoints_frontal.shape[0] より大きい要素を除外 openpose_3dでは最後のフレームが取得できていないため
@@ -354,10 +383,10 @@ def main():
 
         # continue
 
-        trunk_vector_sagittal_2d_ori = keypoints_sagittal_2d[common_frame, 1, :] - keypoints_sagittal_2d[common_frame, 8, :] #neck - mid_hip
-        thigh_vector_l_sagittal_2d_ori = keypoints_sagittal_2d[common_frame, 13, :] - keypoints_sagittal_2d[common_frame, 12, :] #knee - hip
-        lower_leg_vector_l_sagittal_2d_ori = keypoints_sagittal_2d[common_frame, 14, :] - keypoints_sagittal_2d[common_frame, 13, :] #ankle - knee
-        foot_vector_l_sagittal_2d_ori = keypoints_sagittal_2d[common_frame, 21, :]  - (keypoints_sagittal_2d[common_frame, 19, :] + keypoints_sagittal_2d[common_frame, 20, :]) / 2 #heel - (bigtoe + smalltoe) / 2
+        trunk_vector_sagittal_2d = keypoints_sagittal_2d[:, 1, :] - keypoints_sagittal_2d[:, 8, :] #neck - mid_hip
+        thigh_vector_l_sagittal_2d = keypoints_sagittal_2d[:, 13, :] - keypoints_sagittal_2d[:, 12, :] #knee - hip
+        lower_leg_vector_l_sagittal_2d = keypoints_sagittal_2d[:, 14, :] - keypoints_sagittal_2d[:, 13, :] #ankle - knee
+        foot_vector_l_sagittal_2d = keypoints_sagittal_2d[:, 21, :]  - (keypoints_sagittal_2d[:, 19, :] + keypoints_sagittal_2d[:, 20, :]) / 2 #heel - (bigtoe + smalltoe) / 2
 
         trunk_vector_3d_frontal_ori = keypoints_frontal[common_frame, 1, :] - keypoints_frontal[common_frame, 8, :]
         thigh_vector_l_3d_frontal_ori = keypoints_frontal[common_frame, 13, :] - keypoints_frontal[common_frame, 12, :]
@@ -369,45 +398,36 @@ def main():
         # lower_vector_l_mocap_ori = (keypoints_mocap[common_frame, 2, :] + keypoints_mocap[common_frame, 3, :]) / 2 - (keypoints_mocap[common_frame, 6, :] + keypoints_mocap[common_frame, 7, :]) / 2
         # foot_vector_l_mocap_ori = keypoints_mocap[common_frame, 5, :] - keypoints_mocap[common_frame, 12, :]
 
-        mid_hip_sagttal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 8, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        neck_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 1, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lhip_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 12, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lknee_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 13, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lankle_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 14, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lbigtoe_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 19, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lsmalltoe_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 20, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
-        lheel_sagittal_2d = np.array([butter_lowpass_filter(keypoints_sagittal_2d[common_frame, 21, x], order = 4, cutoff_freq = 6) for x in range(2)]).T
+        mid_hip_diagonal_right = np.array([butter_lowpass_fillter(keypoints_diagonal_right[common_frame, 8, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        neck_diagonal_right = np.array([butter_lowpass_fillter(keypoints_diagonal_right[common_frame, 1, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lhip_diagonal_right = np.array([butter_lowpass_fillter(keypoints_diagonal_right[common_frame, 12, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lknee_diagonal_right = np.array([butter_lowpass_fillter(keypoints_diagonal_right[common_frame, 13, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lankle_diagonal_right = np.array([butter_lowpass_fillter(keypoints_diagonal_right[common_frame, 14, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lbigtoe_diagonal_right = np.array([butter_lowpass_fillter(keypoints_diagonal_right[common_frame, 19, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lsmalltoe_diagonal_right = np.array([butter_lowpass_fillter(keypoints_diagonal_right[common_frame, 20, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lheel_diagonal_right = np.array([butter_lowpass_fillter(keypoints_diagonal_right[common_frame, 21, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
 
-        mid_hip_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 8, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        neck_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 1, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lhip_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 12, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lknee_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 13, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lankle_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 14, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lbigtoe_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 19, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lsmalltoe_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 20, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lheel_diagonal_right = np.array([butter_lowpass_filter(keypoints_diagonal_right[common_frame, 21, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
+        mid_hip_diagonal_left = np.array([butter_lowpass_fillter(keypoints_diagonal_left[common_frame, 8, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        neck_diagonal_left = np.array([butter_lowpass_fillter(keypoints_diagonal_left[common_frame, 1, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lhip_diagonal_left = np.array([butter_lowpass_fillter(keypoints_diagonal_left[common_frame, 12, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lknee_diagonal_left = np.array([butter_lowpass_fillter(keypoints_diagonal_left[common_frame, 13, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lankle_diagonal_left = np.array([butter_lowpass_fillter(keypoints_diagonal_left[common_frame, 14, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lbigtoe_diagonal_left = np.array([butter_lowpass_fillter(keypoints_diagonal_left[common_frame, 19, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lsmalltoe_diagonal_left = np.array([butter_lowpass_fillter(keypoints_diagonal_left[common_frame, 20, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
+        lheel_diagonal_left = np.array([butter_lowpass_fillter(keypoints_diagonal_left[common_frame, 21, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(3)]).T
 
-        mid_hip_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 8, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        neck_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 1, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lhip_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 12, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lknee_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 13, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lankle_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 14, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lbigtoe_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 19, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lsmalltoe_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 20, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-        lheel_diagonal_left = np.array([butter_lowpass_filter(keypoints_diagonal_left[common_frame, 21, x], order = 4, cutoff_freq = 6) for x in range(3)]).T
-
-        # rsho = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 21, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # lsho = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 9, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # rpsi = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 20, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # lpsi = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 8, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # rasi = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 15, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # lasi = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 4, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # lknee = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 6, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # lknee2 = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 7, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # lank = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 2, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # lank2 = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 3, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # ltoe = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 12, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
-        # lhee = np.array([butter_lowpass_filter(keypoints_mocap[common_frame, 5, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # rsho = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 21, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # lsho = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 9, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # rpsi = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 20, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # lpsi = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 8, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # rasi = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 15, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # lasi = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 4, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # lknee = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 6, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # lknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 7, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # lank = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 2, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # lank2 = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 3, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # ltoe = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 12, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
+        # lhee = np.array([butter_lowpass_fillter(keypoints_mocap[common_frame, 5, x], order = 4 ,cutoff_freq = 6) for x in range(3)]).T
 
 
         trunk_vector_sagittal_2d = neck_sagittal_2d - mid_hip_sagttal_2d
@@ -435,9 +455,9 @@ def main():
         # lower_vector_l_mocap = (lank + lank2) / 2 - (lknee + lknee2) / 2
         # foot_vector_l_mocap = lhee - ltoe
 
-        hip_angle_sagittal_2d_ori = calculate_angle(trunk_vector_sagittal_2d_ori, thigh_vector_l_sagittal_2d_ori)
-        knee_angle_sagittal_2d_ori = calculate_angle(thigh_vector_l_sagittal_2d_ori, lower_leg_vector_l_sagittal_2d_ori)
-        ankle_angle_sagittal_2d_ori = calculate_angle(lower_leg_vector_l_sagittal_2d_ori, foot_vector_l_sagittal_2d_ori)
+        hip_angle_sagittal_2d = calculate_angle(trunk_vector_sagittal_2d_ori, thigh_vector_l_sagittal_2d_ori)
+        knee_angle_sagittal_2d = calculate_angle(thigh_vector_l_sagittal_2d_ori, lower_leg_vector_l_sagittal_2d_ori)
+        ankle_angle_sagittal_2d = calculate_angle(lower_leg_vector_l_sagittal_2d_ori, foot_vector_l_sagittal_2d_ori)
 
         hip_angle_frontal_3d_ori = calculate_angle(trunk_vector_3d_frontal_ori, thigh_vector_l_3d_frontal_ori)
         knee_angle_frontal_3d_ori = calculate_angle(thigh_vector_l_3d_frontal_ori, lower_leg_vector_l_3d_frontal_ori)
@@ -469,7 +489,7 @@ def main():
         plt.legend()
         plt.xlabel("frame [-]")
         plt.ylabel("angle [°]")
-        plt.savefig(os.path.join(root_dir, f"{condition}_hip_angle.png"))
+        plt.savefig(os.path.join(root_dir, f"{condition_num}_hip_angle.png"))
         plt.cla()
 
         plt.plot(common_frame, knee_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
@@ -482,7 +502,7 @@ def main():
         plt.legend()
         plt.xlabel("frame [-]")
         plt.ylabel("angle [°]")
-        plt.savefig(os.path.join(root_dir, f"{condition}_knee_angle.png"))
+        plt.savefig(os.path.join(root_dir, f"{condition_num}_knee_angle.png"))
         plt.cla()
 
         plt.plot(common_frame, ankle_angle_sagittal_2d, label="2D sagittal", color='#1f77b4')
@@ -495,7 +515,7 @@ def main():
         plt.legend()
         plt.xlabel("frame [-]")
         plt.ylabel("angle [°]")
-        plt.savefig(os.path.join(root_dir, f"{condition}_ankle_angle.png"))
+        plt.savefig(os.path.join(root_dir, f"{condition_num}_ankle_angle.png"))
         plt.cla()
 
         # mae_hip_sagittal = mean_absolute_error(hip_angle_sagittal_2d, hip_angle_mocap)
