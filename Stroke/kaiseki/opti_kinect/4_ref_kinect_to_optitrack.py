@@ -38,10 +38,6 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバ�
     nyquist_freq = sampling_freq / 2
     normal_cutoff = cutoff_freq / nyquist_freq
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    # # data内にnanがある場合は線形補間してからフィルター
-    # if np.any(np.isnan(data)):
-    #     nans, x = np.isnan(data), lambda z: z.nonzero()[0]
-    #     data[nans] = np.interp(x(nans), x(~nans), data[~nans])
     y = filtfilt(b, a, data[frame_list])
     data_fillter = np.copy(data)
     data_fillter[frame_list] = y
@@ -68,9 +64,9 @@ def cubic_spline_interpolation(keypoints_set, frame_range):
 def linear_interpolation(x, x0, x1, y0, y1):
     return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
 
-def get_3d_coordinates(pixel, depth_image, calibration, i):
+def get_3d_coordinates(pixel, depth_image, calibration):
     if np.all(pixel == (0, 0)):
-        print(f"    キーポイント{i} :Openposeで検出できてない")
+        print(f"    Openposeで検出できてない")
         return [0, 0, 0]
 
     pixel_x, pixel_y = pixel[0], pixel[1]
@@ -80,7 +76,7 @@ def get_3d_coordinates(pixel, depth_image, calibration, i):
     height, width = depth_image.shape
 
     if not (0 <= x0 < width and 0 <= x1 < width and 0 <= y0 < height and 0 <= y1 < height):
-        print(f"    keypoint_id = {i} Coordinates {(x0, y0)} or {(x1, y1)} are out of bounds for image of size (width={width}, height={height})")
+        print(f"    Coordinates {(x0, y0)} or {(x1, y1)} are out of bounds for image of size (width={width}, height={height})")
         return [0, 0, 0]
 
     depth_value_x0_y0 = depth_image[y0, x0]
@@ -94,7 +90,7 @@ def get_3d_coordinates(pixel, depth_image, calibration, i):
         point_x0_y1 = calibration.convert_2d_to_3d(coordinates=(x0, y1), depth=depth_value_x0_y1, source_camera=CalibrationType.COLOR)
         point_x1_y1 = calibration.convert_2d_to_3d(coordinates=(x1, y1), depth=depth_value_x1_y1, source_camera=CalibrationType.COLOR)
     except ValueError as e:
-        print(f"    {i} Error converting to 3D coordinates: {e}")
+        print(f"    Error converting to 3D coordinates: {e}")
         # print(f"depth_value_x0_y0 = {depth_value_x0_y0}, depth_value_x1_y0 = {depth_value_x1_y0}, depth_value_x0_y1 = {depth_value_x0_y1}, depth_value_x1_y1 = {depth_value_x1_y1}")
         return [0, 0, 0]
 
@@ -139,16 +135,14 @@ def read_2d_openpose(mkv_file):
     return keypoints_2d_openpose, keypoints_2d_openpose_tf, valid_frames
 
 def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
-    keypoints_data = np.nan_to_num(keypoint_array_2d)  #[frame, 25, 2]
+    print(f"valid_frame = {valid_frame}")
+    keypoints_data = np.nan_to_num(keypoint_array_2d)  #[frame, 2]
     playback = PyK4APlayback(mkv_file)
     playback.open()
     calibration = playback.calibration
 
     frame_count = 0
     all_keypoints_3d = []  # 各フレームの3Dキーポイントを保持するリスト
-    valid_frame_list = [] #Openposeでキーポイントが検出されたフレームを記録
-    check_openpose_list = [1, 8, 12, 13, 14, 19, 20, 21]
-
 
     id = os.path.basename(mkv_file).split('.')[0].split('_')[-1]
     transform_matrix_path = os.path.join(os.path.dirname(mkv_file), f'tf_matrix_calibration_{id}.npz')
@@ -179,7 +173,7 @@ def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
         mask = depth_image == 0
         interpolated_depth_image = depth_image.copy()
         shifted_list = []
-        kernel_size = 5
+        kernel_size = 3
         # 行方向と列方向にシフトした画像を作成
         for x_shift in range(-int((kernel_size-1)/2),  int((kernel_size-1)/2 + 1)):
             for y_shift in range(int((kernel_size-1)/2), -int((kernel_size-1)/2 + 1), -1):
@@ -212,11 +206,11 @@ def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
 
         frame_keypoints_3d = []
 
-        for i, pixel in enumerate(keypoints_data[frame_count, :, :]):  #keypoints_data = [frame, 25, 2]
-            coordinates_cam = get_3d_coordinates(pixel, interpolated_depth_image, calibration, i)  #カメラ座標系での3D座標
-            if coordinates_cam == [0, 0, 0]:
-                frame_keypoints_3d.append([0, 0, 0])
-                continue
+        pixel = keypoints_data[frame_count, :]  #keypoints_data = [frame, 2]
+        coordinates_cam = get_3d_coordinates(pixel, interpolated_depth_image, calibration)  #カメラ座標系での3D座標
+        if coordinates_cam == [0, 0, 0]:
+            frame_keypoints_3d.append([0, 0, 0])
+        else:
             A1_inv = np.linalg.inv(a1)
             coordinates_aruco = np.dot(A1_inv, np.array([coordinates_cam[0], coordinates_cam[1], coordinates_cam[2], 1]).T)[:3]  #Arucoマーカー座標系での3D座標
             A2_inv = np.linalg.inv(a2)
@@ -402,6 +396,7 @@ def main():
         lbigtoe_diagonal_right_3d = read_3d_openpose(lbigtoe_diagonal_right_2d, dia_right_frame_2d, mkv_diagonal_right)
         lsmalltoe_diagonal_right_3d = read_3d_openpose(lsmalltoe_diagonal_right_2d, dia_right_frame_2d, mkv_diagonal_right)
         lheel_diagonal_right_3d = read_3d_openpose(lheel_diagonal_right_2d, dia_right_frame_2d, mkv_diagonal_right)
+        check_point_diagonal_right = np.array([mid_hip_diagonal_right_3d, neck_diagonal_right_3d, lhip_diagonal_right_3d, lknee_diagonal_right_3d, lankle_diagonal_right_3d, lbigtoe_diagonal_right_3d, lsmalltoe_diagonal_right_3d, lheel_diagonal_right_3d])
 
         mid_hip_diagonal_left_3d = read_3d_openpose(mid_hip_diagonal_left_2d, dia_left_frame_2d, mkv_diagonal_left)
         neck_diagonal_left_3d = read_3d_openpose(neck_diagonal_left_2d, dia_left_frame_2d, mkv_diagonal_left)
@@ -411,6 +406,11 @@ def main():
         lbigtoe_diagonal_left_3d = read_3d_openpose(lbigtoe_diagonal_left_2d, dia_left_frame_2d, mkv_diagonal_left)
         lsmalltoe_diagonal_left_3d = read_3d_openpose(lsmalltoe_diagonal_left_2d, dia_left_frame_2d, mkv_diagonal_left)
         lheel_diagonal_left_3d = read_3d_openpose(lheel_diagonal_left_2d, dia_left_frame_2d, mkv_diagonal_left)
+        check_point_diagonal_left = np.array([mid_hip_diagonal_left_3d, neck_diagonal_left_3d, lhip_diagonal_left_3d, lknee_diagonal_left_3d, lankle_diagonal_left_3d, lbigtoe_diagonal_left_3d, lsmalltoe_diagonal_left_3d, lheel_diagonal_left_3d])
+
+        # for frame in range()
+
+
 
 
 
