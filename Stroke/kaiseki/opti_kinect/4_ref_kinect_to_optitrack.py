@@ -14,7 +14,7 @@ from sklearn.metrics import mean_absolute_error
 root_dir = r"F:\Tomson\gait_pattern\20240808"
 
 condition_list = ["0", "1", "2", "3", "4"]  #0がTポーズ,1が通常歩行, 2が通常歩行（遅）, 3が疑似麻痺歩行, 4が疑似麻痺歩行（遅）
-condition_keynum = condition_list[1]
+condition_keynum = condition_list[:]
 
 def load_keypoints_for_frame(frame_number, json_folder_path):
     json_file_name = f"original_{frame_number:012d}_keypoints.json"
@@ -252,7 +252,6 @@ def read_3d_optitrack(csv_path):
     print(f"success_frame_list = {success_frame_list}")
 
     full_range = range(min(success_frame_list), max(success_frame_list) + 1)
-    # success_df = marker_set_df
     success_df = marker_set_df.reindex(full_range)
 
     interpolate_success_df = success_df.interpolate(method='spline', order=3)
@@ -335,10 +334,15 @@ def main():
         lsmalltoe_sagittal_2d_filltered = np.array([butter_lowpass_fillter(lsmalltoe_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
         lheel_sagittal_2d_filltered = np.array([butter_lowpass_fillter(lheel_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
 
-        trunk_vector_sagittal_2d = neck_sagittal_2d_filltered - mid_hip_sagttal_2d_filltered
-        thigh_vector_l_sagittal_2d = lknee_sagittal_2d_filltered - lhip_sagittal_2d_filltered
-        lower_leg_vector_l_sagittal_2d = lankle_sagittal_2d_filltered - lknee_sagittal_2d_filltered
-        foot_vector_l_sagittal_2d = lheel_sagittal_2d_filltered - (lbigtoe_sagittal_2d_filltered + lsmalltoe_sagittal_2d_filltered) / 2
+        trunk_vector_sagittal_2d = neck_sagittal_2d - mid_hip_sagttal_2d
+        thigh_vector_l_sagittal_2d = lknee_sagittal_2d - lhip_sagittal_2d
+        lower_leg_vector_l_sagittal_2d = lknee_sagittal_2d - lankle_sagittal_2d
+        foot_vector_l_sagittal_2d = (lbigtoe_sagittal_2d + lsmalltoe_sagittal_2d) / 2 - lheel_sagittal_2d
+
+        trunk_vector_sagittal_2d_filtered = neck_sagittal_2d_filltered - mid_hip_sagttal_2d_filltered
+        thigh_vector_l_sagittal_2d_filtered = lknee_sagittal_2d_filltered - lhip_sagittal_2d_filltered
+        lower_leg_vector_l_sagittal_2d_filtered = lknee_sagittal_2d_filltered - lankle_sagittal_2d_filltered
+        foot_vector_l_sagittal_2d_filtered = (lbigtoe_sagittal_2d_filltered + lsmalltoe_sagittal_2d_filltered) / 2 - lheel_sagittal_2d_filltered
 
         """
         mid_hip_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 8, :], dia_right_frame_2d)
@@ -450,8 +454,8 @@ def main():
 
         trunk_vector_mocap_ori = (keypoints_mocap[:, 11, :] + keypoints_mocap[:, 7, :]) / 2 - (keypoints_mocap[:, 9, :] + keypoints_mocap[:, 10, :] + keypoints_mocap[:, 6, :] + keypoints_mocap[:, 2, :]) / 4
         thigh_vector_l_mocap_ori = (keypoints_mocap[:, 4, :] + keypoints_mocap[:, 5, :]) / 2 - (keypoints_mocap[:, 2, :] + keypoints_mocap[:, 6, :]) / 2
-        lower_vector_l_mocap_ori = (keypoints_mocap[:, 0, :] + keypoints_mocap[:, 1, :]) / 2 - (keypoints_mocap[:, 4, :] + keypoints_mocap[:, 5, :]) / 2
-        foot_vector_l_mocap_ori = keypoints_mocap[:, 3, :] - keypoints_mocap[:, 8, :]
+        lower_vector_l_mocap_ori = (keypoints_mocap[:, 4, :] + keypoints_mocap[:, 5, :]) / 2 - (keypoints_mocap[:, 0, :] + keypoints_mocap[:, 1, :]) / 2
+        foot_vector_l_mocap_ori = keypoints_mocap[:, 8, :] - keypoints_mocap[:, 3, :]
 
         rsho = np.array([butter_lowpass_fillter(keypoints_mocap[:, 11, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
         lsho = np.array([butter_lowpass_fillter(keypoints_mocap[:, 7, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
@@ -483,8 +487,8 @@ def main():
 
         trunk_vector_mocap = (rsho + lsho) / 2 - (rasi + lasi + rpsi + lpsi) / 4
         thigh_vector_l_mocap = (lknee + lknee2) / 2 - (lasi + lpsi) / 2
-        lower_vector_l_mocap = (lank + lank2) / 2 - (lknee + lknee2) / 2
-        foot_vector_l_mocap = lhee - ltoe
+        lower_vector_l_mocap = (lknee + lknee2) / 2 - (lank + lank2) / 2
+        foot_vector_l_mocap = ltoe - lhee
 
 
         # np.set_printoptions(threshold=np.inf)
@@ -508,9 +512,9 @@ def main():
         ankle_angle_mocap_ori = pd.DataFrame(calculate_angle(lower_vector_l_mocap_ori, foot_vector_l_mocap_ori))
 
 
-        hip_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(trunk_vector_sagittal_2d, thigh_vector_l_sagittal_2d))
-        knee_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(thigh_vector_l_sagittal_2d, lower_leg_vector_l_sagittal_2d))
-        ankle_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(lower_leg_vector_l_sagittal_2d, foot_vector_l_sagittal_2d))
+        hip_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(trunk_vector_sagittal_2d_filtered, thigh_vector_l_sagittal_2d_filtered))
+        knee_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(thigh_vector_l_sagittal_2d_filtered, lower_leg_vector_l_sagittal_2d_filtered))
+        ankle_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(lower_leg_vector_l_sagittal_2d_filtered, foot_vector_l_sagittal_2d_filtered))
 
         # hip_angle_frontal_3d = pd.DataFrame(calculate_angle(trunk_vector_3d_frontal, thigh_vector_l_3d_frontal))
         # knee_angle_frontal_3d = pd.DataFrame(calculate_angle(thigh_vector_l_3d_frontal, lower_leg_vector_l_3d_frontal))
@@ -520,43 +524,50 @@ def main():
         knee_angle_mocap = pd.DataFrame(calculate_angle(thigh_vector_l_mocap, lower_vector_l_mocap))
         ankle_angle_mocap = pd.DataFrame(calculate_angle(lower_vector_l_mocap, foot_vector_l_mocap))
 
-        plt.plot(common_frame, hip_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal_filtered", color='#1f77b4')
+        pd.set_option('display.max_rows', 500)
+        print(F"hip_angle_sagittal_2d = {hip_angle_sagittal_2d.loc[common_frame]}")
+        print(f"hip_angle_sagittal_2d_filtered = {hip_angle_sagittal_2d_filtered.loc[common_frame]}")
+
+        plt.plot(common_frame, hip_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
         # plt.plot(common_frame, hip_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        plt.plot(common_frame, hip_angle_mocap.loc[common_frame], label="Mocap_filtered", color='#2ca02c')
-        plt.plot(common_frame, hip_angle_sagittal_2d.loc[common_frame], label="2D sagittal", color='#1f77b4', alpha=0.5)
+        plt.plot(common_frame, hip_angle_mocap.loc[common_frame], label="Mocap", color='#2ca02c')
+        plt.plot(common_frame, hip_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
         # plt.plot(common_frame, hip_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.plot(common_frame, hip_angle_mocap_ori.loc[common_frame], label="Mocap", color='#2ca02c', alpha=0.5)
+        plt.plot(common_frame, hip_angle_mocap_ori.loc[common_frame], color='#2ca02c', alpha=0.5)
         plt.title("Hip Angle")
         plt.legend()
         plt.xlabel("frame [-]")
         plt.ylabel("angle [°]")
         plt.savefig(os.path.join(root_dir, f"{condition_num}_hip_angle.png"))
+        # plt.show()  #5frame
         plt.cla()
 
-        plt.plot(common_frame, knee_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal_filtered", color='#1f77b4')
+        plt.plot(common_frame, knee_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
         # plt.plot(common_frame, knee_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        plt.plot(common_frame, knee_angle_mocap.loc[common_frame], label="Mocap_filtered", color='#2ca02c')
-        plt.plot(common_frame, knee_angle_sagittal_2d.loc[common_frame], label="2D sagittal", color='#1f77b4', alpha=0.5)
+        plt.plot(common_frame, knee_angle_mocap.loc[common_frame], label="Mocap", color='#2ca02c')
+        plt.plot(common_frame, knee_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
         # plt.plot(common_frame, knee_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.plot(common_frame, knee_angle_mocap_ori.loc[common_frame], label="Mocap", color='#2ca02c', alpha=0.5)
+        plt.plot(common_frame, knee_angle_mocap_ori.loc[common_frame], color='#2ca02c', alpha=0.5)
         plt.title("Knee Angle")
         plt.legend()
         plt.xlabel("frame [-]")
         plt.ylabel("angle [°]")
         plt.savefig(os.path.join(root_dir, f"{condition_num}_knee_angle.png"))
+        # plt.show() #3frame
         plt.cla()
 
-        plt.plot(common_frame, ankle_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal_filtered", color='#1f77b4')
+        plt.plot(common_frame, ankle_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
         # plt.plot(common_frame, ankle_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
         plt.plot(common_frame, ankle_angle_mocap.loc[common_frame], label="Mocap", color='#2ca02c')
-        plt.plot(common_frame, ankle_angle_sagittal_2d.loc[common_frame], label="2D sagittal", color='#1f77b4', alpha=0.5)
+        plt.plot(common_frame, ankle_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
         # plt.plot(common_frame, ankle_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.plot(common_frame, ankle_angle_mocap_ori.loc[common_frame], label="Mocap", color='#2ca02c', alpha=0.5)
+        plt.plot(common_frame, ankle_angle_mocap_ori.loc[common_frame], color='#2ca02c', alpha=0.5)
         plt.title("Ankle Angle")
         plt.legend()
         plt.xlabel("frame [-]")
         plt.ylabel("angle [°]")
         plt.savefig(os.path.join(root_dir, f"{condition_num}_ankle_angle.png"))
+        plt.show() #5frame
         plt.cla()
 
         mae_hip_sagittal = mean_absolute_error(hip_angle_sagittal_2d.iloc[common_frame], hip_angle_mocap.iloc[common_frame])
