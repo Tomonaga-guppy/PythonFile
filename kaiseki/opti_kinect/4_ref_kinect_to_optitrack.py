@@ -231,58 +231,6 @@ def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
     # return keypoints_openpose, valid_frame_list
     return keypoints_openpose
 
-def read_3d_optitrack(csv_path):
-    df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])
-
-    df_down = df[::4].reset_index(drop=True)
-
-    marker_set = ["RASI", "LASI","RPSI","LPSI","LKNE","LANK","LTOE","LHEE","RSHO", "LSHO", "LKNE2", "LANK2"]
-    # marker_set = ["RASI", "LASI","RPSI","LPSI","RKNE","LKNE", "RTHI", "LTHI", "RANK","LANK", "RTIB", "LTIB","RTOE","LTOE","RHEE","LHEE",
-    #             "RSHO", "LSHO","C7", "T10", "CLAV", "STRN", "RBAK", "RKNE2", "LKNE2", "RANK2", "LANK2"]
-
-    marker_set_df = df_down[[col for col in df_down.columns if any(marker in col[0] for marker in marker_set)]].copy()
-    # print(f"marker_set?df_columns = {marker_set_df.columns}")
-
-    success_frame_list = []
-
-    for frame in range(0, len(marker_set_df)):
-        if not marker_set_df.iloc[frame].isna().any():
-            success_frame_list.append(frame)
-
-    print(f"success_frame_list = {success_frame_list}")
-
-    full_range = range(min(success_frame_list), max(success_frame_list) + 1)
-    success_df = marker_set_df.reindex(full_range)
-
-    interpolate_success_df = success_df.interpolate(method='spline', order=3)
-
-    for i, index in enumerate(full_range):
-        marker_set_df.loc[index, :] = interpolate_success_df.iloc[i, :]
-    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path)}"))
-
-    '''
-    表示の順番
-    columns = MultiIndex([(
-                ( 'MarkerSet 01:LANK', 'X'), 0
-                ('MarkerSet 01:LANK2', 'X'), 1
-                ( 'MarkerSet 01:LASI', 'X'), 2
-                ( 'MarkerSet 01:LHEE', 'X'), 3
-                ( 'MarkerSet 01:LKNE', 'X'), 4
-                ('MarkerSet 01:LKNE2', 'X'), 5
-                ( 'MarkerSet 01:LPSI', 'X'), 6
-                ( 'MarkerSet 01:LSHO', 'X'), 7
-                ( 'MarkerSet 01:LTOE', 'X'), 8
-                ( 'MarkerSet 01:RASI', 'X'), 9
-                ( 'MarkerSet 01:RPSI', 'X'), 10
-                ( 'MarkerSet 01:RSHO', 'X'), 11
-            )
-    '''
-    keypoints = marker_set_df.values
-    keypoints_mocap = keypoints.reshape(-1, len(marker_set), 3)  #xyzで組になるように変形
-    print(f"keypoiints_mocap.shape = {keypoints_mocap.shape}")
-
-    return keypoints_mocap, full_range
-
 def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配列を入力)
     angle_list = []
     for frame in range(len(vector1)):
@@ -303,13 +251,9 @@ def main():
         # mkv_diagonal_right = mkv_files[1]
         # mkv_diagonal_left = mkv_files[2]
 
-        csv_files = glob.glob(os.path.join(root_dir, f"Motive/{condition_num}*.csv"))
-        # print(f"csv_files = {csv_files}")
-        try:
-            keypoints_mocap, mocap_frame = read_3d_optitrack(csv_files[0])
-        except IndexError:
-            print(f"Optitrackのデータがないため読み込み終了")
-            break
+        csv_files = glob.glob(os.path.join(root_dir, f"Motive/angle_{condition_num}*.csv"))[0]
+        df_mocap_angle = pd.read_csv(csv_files, index_col=0)
+        mocap_frame = df_mocap_angle.index.values
 
         #2d上でのキーポイントを取得"
         keypoints_sagittal_2d, keypoints_sagittal_2d_tf, sagi_frame_2d = read_2d_openpose(mkv_sagittal)  #[frame, 25, 3]
@@ -433,42 +377,19 @@ def main():
         # print(f"dia_right_frame_3d = {dia_right_frame_3d}")
         # print(f"dia_left_frame_3d = {dia_left_frame_3d}")
         print(f"mocap_frame = {mocap_frame}")
-        # mocap_frame = check_opti_frame(keypoints_mocap)
         # common_frame = sorted(list(set(sagi_frame_2d) & set(dia_right_frame_3d) & set(dia_left_frame_3d) & set(mocap_frame)))
         common_frame = sorted(list(set(sagi_frame_2d) & set(mocap_frame)))
         # print(f"sagi_frame_2d = {sagi_frame_2d}")
         # print(f"dia_right_frame_2d = {dia_right_frame_2d}")
         # print(f"dia_left_frame_2d = {dia_left_frame_2d}")
-        # print(f"mocap_frame = {mocap_frame}")
 
         # # keypoints_frontal.shape[0] より大きい要素を除外 openpose_3dでは最後のフレームが取得できていないため
         # common_frame = [frame for frame in common_frame if frame < keypoints_frontal.shape[0]]
-        print(f"common_frame = {common_frame}")
-        common_frame_mocap = [frame-min(common_frame) for frame in common_frame]
-        print(f"common_frame_mocap = {common_frame_mocap}")
 
         # trunk_vector_3d_frontal_ori = keypoints_frontal[common_frame, 1, :] - keypoints_frontal[common_frame, 8, :]
         # thigh_vector_l_3d_frontal_ori = keypoints_frontal[common_frame, 13, :] - keypoints_frontal[common_frame, 12, :]
         # lower_leg_vector_l_3d_frontal_ori = keypoints_frontal[common_frame, 14, :] - keypoints_frontal[common_frame, 13, :]
         # foot_vector_l_3d_frontal_ori = keypoints_frontal[common_frame, 21, :]  - (keypoints_frontal[common_frame, 19, :] + keypoints_frontal[common_frame, 20, :]) / 2
-
-        trunk_vector_mocap_ori = (keypoints_mocap[:, 11, :] + keypoints_mocap[:, 7, :]) / 2 - (keypoints_mocap[:, 9, :] + keypoints_mocap[:, 10, :] + keypoints_mocap[:, 6, :] + keypoints_mocap[:, 2, :]) / 4
-        thigh_vector_l_mocap_ori = (keypoints_mocap[:, 4, :] + keypoints_mocap[:, 5, :]) / 2 - (keypoints_mocap[:, 2, :] + keypoints_mocap[:, 6, :]) / 2
-        lower_vector_l_mocap_ori = (keypoints_mocap[:, 4, :] + keypoints_mocap[:, 5, :]) / 2 - (keypoints_mocap[:, 0, :] + keypoints_mocap[:, 1, :]) / 2
-        foot_vector_l_mocap_ori = keypoints_mocap[:, 8, :] - keypoints_mocap[:, 3, :]
-
-        rsho = np.array([butter_lowpass_fillter(keypoints_mocap[:, 11, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        lsho = np.array([butter_lowpass_fillter(keypoints_mocap[:, 7, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        rpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 10, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        lpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 6, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        rasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 9, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        lasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 2, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        lknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 4, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        lknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 5, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        lank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 0, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        lank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 1, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        ltoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 8, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
-        lhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 3, x], order = 4 ,cutoff_freq = 6, frame_list=common_frame) for x in range(3)]).T
 
         # trunk_vector_3d_diagonal_right = neck_diagonal_right - mid_hip_diagonal_right
         # thigh_vector_3d_diagonal_right = lknee_diagonal_right - lhip_diagonal_right
@@ -484,12 +405,6 @@ def main():
         # thigh_vector_l_3d_frontal = (thigh_vector_3d_diagonal_right + thigh_vector_3d_diagonal_left) / 2
         # lower_leg_vector_l_3d_frontal = (lower_leg_vector_3d_diagonal_right + lower_leg_vector_3d_diagonal_left) / 2
         # foot_vector_l_3d_frontal = (foot_vector_3d_diagonal_right + foot_vector_3d_diagonal_left) / 2
-
-        trunk_vector_mocap = (rsho + lsho) / 2 - (rasi + lasi + rpsi + lpsi) / 4
-        thigh_vector_l_mocap = (lknee + lknee2) / 2 - (lasi + lpsi) / 2
-        lower_vector_l_mocap = (lknee + lknee2) / 2 - (lank + lank2) / 2
-        foot_vector_l_mocap = ltoe - lhee
-
 
         # np.set_printoptions(threshold=np.inf)
         # print(f"keypoints_mocap = {keypoints_mocap}")
@@ -507,11 +422,6 @@ def main():
         # knee_angle_frontal_3d_ori = pd.DataFrame(calculate_angle(thigh_vector_l_3d_frontal_ori, lower_leg_vector_l_3d_frontal_ori))
         # ankle_angle_frontal_3d_ori = pd.DataFrame(calculate_angle(lower_leg_vector_l_3d_frontal_ori, foot_vector_l_3d_frontal_ori))
 
-        hip_angle_mocap_ori = pd.DataFrame(calculate_angle(trunk_vector_mocap_ori, thigh_vector_l_mocap_ori))
-        knee_angle_mocap_ori = pd.DataFrame(calculate_angle(thigh_vector_l_mocap_ori, lower_vector_l_mocap_ori))
-        ankle_angle_mocap_ori = pd.DataFrame(calculate_angle(lower_vector_l_mocap_ori, foot_vector_l_mocap_ori))
-
-
         hip_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(trunk_vector_sagittal_2d_filtered, thigh_vector_l_sagittal_2d_filtered))
         knee_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(thigh_vector_l_sagittal_2d_filtered, lower_leg_vector_l_sagittal_2d_filtered))
         ankle_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(lower_leg_vector_l_sagittal_2d_filtered, foot_vector_l_sagittal_2d_filtered))
@@ -520,20 +430,23 @@ def main():
         # knee_angle_frontal_3d = pd.DataFrame(calculate_angle(thigh_vector_l_3d_frontal, lower_leg_vector_l_3d_frontal))
         # ankle_angle_frontal_3d = pd.DataFrame(calculate_angle(lower_leg_vector_l_3d_frontal, foot_vector_l_3d_frontal))
 
-        hip_angle_mocap = pd.DataFrame(calculate_angle(trunk_vector_mocap, thigh_vector_l_mocap))
-        knee_angle_mocap = pd.DataFrame(calculate_angle(thigh_vector_l_mocap, lower_vector_l_mocap))
-        ankle_angle_mocap = pd.DataFrame(calculate_angle(lower_vector_l_mocap, foot_vector_l_mocap))
+        df_mocap_angle.index = df_mocap_angle.index - 5
+        df_mocap_angle = df_mocap_angle.reindex(common_frame)
+        df_mocap_angle.iloc[-5:, :] = 0
 
-        pd.set_option('display.max_rows', 500)
-        print(F"hip_angle_sagittal_2d = {hip_angle_sagittal_2d.loc[common_frame]}")
-        print(f"hip_angle_sagittal_2d_filtered = {hip_angle_sagittal_2d_filtered.loc[common_frame]}")
+        hip_angle_mocap = df_mocap_angle["l_hip_angle"].loc[common_frame]
+        knee_angle_mocap = df_mocap_angle["l_knee_angle"].loc[common_frame]
+        ankle_angle_mocap = df_mocap_angle["l_ankle_angle"].loc[common_frame]
+
+        # pd.set_option('display.max_rows', 500)
+        # print(F"hip_angle_sagittal_2d = {hip_angle_sagittal_2d.loc[common_frame]}")
+        # print(f"hip_angle_sagittal_2d_filtered = {hip_angle_sagittal_2d_filtered.loc[common_frame]}")
 
         plt.plot(common_frame, hip_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
         # plt.plot(common_frame, hip_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        plt.plot(common_frame, hip_angle_mocap.loc[common_frame], label="Mocap", color='#2ca02c')
+        plt.plot(common_frame, hip_angle_mocap, label="Mocap", color='#2ca02c')
         plt.plot(common_frame, hip_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
         # plt.plot(common_frame, hip_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.plot(common_frame, hip_angle_mocap_ori.loc[common_frame], color='#2ca02c', alpha=0.5)
         plt.title("Hip Angle")
         plt.legend()
         plt.xlabel("frame [-]")
@@ -544,10 +457,9 @@ def main():
 
         plt.plot(common_frame, knee_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
         # plt.plot(common_frame, knee_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        plt.plot(common_frame, knee_angle_mocap.loc[common_frame], label="Mocap", color='#2ca02c')
+        plt.plot(common_frame, knee_angle_mocap, label="Mocap", color='#2ca02c')
         plt.plot(common_frame, knee_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
         # plt.plot(common_frame, knee_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.plot(common_frame, knee_angle_mocap_ori.loc[common_frame], color='#2ca02c', alpha=0.5)
         plt.title("Knee Angle")
         plt.legend()
         plt.xlabel("frame [-]")
@@ -558,23 +470,22 @@ def main():
 
         plt.plot(common_frame, ankle_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
         # plt.plot(common_frame, ankle_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
-        plt.plot(common_frame, ankle_angle_mocap.loc[common_frame], label="Mocap", color='#2ca02c')
+        plt.plot(common_frame, ankle_angle_mocap, label="Mocap", color='#2ca02c')
         plt.plot(common_frame, ankle_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
         # plt.plot(common_frame, ankle_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.plot(common_frame, ankle_angle_mocap_ori.loc[common_frame], color='#2ca02c', alpha=0.5)
         plt.title("Ankle Angle")
         plt.legend()
         plt.xlabel("frame [-]")
         plt.ylabel("angle [°]")
         plt.savefig(os.path.join(root_dir, f"{condition_num}_ankle_angle.png"))
-        plt.show() #5frame
+        # plt.show() #5frame
         plt.cla()
 
-        mae_hip_sagittal = mean_absolute_error(hip_angle_sagittal_2d.iloc[common_frame], hip_angle_mocap.iloc[common_frame])
+        mae_hip_sagittal = mean_absolute_error(hip_angle_sagittal_2d.iloc[common_frame], hip_angle_mocap.loc[common_frame])
+        mae_knee_sagittal = mean_absolute_error(knee_angle_sagittal_2d.iloc[common_frame], knee_angle_mocap.loc[common_frame])
+        mae_ankle_sagittal = mean_absolute_error(ankle_angle_sagittal_2d.iloc[common_frame], ankle_angle_mocap.loc[common_frame])
         # mae_hip_frontal = mean_absolute_error(hip_angle_frontal_3d, hip_angle_mocap)
-        mae_knee_sagittal = mean_absolute_error(knee_angle_sagittal_2d.iloc[common_frame], knee_angle_mocap.iloc[common_frame])
         # mae_knee_frontal = mean_absolute_error(knee_angle_frontal_3d, knee_angle_mocap)
-        mae_ankle_sagittal = mean_absolute_error(ankle_angle_sagittal_2d.iloc[common_frame], ankle_angle_mocap.iloc[common_frame])
         # mae_ankle_frontal = mean_absolute_error(ankle_angle_frontal_3d, ankle_angle_mocap)
 
         print(f"mae_hip_sagittal = {mae_hip_sagittal}")

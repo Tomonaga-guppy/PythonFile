@@ -101,7 +101,7 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバ�
     return data_fillter
 
 def main():
-    csv_path_dir = r"F:\Tomson\gait_pattern\20240808\Motive"
+    csv_path_dir = r"F:\Tomson\gait_pattern\20240712\Motive"
     csv_paths = glob.glob(os.path.join(csv_path_dir, "[0-9]*.csv"))
 
     for i, csv_path in enumerate(csv_paths):
@@ -280,19 +280,20 @@ def main():
             # l_ankle_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lfoot)
             # l_ankle_angle = R.from_matrix(l_ankle_realative_rotation).as_euler('yzx', degrees=True)[0]
 
-            angle_list.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle])
+            angles = [r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle]
+            angles = [angle + 360 if angle < 0 else angle for angle in angles]  #オイラー角(-180~180)が負の値の場合は正に変換
+            angle_list.append(angles)
 
-            def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配列を入力)
-                angle_list = []
-                for frame in range(len(vector1)):
-                    dot_product = np.dot(vector1[frame], vector2[frame])
-                    cross_product = np.cross(vector1[frame], vector2[frame])
-                    angle = np.arctan2(np.linalg.norm(cross_product), dot_product)
-                    angle = angle * 180 / np.pi
-                    angle_list.append(angle)
+            # def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配列を入力)
+            #     angle_list = []
+            #     for frame in range(len(vector1)):
+            #         dot_product = np.dot(vector1[frame], vector2[frame])
+            #         cross_product = np.cross(vector1[frame], vector2[frame])
+            #         angle = np.arctan2(np.linalg.norm(cross_product), dot_product)
+            #         angle = angle * 180 / np.pi
+            #         angle_list.append(angle)
 
-                return angle_list
-
+            #     return angle_list
 
 
             plot_flag = False
@@ -391,24 +392,19 @@ def main():
                 plt.legend()
                 plt.show()
 
-            e_z_lshank_list.append(e_z_lshank)
-            e_z_lfoot_list.append(e_z_lfoot)
+            # e_z_lshank_list.append(e_z_lshank)
+            # e_z_lfoot_list.append(e_z_lfoot)
 
 
         angle_array = np.array(angle_list)
+        # print(f"angle_array = {angle_array}")
+        # print(f"angle_array.shape = {angle_array.shape}")
         df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
         df.index = df.index + full_range.start
         df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_{os.path.basename(csv_path)}"))
 
-        ankle_angle = calculate_angle(e_z_lshank_list, e_z_lfoot_list)
+        # ankle_angle = calculate_angle(e_z_lshank_list, e_z_lfoot_list)
         # print(f"ankle_angle = {ankle_angle}")
-
-        fig, ax = plt.subplots()
-        plt.plot(full_range, ankle_angle, label="arctan2")
-        plt.plot(full_range, df["l_ankle_angle"], label="rot")
-        plt.legend()
-        plt.ylim(0, 175)
-        plt.show()
 
 
 if __name__ == "__main__":
