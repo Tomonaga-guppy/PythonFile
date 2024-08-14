@@ -101,14 +101,17 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバ�
     return data_fillter
 
 def main():
-    csv_path_dir = r"F:\Tomson\gait_pattern\20240712\Motive"
-    csv_paths = glob.glob(os.path.join(csv_path_dir, "[0-9]*.csv"))
+    csv_path_dir = r"F:\Tomson\gait_pattern\20240808\Motive"
+    csv_paths = glob.glob(os.path.join(csv_path_dir, "1*.csv"))
+    # csv_paths = glob.glob(os.path.join(csv_path_dir, "[1-9]*.csv"))
 
     for i, csv_path in enumerate(csv_paths):
         keypoints_mocap, full_range = read_3d_optitrack(csv_path)
         print(f"csv_path = {csv_path}")
 
         angle_list = []
+        dist_list = []
+        bector_list = []
 
         e_z_lshank_list = []
         e_z_lfoot_list = []
@@ -295,6 +298,12 @@ def main():
 
             #     return angle_list
 
+            # trans_mat_pelvis = np.array([[e_x_pelvis[0], e_y_pelvis[0], e_z_pelvis[0], hip[0]],
+            #                       [e_x_pelvis[1], e_y_pelvis[1], e_z_pelvis[1], hip[1]],
+            #                       [e_x_pelvis[2], e_y_pelvis[2], e_z_pelvis[2], hip[2]],
+            #                       [0, 0, 0, 1]])
+            # lhee_basse_pelvis = np.dot(trans_mat_pelvis, np.append(lhee[frame_num,:], 1))[:3]
+            # print(f"lhee_basse_pelvis = {lhee_basse_pelvis}")
 
             plot_flag = False
             if plot_flag:
@@ -305,31 +314,26 @@ def main():
                 ax.set_xlim(-1, 1)
                 ax.set_ylim(-1, 1)
                 ax.set_zlim(-1, 1)
+                #方向を設定
+                ax.view_init(elev=0, azim=0)
 
-                ax.scatter(rasi[frame_num,:][0], rasi[frame_num,:][1], rasi[frame_num,:][2], label='rasi[frame_num,:]')
-                ax.scatter(lasi[frame_num,:][0], lasi[frame_num,:][1], lasi[frame_num,:][2], label='lasi[frame_num,:]')
-                ax.scatter(rpsi[frame_num,:][0], rpsi[frame_num,:][1], rpsi[frame_num,:][2], label='rpsi[frame_num,:]')
-                ax.scatter(lpsi[frame_num,:][0], lpsi[frame_num,:][1], lpsi[frame_num,:][2], label='lpsi[frame_num,:]')
+                ax.scatter(rasi[frame_num,:][0], rasi[frame_num,:][1], rasi[frame_num,:][2], label='rasi')
+                ax.scatter(lasi[frame_num,:][0], lasi[frame_num,:][1], lasi[frame_num,:][2], label='lasi')
+                ax.scatter(rpsi[frame_num,:][0], rpsi[frame_num,:][1], rpsi[frame_num,:][2], label='rpsi')
+                ax.scatter(lpsi[frame_num,:][0], lpsi[frame_num,:][1], lpsi[frame_num,:][2], label='lpsi')
                 ax.scatter(rfoot[0], rfoot[1], rfoot[2], label='rfoot')
                 ax.scatter(lfoot[0], lfoot[1], lfoot[2], label='lfoot')
                 ax.scatter(rshank[0], rshank[1], rshank[2], label='rshank')
                 ax.scatter(lshank[0], lshank[1], lshank[2], label='lshank')
-                ax.scatter(rtoe[frame_num,:][0], rtoe[frame_num,:][1], rtoe[frame_num,:][2], label='rtoe[frame_num,:]')
-                ax.scatter(ltoe[frame_num,:][0], ltoe[frame_num,:][1], ltoe[frame_num,:][2], label='ltoe[frame_num,:]')
-                ax.scatter(rhee[frame_num,:][0], rhee[frame_num,:][1], rhee[frame_num,:][2], label='rhee[frame_num,:]')
-                ax.scatter(lhee[frame_num, :][0], lhee[frame_num, :][1], lhee[frame_num, :][2], label='lhee[frame_num, :]')
+                ax.scatter(rtoe[frame_num,:][0], rtoe[frame_num,:][1], rtoe[frame_num,:][2], label='rtoe')
+                ax.scatter(ltoe[frame_num,:][0], ltoe[frame_num,:][1], ltoe[frame_num,:][2], label='ltoe')
+                ax.scatter(rhee[frame_num,:][0], rhee[frame_num,:][1], rhee[frame_num,:][2], label='rhee')
+                ax.scatter(lhee[frame_num, :][0], lhee[frame_num, :][1], lhee[frame_num, :][2], label='lhee')
                 ax.scatter(lumbar[0], lumbar[1], lumbar[2], label='lumbar')
+                ax.scatter(hip[0], hip[1], hip[2], label='hip')
 
-                # ax.plot([rasi[frame_num,:][0], lasi[frame_num,:])[0]], [rasi[frame_num,:][1], lasi[frame_num,:])][1]], [rasi[frame_num,:][2], lasi[frame_num,:])][2]], color='blue')
-                # ax.plot([rpsi[frame_num,:][0], lpsi[frame_num,:][0]], [rpsi[frame_num,:][1], lpsi[frame_num,:][1]], [rpsi[frame_num,:][2], lpsi[frame_num,:][2]], color='blue')
-                # ax.plot([rasi[frame_num,:][0], rpsi[frame_num,:][0]], [rasi[frame_num,:][1], rpsi[frame_num,:][1]], [rasi[frame_num,:][2], rpsi[frame_num,:][2]], color='blue')
-                # ax.plot([lasi[frame_num,:])[0], lpsi[frame_num,:][0]], [lasi[frame_num,:])][1], lpsi[frame_num,:][1]], [lasi[frame_num,:])][2], lpsi[frame_num,:][2]], color='blue')
-                # ax.plot([rasi[frame_num,:][0], rshank[0]], [rasi[frame_num,:][1], rshank[1]], [rasi[frame_num,:][2], rshank[2]], color='blue')
-                # ax.plot([lasi[frame_num,:])[0], lshank[0]], [lasi[frame_num,:])][1], lshank[1]], [lasi[frame_num,:])][2], lshank[2]], color='blue')
-                # ax.plot([rshank[0], rfoot[0]], [rshank[1], rfoot[1]], [rshank[2], rfoot[2]], color='blue')
-                # ax.plot([lshank[0], lfoot[0]], [lshank[1], lfoot[1]], [lshank[2], lfoot[2]], color='blue')
-                # ax.plot([rhee[frame_num,:][0], rtoe[frame_num,:][0]], [rhee[frame_num,:][1], rtoe[frame_num,:][1]], [rhee[frame_num,:][2], rtoe[frame_num,:][2]], color='blue')
-                # ax.plot([lhee[frame_num, :][0], ltoe[frame_num,:][0]], [lhee[frame_num, :][1], ltoe[frame_num,:][1]], [lhee[frame_num, :][2], ltoe[frame_num,:][2]], color='blue')
+
+                ax.plot([lhee[frame_num, :][0]- hip[0]], [lhee[frame_num, :][1]- hip[1]], [lhee[frame_num, :][2]- hip[2]], color='red')
 
                 e_x_pelvis = e_x_pelvis * 0.1
                 e_y_pelvis = e_y_pelvis * 0.1
@@ -381,13 +385,7 @@ def main():
                 ax.plot([lfoot[0], lfoot[0] + e_y_lfoot[0]], [lfoot[1], lfoot[1] + e_y_lfoot[1]], [lfoot[2], lfoot[2] + e_y_lfoot[2]], color='green')
                 ax.plot([lfoot[0], lfoot[0] + e_z_lfoot[0]], [lfoot[1], lfoot[1] + e_z_lfoot[1]], [lfoot[2], lfoot[2] + e_z_lfoot[2]], color='blue')
 
-                ax.scatter(hip[0], hip[1], hip[2], label='hip')
-                ax.scatter(rthigh[0], rthigh[1], rthigh[2], label='rthigh')
-                ax.scatter(lthigh[0], lthigh[1], lthigh[2], label='lthigh')
-                ax.scatter(rshank[0], rshank[1], rshank[2], label='rshank')
-                ax.scatter(lshank[0], lshank[1], lshank[2], label='lshank')
-                ax.scatter(rfoot[0], rfoot[1], rfoot[2], label='rfoot')
-                ax.scatter(lfoot[0], lfoot[1], lfoot[2], label='lfoot')
+
 
                 plt.legend()
                 plt.show()
@@ -395,6 +393,12 @@ def main():
             # e_z_lshank_list.append(e_z_lshank)
             # e_z_lfoot_list.append(e_z_lfoot)
 
+            #骨盤とかかとの距離計算
+            dist = np.linalg.norm(lhee[frame_num, :] - hip[:])
+            bector = lhee[frame_num, :] - hip[:]
+            dist_list.append(dist)
+            bector_list.append(bector)
+            # bector_list.append(lhee_basse_pelvis)
 
         angle_array = np.array(angle_list)
         # print(f"angle_array = {angle_array}")
@@ -405,6 +409,46 @@ def main():
 
         # ankle_angle = calculate_angle(e_z_lshank_list, e_z_lfoot_list)
         # print(f"ankle_angle = {ankle_angle}")
+
+        # fig, ax = plt.subplots()
+        # ax.plot(full_range, dist_list)
+        # plt.show()
+        # plt.cla
+
+        bector_array = np.array(bector_list)
+        lhee_pel_z = bector_array[:, 2]
+        df = pd.DataFrame({"frame":full_range, "lhee_pel_z":lhee_pel_z})
+        df = df.sort_values(by="lhee_pel_z", ascending=False)
+        print(df)
+        ic_list = df.head(30)["frame"].values
+        print(f"ic_list = {ic_list}")
+
+        filtered_list = []
+        skip_values = set()
+        for value in ic_list:
+            # すでにスキップリストにある場合はスキップ
+            if value in skip_values:
+                continue
+            # 現在の値を結果リストに追加
+            filtered_list.append(value)
+            # 10個以内の数値をスキップリストに追加
+            skip_values.update(range(value - 10, value + 11))
+        print(f"フィルタリング後のリスト:{filtered_list}")
+
+
+        # print(f"bector_list = {bector_list}")
+        fig, ax = plt.subplots()
+        # ax.plot(full_range, bector_array[:, 0], label="x")
+        # ax.plot(full_range, bector_array[:, 1], label="y")
+        ax.plot(full_range, bector_array[:, 2], label="z")
+        plt.legend()
+        # plt.show()
+
+
+
+
+
+
 
 
 if __name__ == "__main__":

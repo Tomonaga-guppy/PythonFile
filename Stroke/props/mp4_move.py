@@ -2,7 +2,7 @@ import os
 import glob
 import shutil
 
-root_dir = r"F:\Tomson\gait_pattern\20240712"
+root_dir = r"F:\Tomson\gait_pattern\20240808"
 original_dirs = glob.glob(os.path.join(root_dir, "*" ,"original.mp4"))
 
 for i, original_mov in enumerate(original_dirs):
