@@ -12,6 +12,7 @@ from scipy.interpolate import CubicSpline
 from sklearn.metrics import mean_absolute_error
 
 root_dir = r"F:\Tomson\gait_pattern\20240808"
+# root_dir = r"F:\Tomson\gait_pattern\20240712"
 
 condition_list = ["0", "1", "2", "3", "4"]  #0がTポーズ,1が通常歩行, 2が通常歩行（遅）, 3が疑似麻痺歩行, 4が疑似麻痺歩行（遅）
 condition_keynum = condition_list[:]
@@ -430,9 +431,9 @@ def main():
         # knee_angle_frontal_3d = pd.DataFrame(calculate_angle(thigh_vector_l_3d_frontal, lower_leg_vector_l_3d_frontal))
         # ankle_angle_frontal_3d = pd.DataFrame(calculate_angle(lower_leg_vector_l_3d_frontal, foot_vector_l_3d_frontal))
 
-        df_mocap_angle.index = df_mocap_angle.index - 5
-        df_mocap_angle = df_mocap_angle.reindex(common_frame)
-        df_mocap_angle.iloc[-5:, :] = 0
+        # df_mocap_angle.index = df_mocap_angle.index - 5
+        # df_mocap_angle = df_mocap_angle.reindex(common_frame)
+        # df_mocap_angle.iloc[-5:, :] = 0
 
         hip_angle_mocap = df_mocap_angle["l_hip_angle"].loc[common_frame]
         knee_angle_mocap = df_mocap_angle["l_knee_angle"].loc[common_frame]
@@ -445,7 +446,7 @@ def main():
         plt.plot(common_frame, hip_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
         # plt.plot(common_frame, hip_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
         plt.plot(common_frame, hip_angle_mocap, label="Mocap", color='#2ca02c')
-        plt.plot(common_frame, hip_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
+        # plt.plot(common_frame, hip_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
         # plt.plot(common_frame, hip_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
         plt.title("Hip Angle")
         plt.legend()
@@ -458,7 +459,7 @@ def main():
         plt.plot(common_frame, knee_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
         # plt.plot(common_frame, knee_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
         plt.plot(common_frame, knee_angle_mocap, label="Mocap", color='#2ca02c')
-        plt.plot(common_frame, knee_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
+        # plt.plot(common_frame, knee_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
         # plt.plot(common_frame, knee_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
         plt.title("Knee Angle")
         plt.legend()
@@ -471,7 +472,7 @@ def main():
         plt.plot(common_frame, ankle_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
         # plt.plot(common_frame, ankle_angle_frontal_3d, label="3D frontal", color='#ff7f0e')
         plt.plot(common_frame, ankle_angle_mocap, label="Mocap", color='#2ca02c')
-        plt.plot(common_frame, ankle_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
+        # plt.plot(common_frame, ankle_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
         # plt.plot(common_frame, ankle_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
         plt.title("Ankle Angle")
         plt.legend()
