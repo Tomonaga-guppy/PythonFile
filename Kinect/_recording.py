@@ -1,5 +1,5 @@
 from argparse import ArgumentParser
-from pyk4a import Config, ImageFormat, PyK4A, PyK4ARecord
+from pyk4a import Config, ImageFormat, PyK4A, PyK4ARecord, FPS, DepthMode, ColorResolution, WiredSyncMode
 import os
 import time
 
@@ -7,21 +7,25 @@ name = input("保存ファイル名をいれてください ")
 save_dir = r"C:\Users\tus\Desktop\record\recorded_data\kinect\2024_0807pyk4a"
 # save_dir = r"C:\Users\tus\Desktop\record\recorded_data\kinect\2024_0807pyk4a\test.mkv"
 
-config0 = Config(color_format=ImageFormat.COLOR_MJPG, camera_fps=2, depth_mode=2, color_resolution=2, wired_sync_mode=1)
-config1 = Config(color_format=ImageFormat.COLOR_MJPG, camera_fps=2, depth_mode=2, color_resolution=2, wired_sync_mode=2)
-config2 = Config(color_format=ImageFormat.COLOR_MJPG, camera_fps=2, depth_mode=2, color_resolution=2, wired_sync_mode=2)
-# config = Config(color_format=ImageFormat.COLOR_MJPG, camera_fps=2, depth_mode=2, color_resolution=2, wired_sync_mode=2)
+# config0 = Config(color_format=ImageFormat.COLOR_MJPG, camera_fps=FPS.FPS_30, depth_mode=DepthMode.NFOV_UNBINNED, color_resolution=ColorResolution.RES_1080P, wired_sync_mode=WiredSyncMode.MASTER)
+config0 = Config(color_format=ImageFormat.COLOR_MJPG, camera_fps=FPS.FPS_30, depth_mode=DepthMode.NFOV_UNBINNED, color_resolution=ColorResolution.RES_1080P, wired_sync_mode=WiredSyncMode.SUBORDINATE)
+config1 = Config(color_format=ImageFormat.COLOR_MJPG, camera_fps=FPS.FPS_30, depth_mode=DepthMode.NFOV_UNBINNED, color_resolution=ColorResolution.RES_1080P, wired_sync_mode=WiredSyncMode.SUBORDINATE)
+config2 = Config(color_format=ImageFormat.COLOR_MJPG, camera_fps=FPS.FPS_30, depth_mode=DepthMode.NFOV_UNBINNED, color_resolution=ColorResolution.RES_1080P, wired_sync_mode=WiredSyncMode.SUBORDINATE)
+
 device0 = PyK4A(config=config0, device_id=0)
 device1 = PyK4A(config=config1, device_id=1)
 device2 = PyK4A(config=config2, device_id=2)
 device1.start()
 device2.start()
-
-time.sleep(5)
+time.sleep(1)
 device0.start()
 
-record1 = PyK4ARecord(device=device0, config=config1, path=os.path.join(save_dir,f"{name}_1.mkv"))
-record2 = PyK4ARecord(device=device0, config=config2, path=os.path.join(save_dir,f"{name}_2.mkv"))
+device0.exposure = 10000
+device1.exposure = 10000
+device2.exposure = 10000
+
+record1 = PyK4ARecord(device=device1, config=config1, path=os.path.join(save_dir,f"{name}_1.mkv"))
+record2 = PyK4ARecord(device=device2, config=config2, path=os.path.join(save_dir,f"{name}_2.mkv"))
 record0 = PyK4ARecord(device=device0, config=config0, path=os.path.join(save_dir,f"{name}_0.mkv"))
 # record = PyK4ARecord(device=device0, config=config, path=save_dir)
 

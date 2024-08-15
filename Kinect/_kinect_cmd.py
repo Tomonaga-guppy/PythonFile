@@ -1,12 +1,13 @@
 import subprocess
 
 name = input("Enter name: ")
+save_dir = r"C:\Users\tus\Desktop\record\recorded_data\kinect"
 
 # 実行するコマンド
 commands = [
-    rf'"C:\Program Files\Azure Kinect SDK v1.4.1\tools\k4arecorder.exe" --device 0 --external-sync master --imu OFF --exposure-control -8 --rate 30 --record-length 10 --color-mode 1080p {name}_0.mkv',
-    rf'"C:\Program Files\Azure Kinect SDK v1.4.1\tools\k4arecorder.exe" --device 1 --external-sync sub --imu OFF --exposure-control -8 --rate 30 --record-length 10 --color-mode 1080p {name}_1.mkv',
-    rf'"C:\Program Files\Azure Kinect SDK v1.4.1\tools\k4arecorder.exe" --device 2 --external-sync sub --imu OFF --exposure-control -8 --rate 30 --record-length 10 --color-mode 1080p {name}_2.mkv'
+    rf'"C:\Program Files\Azure Kinect SDK v1.4.1\tools\k4arecorder.exe" --device 0 --external-sync sub --depth-delay 160 --imu OFF --exposure-control -6 --rate 30 --color-mode 1080p {save_dir}\{name}_0.mkv',
+    rf'"C:\Program Files\Azure Kinect SDK v1.4.1\tools\k4arecorder.exe" --device 1 --external-sync sub --depth-delay 320 --imu OFF --exposure-control -6 --rate 30 --color-mode 1080p {save_dir}\{name}_1.mkv',
+    rf'"C:\Program Files\Azure Kinect SDK v1.4.1\tools\k4arecorder.exe" --device 2 --external-sync sub --depth-delay 480 --imu OFF --exposure-control -6 --rate 30 --color-mode 1080p {save_dir}\{name}_2.mkv'
 ]
 
 # 各コマンドを新しいコマンドプロンプトウィンドウで実行
