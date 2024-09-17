@@ -11,8 +11,8 @@ sys.path.append(helpers_dir)
 from helpers import convert_to_bgra_if_required
 
 def main():
-    mkv_folder = r"F:\Tomson\gait_pattern\20240808"
-    # mkv_folder = r"F:\Tomson\gait_pattern\20240712"
+    # mkv_folder = r"F:\Tomson\gait_pattern\20240808"
+    mkv_folder = r"f:\Tomson\gait_pattern\20240808"
     mkv_files = glob.glob(os.path.join(mkv_folder, '[0-9]*.mkv'))
     print(f"mkv_files = {mkv_files}")
 
@@ -21,6 +21,8 @@ def main():
         folder_path = os.path.dirname(mkv_file_path) + '/' + os.path.basename(mkv_file_path).split('.')[0]
         if os.path.exists(folder_path) == False:
             os.mkdir(folder_path)
+        else:
+            continue
 
         # MKVファイルの再生
         playback = PyK4APlayback(mkv_file_path)
