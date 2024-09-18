@@ -16,7 +16,7 @@ for self_angle_path in self_angle_paths:
     df_skycom = pd.read_csv(skycom_path, index_col=0, skiprows=11, encoding='ISO-8859-1')
     print(df_skycom)
 
-    plt.plot(df_self.index, df_self['l_hip_angle'], label='self', color='#ff7f0e')
+    plt.plot(df_self.index, df_self['l_hip_angle'], label='self', color='#ff7f0e')#color='#2ca02c' 緑 color='#ff7f0e' オレンジ  color='#1f77b4' 青
     plt.plot(df_skycom.index, df_skycom['lt hip'], label='SKYCOM', color='#2ca02c')
     plt.title('l_hip_angle')
     plt.xlabel('frame [Hz]')

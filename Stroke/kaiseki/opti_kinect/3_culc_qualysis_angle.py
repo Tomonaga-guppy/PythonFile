@@ -8,20 +8,31 @@ from scipy.signal import butter, filtfilt
 import json
 
 def read_3d_optitrack(csv_path, down_hz):
-    df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])
+    col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
+    df = pd.read_csv(csv_path, names=col_names, sep='\t', skiprows=[0,1,2,3,4,5,6,7,8,10])  #Qualysis
+    df.columns = df.iloc[0]  # 最初の行をヘッダーに
+    df = df.drop(0).reset_index(drop=True)  # ヘッダーにした行をデータから削除し、インデックスをリセット
 
     if down_hz:
         df_down = df[::4].reset_index(drop=True)
     else:
         df_down = df
 
-
     marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
+    marker_dict = dict()
+    xyz_list = ['X', 'Y', 'Z']
 
-    # marker_set = ["RASI[frame_num,:]", "LASI[frame_num,:])","RPSI[frame_num,:]","LPSI[frame_num,:]","RKNE","LKNE", "RTHI", "LTHI", "RANK[frame_num,:]","LANK", "RTIB", "LTIB","RTOE[frame_num,:]","LTOE[frame_num,:]","RHEE[frame_num,:]","LHEE[frame_num, :]",
-    #             "RSHO", "LSHO","C7", "T10", "CLAV", "STRN", "RBAK", "RKNE2", "LKNE2", "RANK[frame_num,:]2", "LANK2[frame_num,:]"]
+    for marker in marker_set:
+        for i, xyz in enumerate(xyz_list):
+            key_index = df_down.columns.get_loc(f'{marker}')
+            marker_rows = (key_index-1)*3 + i
+            marker_dict[f"{marker}_{xyz}"] = marker_rows
 
-    marker_set_df = df_down[[col for col in df_down.columns if any(marker in col[0] for marker in marker_set)]].copy()
+    marker_set_df = pd.DataFrame(columns=marker_dict.keys())
+    for column in marker_set_df.columns:
+        marker_set_df[column] = df_down.iloc[:, marker_dict[column]].values
+
+    marker_set_df = marker_set_df.apply(pd.to_numeric, errors='coerce')  #文字列として読み込まれたデータを数値に変換
     success_frame_list = []
 
     for frame in range(0, len(marker_set_df)):
@@ -34,59 +45,7 @@ def read_3d_optitrack(csv_path, down_hz):
 
     for i, index in enumerate(full_range):
         marker_set_df.loc[index, :] = interpolate_success_df.iloc[i, :]
-    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path)}"))
-
-    # print(f"colums = {marker_set_df.columns}")
-
-    '''
-    表示の順番
-    columns = MultiIndex([(   'MarkerSet 01:C7', 'X'), 0
-                ( 'MarkerSet 01:CLAV', 'X'), 1
-                ( 'MarkerSet 01:LANK', 'X'), 2
-                ('MarkerSet 01:LANK2[frame_num,:]', 'X'), 3
-                ( 'MarkerSet 01:LASI[frame_num,:])', 'X'), 4
-                ( 'MarkerSet 01:LHEE[frame_num, :]', 'X'), 5
-                ( 'MarkerSet 01:LKNE', 'X'), 6
-                ('MarkerSet 01:LKNE2', 'X'), 7
-                ( 'MarkerSet 01:LPSI[frame_num,:]', 'X'), 8
-                ( 'MarkerSet 01:LSHO', 'X'), 9
-                ( 'MarkerSet 01:LTHI', 'X'), 10
-                ( 'MarkerSet 01:LTIB', 'X'), 11
-                ( 'MarkerSet 01:LTOE[frame_num,:]', 'X'), 12
-                ( 'MarkerSet 01:RANK[frame_num,:]', 'X'), 13
-                ('MarkerSet 01:RANK[frame_num,:]2', 'X'), 14
-                ( 'MarkerSet 01:RASI[frame_num,:]', 'X'), 15
-                ( 'MarkerSet 01:RBAK', 'X'), 16
-                ( 'MarkerSet 01:RHEE[frame_num,:]', 'X'), 17
-                ( 'MarkerSet 01:RKNE', 'X'), 18
-                ('MarkerSet 01:RKNE2', 'X'), 19
-                ( 'MarkerSet 01:RPSI[frame_num,:]', 'X'), 20
-                ( 'MarkerSet 01:RSHO', 'X'), 21
-                ( 'MarkerSet 01:RTHI', 'X'), 22
-                ( 'MarkerSet 01:RTIB', 'X'), 23
-                ( 'MarkerSet 01:RTOE[frame_num,:]', 'X'), 24
-                ( 'MarkerSet 01:STRN', 'X'), 25
-                (  'MarkerSet 01:T10', 'X'), 26
-            )
-
-    columns = MultiIndex([( 'MarkerSet 01:LANK', 'X'), 0
-                ('MarkerSet 01:LANK2[frame_num,:]', 'X'), 1
-                ( 'MarkerSet 01:LASI[frame_num,:])', 'X'), 2
-                ( 'MarkerSet 01:LHEE[frame_num, :]', 'X'), 3
-                ( 'MarkerSet 01:LKNE', 'X'), 4
-                ('MarkerSet 01:LKNE2', 'X'), 5
-                ( 'MarkerSet 01:LPSI[frame_num,:]', 'X'), 6
-                ( 'MarkerSet 01:LTOE[frame_num,:]', 'X'), 7
-                ( 'MarkerSet 01:RANK[frame_num,:]', 'X'), 8
-                ('MarkerSet 01:RANK[frame_num,:]2', 'X'), 9
-                ( 'MarkerSet 01:RASI[frame_num,:]', 'X'), 10
-                ( 'MarkerSet 01:RHEE[frame_num,:]', 'X'), 11
-                ( 'MarkerSet 01:RKNE', 'X'), 12
-                ('MarkerSet 01:RKNE2', 'X'), 13
-                ( 'MarkerSet 01:RPSI[frame_num,:]', 'X'), 14
-                ( 'MarkerSet 01:RTOE[frame_num,:]', 'X'), 15
-            )
-    '''
+    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path).split('.')[0]}.csv"))
 
     keypoints = marker_set_df.values
     keypoints_mocap = keypoints.reshape(-1, len(marker_set), 3)  #xyzで組になるように変形
@@ -98,8 +57,6 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバ�
     nyquist_freq = sampling_freq / 2
     normal_cutoff = cutoff_freq / nyquist_freq
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    # print(f"data = {data}")
-    # print(f"data.shape = {data.shape}")
     y = filtfilt(b, a, data[frame_list])
     data_fillter = np.copy(data)
     data_fillter[frame_list] = y
@@ -107,11 +64,12 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバ�
 
 def main():
     down_hz = False
-    csv_path_dir = r"F:\Tomson\gait_pattern\20240808\Motive"
-    csv_paths = glob.glob(os.path.join(csv_path_dir, "2*.csv"))
+    csv_path_dir = r"F:\Tomson\gait_pattern\20240822\qualysis"
+    csv_paths = glob.glob(os.path.join(csv_path_dir, "sub3*.tsv"))
 
     for i, csv_path in enumerate(csv_paths):
         keypoints_mocap, full_range = read_3d_optitrack(csv_path, down_hz)
+        print(keypoints_mocap.shape)
         print(f"csv_path = {csv_path}")
 
         angle_list = []
@@ -120,23 +78,23 @@ def main():
 
         e_z_lshank_list = []
         e_z_lfoot_list = []
-
-        rasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 10, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 2, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 14, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 6, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 8, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 0, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 9, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 1, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 12, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 4, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 13, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 5, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rtoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 15, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        ltoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 7, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 11, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 3, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        #["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
+        rasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 0, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        lasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 1, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        rpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 2, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        lpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 3, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        rknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 4, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        lknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 5, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        rank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 6, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        lank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 7, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        rtoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 8, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        ltoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 9, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        rhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 10, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        lhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 11, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        rknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 12, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        lknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 13, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        rank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 14, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        lank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 15, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
 
         for frame_num in full_range:
             #メモ
@@ -144,7 +102,7 @@ def main():
             d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:]) / 2)
             # r = 0.0159 #[m] サイズ違うかも確認必要 https://www.optitrack.jp/products/accessories/marker.html
             r = 0.0127 #[m] 三宅君
-            h = 1.7 #[m] 山本先生1.703 三宅君1.7
+            h = 1.74
             k = h/1.7
             beta = 0.1 * np.pi #[rad]
             theta = 0.496 #[rad]
@@ -414,9 +372,9 @@ def main():
         df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
         df.index = df.index + full_range.start
         if down_hz:
-            df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_30Hz_{os.path.basename(csv_path)}"))
+            df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_30Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
         else:
-            df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_120Hz_{os.path.basename(csv_path)}"))
+            df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_120Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
 
         # ankle_angle = calculate_angle(e_z_lshank_list, e_z_lfoot_list)
         # print(f"ankle_angle = {ankle_angle}")
@@ -447,7 +405,8 @@ def main():
                 skip_values.update(range(value - 10, value + 11))
             filtered_list = sorted(filtered_list)
             print(f"フィルタリング後のリスト:{filtered_list}")
-            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_{os.path.basename(csv_path).split('.')[0]}"), filtered_list)
+            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_{os.path.basename(csv_path).split('.')[0]}.csv"), filtered_list)
+
 
 
 

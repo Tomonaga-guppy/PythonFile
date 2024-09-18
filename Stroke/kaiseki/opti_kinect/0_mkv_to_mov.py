@@ -11,9 +11,8 @@ sys.path.append(helpers_dir)
 from helpers import convert_to_bgra_if_required
 
 def main():
-    # mkv_folder = r"F:\Tomson\gait_pattern\20240808"
-    mkv_folder = r"f:\Tomson\gait_pattern\20240808"
-    mkv_files = glob.glob(os.path.join(mkv_folder, '[0-9]*.mkv'))
+    mkv_folder = r"F:\Tomson\gait_pattern\20240822"
+    mkv_files = glob.glob(os.path.join(mkv_folder, 'sub3*.mkv'))
     print(f"mkv_files = {mkv_files}")
 
     for i, mkv_file_path in enumerate(mkv_files):
@@ -64,7 +63,7 @@ def main():
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-            print(f"frame_count = {frame_count}")
+            print(f"{i}/{len(mkv_files)} frame_count = {frame_count}")
             writer.write(rgb_image)
             frame_count += 1
 

@@ -7,10 +7,20 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 import json
 
-def read_3d_optitrack(csv_path):
-    df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])
+def read_3d_optitrack(csv_path, down_hz):
+    col_names = range(1, 100,1)  #データの形が汚い場合に対応するためあらかじめ列数を設定
+    df = pd.read_csv(csv_path, names=col_names, sep='\t')  #Qualysis
+    # df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 3,4,5,6,7,8,], header=[0, 2])  #Qualysis
+    # df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])  #Motive
 
-    df_down = df[::4].reset_index(drop=True)
+    # pd.set_option('display.max_rows', None)  # 表示する行数を増やす
+    print(f"df = {df.head(100)}")
+    # print(f"df = {df.head(100)}")
+
+    if down_hz:
+        df_down = df[::4].reset_index(drop=True)
+    else:
+        df_down = df
 
     marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
 
@@ -102,12 +112,12 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバ�
     return data_fillter
 
 def main():
-    csv_path_dir = r"F:\Tomson\gait_pattern\20240808\Motive"
-    csv_paths = glob.glob(os.path.join(csv_path_dir, "[0-9]*.csv"))
-    # csv_paths = glob.glob(os.path.join(csv_path_dir, "[1-9]*.csv"))
+    down_hz = False
+    csv_path_dir = r"F:\Tomson\gait_pattern\20240822\qualysis"
+    csv_paths = glob.glob(os.path.join(csv_path_dir, "sub3*.tsv"))
 
     for i, csv_path in enumerate(csv_paths):
-        keypoints_mocap, full_range = read_3d_optitrack(csv_path)
+        keypoints_mocap, full_range = read_3d_optitrack(csv_path, down_hz)
         print(f"csv_path = {csv_path}")
 
         angle_list = []
@@ -263,7 +273,7 @@ def main():
             l_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_lthigh)
             l_hip_angle = R.from_matrix(l_hip_realative_rotation).as_euler('yzx', degrees=True)[0]
             r_knee_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rthigh)
-            r_knee_angle = R.from_matrix(r_knee_realative_rotation).as_euler('yzx', degrees=True)[0]
+            r_knee_angle =  R.from_matrix(r_knee_realative_rotation).as_euler('yzx', degrees=True)[0]
             l_knee_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lthigh)
             l_knee_angle = R.from_matrix(l_knee_realative_rotation).as_euler('yzx', degrees=True)[0]
             r_ankle_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rfoot)
@@ -271,21 +281,22 @@ def main():
             l_ankle_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lfoot)
             l_ankle_angle = R.from_matrix(l_ankle_realative_rotation).as_euler('yzx', degrees=True)[0]
 
-            # r_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_rthigh)
-            # r_hip_angle = R.from_matrix(r_hip_realative_rotation).as_euler('yzx', degrees=True)[0]
-            # l_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_lthigh)
-            # l_hip_angle = R.from_matrix(l_hip_realative_rotation).as_euler('yzx', degrees=True)[0]
-            # r_knee_realative_rotation = np.dot(np.linalg.inv(rot_rthigh), rot_rshank)
-            # r_knee_angle = R.from_matrix(r_knee_realative_rotation).as_euler('yzx', degrees=True)[0]
-            # l_knee_realative_rotation = np.dot(np.linalg.inv(rot_lthigh), rot_lshank)
-            # l_knee_angle = R.from_matrix(l_knee_realative_rotation).as_euler('yzx', degrees=True)[0]
-            # r_ankle_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rfoot)
-            # r_ankle_angle = R.from_matrix(r_ankle_realative_rotation).as_euler('yzx', degrees=True)[0]
-            # l_ankle_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lfoot)
-            # l_ankle_angle = R.from_matrix(l_ankle_realative_rotation).as_euler('yzx', degrees=True)[0]
+            r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
+            l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
+            r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
+            l_knee_angle = 360 + l_knee_angle if l_knee_angle < 0 else l_knee_angle
+            r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
+            l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
+
+            r_hip_angle = 180 - r_hip_angle
+            l_hip_angle = 180 - l_hip_angle
+            r_knee_angle = 180 - r_knee_angle
+            l_knee_angle = 180 - l_knee_angle
+            r_ankle_angle = 90 - r_ankle_angle
+            l_ankle_angle = 90 - l_ankle_angle
+
 
             angles = [r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle]
-            angles = [angle + 360 if angle < 0 else angle for angle in angles]  #オイラー角(-180~180)が負の値の場合は正に変換
             angle_list.append(angles)
 
             # def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配列を入力)
@@ -315,6 +326,8 @@ def main():
                 ax.set_xlim(-1, 1)
                 ax.set_ylim(-1, 1)
                 ax.set_zlim(-1, 1)
+                #frame数を表示
+                ax.text2D(0.5, 0.01, f"frame = {frame_num}", transform=ax.transAxes)
                 #方向を設定
                 ax.view_init(elev=0, azim=0)
 
@@ -406,7 +419,10 @@ def main():
         # print(f"angle_array.shape = {angle_array.shape}")
         df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
         df.index = df.index + full_range.start
-        df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_{os.path.basename(csv_path)}"))
+        if down_hz:
+            df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_30Hz_{os.path.basename(csv_path)}"))
+        else:
+            df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_120Hz_{os.path.basename(csv_path)}"))
 
         # ankle_angle = calculate_angle(e_z_lshank_list, e_z_lfoot_list)
         # print(f"ankle_angle = {ankle_angle}")
@@ -416,42 +432,28 @@ def main():
         # plt.show()
         # plt.cla
 
-        bector_array = np.array(bector_list)
-        lhee_pel_z = bector_array[:, 2]
-        df = pd.DataFrame({"frame":full_range, "lhee_pel_z":lhee_pel_z})
-        df = df.sort_values(by="lhee_pel_z", ascending=False)
-        # print(df)
-        ic_list = df.head(30)["frame"].values
-        print(f"ic_list = {ic_list}")
+        if down_hz:
+            bector_array = np.array(bector_list)
+            lhee_pel_z = bector_array[:, 2]
+            df = pd.DataFrame({"frame":full_range, "lhee_pel_z":lhee_pel_z})
+            df = df.sort_values(by="lhee_pel_z", ascending=False)
+            # print(df)
+            ic_list = df.head(30)["frame"].values
+            print(f"ic_list = {ic_list}")
 
-        filtered_list = []
-        skip_values = set()
-        for value in ic_list:
-            # すでにスキップリストにある場合はスキップ
-            if value in skip_values:
-                continue
-            # 現在の値を結果リストに追加
-            filtered_list.append(value)
-            # 10個以内の数値をスキップリストに追加
-            skip_values.update(range(value - 10, value + 11))
-        filtered_list = sorted(filtered_list)
-        print(f"フィルタリング後のリスト:{filtered_list}")
-
-
-        np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_{os.path.basename(csv_path).split('.')[0]}"), filtered_list)
-
-        # print(f"bector_list = {bector_list}")
-        fig, ax = plt.subplots()
-        # ax.plot(full_range, bector_array[:, 0], label="x")
-        # ax.plot(full_range, bector_array[:, 1], label="y")
-        ax.plot(full_range, bector_array[:, 2], label="z")
-        plt.legend()
-        # plt.show()
-
-
-
-
-
+            filtered_list = []
+            skip_values = set()
+            for value in ic_list:
+                # すでにスキップリストにある場合はスキップ
+                if value in skip_values:
+                    continue
+                # 現在の値を結果リストに追加
+                filtered_list.append(value)
+                # 10個以内の数値をスキップリストに追加
+                skip_values.update(range(value - 10, value + 11))
+            filtered_list = sorted(filtered_list)
+            print(f"フィルタリング後のリスト:{filtered_list}")
+            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_{os.path.basename(csv_path).split('.')[0]}"), filtered_list)
 
 
 
