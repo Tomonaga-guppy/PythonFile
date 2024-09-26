@@ -10,6 +10,10 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 from scipy.interpolate import CubicSpline
 from sklearn.metrics import mean_absolute_error
+from scipy.interpolate import griddata
+from scipy.ndimage import gaussian_filter
+import matplotlib.pyplot as plt
+
 
 root_dir = r"F:\Tomson\gait_pattern\20240808"
 
@@ -187,10 +191,12 @@ def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
 
         # 画像を取得
         depth_image = capture.transformed_depth
+
         # 深度画像の欠損値を近傍の最小値で補間
         mask = depth_image == 0
         interpolated_depth_image = depth_image.copy()
         shifted_list = []
+        # kernel_size = 5
         kernel_size = 3
         # 行方向と列方向にシフトした画像を作成
         for x_shift in range(-int((kernel_size-1)/2),  int((kernel_size-1)/2 + 1)):
@@ -209,18 +215,74 @@ def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
         # 欠損値の位置に最小値を代入
         interpolated_depth_image[mask] = min_values[mask]
 
-        depth_map = cv2.normalize(depth_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        depth_map = cv2.resize(depth_map, (720, 480))
-        depth_map = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
-        interpolated_depth_map = cv2.normalize(interpolated_depth_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        interpolated_depth_map = cv2.resize(interpolated_depth_map, (720, 480))
-        interpolated_depth_map = cv2.applyColorMap(interpolated_depth_map, cv2.COLORMAP_JET)
+        # 深度画像の欠損値を補間
 
-        # print(f"depthmapの欠損値の数 = {np.sum(depth_image == 0)}")
-        # print(f"interpolated_depth_mapの欠損値の数 = {np.sum(interpolated_depth_image == 0)}")
+        # 線形補間、最近傍補間
+        # # 欠損値の位置を特定 (ここでは値が0のピクセルを欠損値とします)
+        # missing_mask = depth_image == 0
+        # x, y = np.meshgrid(np.arange(depth_image.shape[1]), np.arange(depth_image.shape[0]))
+        # # 欠損値でないピクセルを取得
+        # valid_x = x[~missing_mask]
+        # valid_y = y[~missing_mask]
+        # valid_values = depth_image[~missing_mask]
+        # # 欠損値を補間
+        # interpolated_depth_image = depth_image.copy()
+        # interpolated_depth_image[missing_mask] = griddata((valid_x, valid_y), valid_values, (x[missing_mask], y[missing_mask]), method='linear')
+        # # interpolated_depth_image[missing_mask] = griddata((valid_x, valid_y), valid_values, (x[missing_mask], y[missing_mask]), method='nearest')
+
+        # 線形補間 軽くしたい npによる1次元補間を繰り返す方法
+        # # 欠損値のマスクを作成
+        # missing_mask = depth_image == 0
+        # interpolated_depth_image = depth_image.copy()
+        # # 各行ごとに線形補間を行う
+        # for i in range(interpolated_depth_image.shape[0]):
+        #     valid = ~missing_mask[i]
+        #     if np.sum(valid) > 1:  # 補間可能な有効な値が2つ以上ある場合
+        #         interpolated_depth_image[i, missing_mask[i]] = np.interp(np.flatnonzero(missing_mask[i]), np.flatnonzero(valid), interpolated_depth_image[i, valid])
+
+        # # 各列ごとに線形補間を行う
+        # for j in range(interpolated_depth_image.shape[1]):
+        #     valid = ~missing_mask[:, j]
+        #     if np.sum(valid) > 1:  # 補間可能な有効な値が2つ以上ある場合
+        #         interpolated_depth_image[missing_mask[:, j], j] = np.interp(np.flatnonzero(missing_mask[:, j]), np.flatnonzero(valid), interpolated_depth_image[valid, j])
+
+
+        # # 線形補間 軽くしたい OpenCVによるインペインティング 全然軽くない、重い
+        # # 欠損値マスクを作成（0が欠損値と仮定）
+        # mask = (depth_image == 0).astype(np.uint8)
+        # # 欠損値をOpenCVのinpaint関数で補間
+        # interpolated_depth_image = cv2.inpaint(depth_image.astype(np.float32), mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
+
+
+        # # ガウガシアンフィルタで平滑化
+        # interpolated_depth_image = depth_image.copy()
+        # interpolated_depth_image = interpolated_depth_image.astype(float)
+        # interpolated_depth_image[interpolated_depth_image == 0] = np.nan
+        # interpolated_depth_image = np.nan_to_num(gaussian_filter(interpolated_depth_image, sigma=1), nan=0)
+
+
+        # depth_map = cv2.normalize(depth_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        # depth_map = cv2.resize(depth_map, (720, 480))
+        # depth_map = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
+        # interpolated_depth_map = cv2.normalize(interpolated_depth_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        # interpolated_depth_map = cv2.resize(interpolated_depth_map, (720, 480))
+        # interpolated_depth_map = cv2.applyColorMap(interpolated_depth_map, cv2.COLORMAP_JET)
+
+        print(f"depthmapの欠損値の数 = {np.sum(depth_image == 0)}")
+        print(f"interpolated_depth_mapの欠損値の数 = {np.sum(interpolated_depth_image == 0)}")
         # depth_map_hstack = cv2.hconcat([depth_map, interpolated_depth_map])
         # cv2.imshow("depth_map", depth_map_hstack)
         # cv2.waitKey(0)
+
+        # # 16bitの画像（例: depth_map_hstack）を表示する前にスケーリング
+        # depth_map_hstack = cv2.hconcat([depth_image, interpolated_depth_image])
+        # depth_map_hstack = depth_map_hstack.astype(np.float32) / 65535.0
+
+        fig,axes = plt.subplots(1, 2, figsize=(10, 5))
+        axes[0].imshow(depth_image)
+        axes[1].imshow(interpolated_depth_image)
+        plt.show()
+
 
         frame_keypoints_3d = []
 
@@ -411,8 +473,10 @@ def main():
         # 結果を表示、CSVファイルに保存
         print(f"df_frontal = {df_frontal}")
         df_frontal.to_csv(f"{frontal_df_path}/df_frontal_{condition_num}.csv")
-
         df_frontal = df_frontal.replace(0, np.nan)
+
+        # フレームの範囲を定義
+        frame_range = df_frontal.index
 
         # 3次スプライン補間関数
         def cubic_spline_interpolation_df(column, frame_range):
@@ -429,14 +493,30 @@ def main():
                 # 有効なデータポイントが少ない場合は、そのまま返す
                 return column
 
-        # フレームの範囲を定義
-        frame_range = df_frontal.index
-
         # 各カラムに対してスプライン補間を適用
         df_frontal_interpolated = df_frontal.apply(lambda col: cubic_spline_interpolation_df(col, frame_range))
-        # 各カラムに対してバターワースローパスフィルターを適用
 
+        def butter_lowpass_filter_df(column, order, cutoff_freq, frame_range):
+            # フィルタを適用するために、NaNを0に置き換える
+            valid_data = column.fillna(0)
 
+            sampling_freq = 30
+            nyquist_freq = sampling_freq / 2
+            normal_cutoff = cutoff_freq / nyquist_freq
+            b, a = butter(order, normal_cutoff, btype='low', analog=False)
+
+            # フィルター適用
+            filtered_data = filtfilt(b, a, valid_data)
+
+            # フィルター適用後に元のNaNの位置を保持
+            filtered_column = pd.Series(filtered_data, index=frame_range).where(~column.isna(), np.nan)
+
+            return filtered_column
+
+        # 4次バターワースローパスフィルターを適用
+        df_frontal_filtered = df_frontal_interpolated.apply(lambda col: butter_lowpass_filter_df(col, order=4, cutoff_freq=6, frame_range=frame_range))
+
+        df_frontal = df_frontal_filtered
 
         # keypoints_frontal = df_frontal.to_numpy()
 
@@ -517,12 +597,6 @@ def main():
 
 
 
-        # for frame_count in range(keypoints_diagonal_right.shape[0]):
-        #     for i in range(8):
-        #         if keypoints_diagonal_right[frame_count, i, :] == [0,0,0] and keypoints_diagonal_left[frame_count, i, :] != [0,0,0]:
-        #             keypoints_diagonal_right[frame_count, i, :] = keypoints_diagonal_left[frame_count, i, :]
-
-        # keypoints_frontal = (keypoints_diagonal_right + keypoints_diagonal_left) / 2
 
         print("3dようの処理が終了しました")
         # """
