@@ -13,12 +13,13 @@ from sklearn.metrics import mean_absolute_error
 from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter
 import matplotlib.pyplot as plt
-
+import time
 
 root_dir = r"F:\Tomson\gait_pattern\20240808"
 
 # condition_list = ["0", "1", "2", "3", "4"]  #0がTポーズ,1が通常歩行, 2が通常歩行（遅）, 3が疑似麻痺歩行, 4が疑似麻痺歩行（遅）
-condition_list = ["0", "1"]  #0がTポーズ,1が通常歩行, 2が通常歩行（遅）, 3が疑似麻痺歩行, 4が疑似麻痺歩行（遅）
+# condition_list = ["0", "1"]  #0がTポーズ,1が通常歩行, 2が通常歩行（遅）, 3が疑似麻痺歩行, 4が疑似麻痺歩行（遅）
+condition_list = ["1"]  #0がTポーズ,1が通常歩行, 2が通常歩行（遅）, 3が疑似麻痺歩行, 4が疑似麻痺歩行（遅）
 condition_keynum = condition_list[:]
 
 def load_keypoints_for_frame(frame_number, json_folder_path):
@@ -156,7 +157,7 @@ def read_2d_openpose(mkv_file):
 
 def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
     print(f"valid_frame = {valid_frame}")
-    keypoints_data = np.nan_to_num(keypoint_array_2d)  #[8, frame, 2]←もともと[frame, 2]
+    keypoints_data = np.nan_to_num(keypoint_array_2d)  # [8, frame, 2]←もともと[frame, 2]
     playback = PyK4APlayback(mkv_file)
     playback.open()
     calibration = playback.calibration
@@ -164,7 +165,6 @@ def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
     frame_count = 0
     all_keypoints_3d = []  # 各フレームの3Dキーポイントを保持するリスト
     frame_keypoints_3d_all = []
-
 
     id = os.path.basename(mkv_file).split('.')[0].split('_')[-1]
     transform_matrix_path = os.path.join(os.path.dirname(mkv_file), f'tf_matrix_calibration_{id}.npz')
@@ -190,98 +190,16 @@ def read_3d_openpose(keypoint_array_2d, valid_frame, mkv_file):
         print(f"frame_count = {frame_count} mkvfile = {mkv_file} ")
 
         # 画像を取得
-        depth_image = capture.transformed_depth
+        depth_image_path = os.path.join(os.path.dirname(mkv_file), os.path.basename(mkv_file).split('.')[0], "depth_image_original" ,f"{frame_count+1:04d}.png")
+        depth_image = cv2.imread(depth_image_path, cv2.IMREAD_UNCHANGED)
 
-        # 深度画像の欠損値を近傍の最小値で補間
-        mask = depth_image == 0
-        interpolated_depth_image = depth_image.copy()
-        shifted_list = []
-        # kernel_size = 5
-        kernel_size = 3
-        # 行方向と列方向にシフトした画像を作成
-        for x_shift in range(-int((kernel_size-1)/2),  int((kernel_size-1)/2 + 1)):
-            for y_shift in range(int((kernel_size-1)/2), -int((kernel_size-1)/2 + 1), -1):
-                if x_shift == 0 and y_shift == 0:
-                    continue
-                shifted = np.roll(depth_image, (x_shift, y_shift), axis=(0, 1))
-                shifted_list.append(shifted)
-        # シフトした画像の中で0以外の最小値を取得
-        min_values = np.full(depth_image.shape, np.inf)  # 初期値を無限大に設定
-        for shifted in shifted_list:
-            non_zero_mask = shifted != 0
-            min_values[non_zero_mask] = np.minimum(min_values[non_zero_mask], shifted[non_zero_mask])
-        # 無限大が残っている場所はすべて0（欠損値）だった場所なので、0に置き換える
-        min_values[min_values == np.inf] = 0
-        # 欠損値の位置に最小値を代入
-        interpolated_depth_image[mask] = min_values[mask]
+        interpolated_depth_image_path = os.path.join(os.path.dirname(mkv_file), os.path.basename(mkv_file).split('.')[0], "filled_depth_image" ,f"{frame_count+1:04d}.png")
+        interpolated_depth_image = cv2.imread(interpolated_depth_image_path, cv2.IMREAD_UNCHANGED)
 
-        # 深度画像の欠損値を補間
-
-        # 線形補間、最近傍補間
-        # # 欠損値の位置を特定 (ここでは値が0のピクセルを欠損値とします)
-        # missing_mask = depth_image == 0
-        # x, y = np.meshgrid(np.arange(depth_image.shape[1]), np.arange(depth_image.shape[0]))
-        # # 欠損値でないピクセルを取得
-        # valid_x = x[~missing_mask]
-        # valid_y = y[~missing_mask]
-        # valid_values = depth_image[~missing_mask]
-        # # 欠損値を補間
-        # interpolated_depth_image = depth_image.copy()
-        # interpolated_depth_image[missing_mask] = griddata((valid_x, valid_y), valid_values, (x[missing_mask], y[missing_mask]), method='linear')
-        # # interpolated_depth_image[missing_mask] = griddata((valid_x, valid_y), valid_values, (x[missing_mask], y[missing_mask]), method='nearest')
-
-        # 線形補間 軽くしたい npによる1次元補間を繰り返す方法
-        # # 欠損値のマスクを作成
-        # missing_mask = depth_image == 0
-        # interpolated_depth_image = depth_image.copy()
-        # # 各行ごとに線形補間を行う
-        # for i in range(interpolated_depth_image.shape[0]):
-        #     valid = ~missing_mask[i]
-        #     if np.sum(valid) > 1:  # 補間可能な有効な値が2つ以上ある場合
-        #         interpolated_depth_image[i, missing_mask[i]] = np.interp(np.flatnonzero(missing_mask[i]), np.flatnonzero(valid), interpolated_depth_image[i, valid])
-
-        # # 各列ごとに線形補間を行う
-        # for j in range(interpolated_depth_image.shape[1]):
-        #     valid = ~missing_mask[:, j]
-        #     if np.sum(valid) > 1:  # 補間可能な有効な値が2つ以上ある場合
-        #         interpolated_depth_image[missing_mask[:, j], j] = np.interp(np.flatnonzero(missing_mask[:, j]), np.flatnonzero(valid), interpolated_depth_image[valid, j])
-
-
-        # # 線形補間 軽くしたい OpenCVによるインペインティング 全然軽くない、重い
-        # # 欠損値マスクを作成（0が欠損値と仮定）
-        # mask = (depth_image == 0).astype(np.uint8)
-        # # 欠損値をOpenCVのinpaint関数で補間
-        # interpolated_depth_image = cv2.inpaint(depth_image.astype(np.float32), mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
-
-
-        # # ガウガシアンフィルタで平滑化
-        # interpolated_depth_image = depth_image.copy()
-        # interpolated_depth_image = interpolated_depth_image.astype(float)
-        # interpolated_depth_image[interpolated_depth_image == 0] = np.nan
-        # interpolated_depth_image = np.nan_to_num(gaussian_filter(interpolated_depth_image, sigma=1), nan=0)
-
-
-        # depth_map = cv2.normalize(depth_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        # depth_map = cv2.resize(depth_map, (720, 480))
-        # depth_map = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
-        # interpolated_depth_map = cv2.normalize(interpolated_depth_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        # interpolated_depth_map = cv2.resize(interpolated_depth_map, (720, 480))
-        # interpolated_depth_map = cv2.applyColorMap(interpolated_depth_map, cv2.COLORMAP_JET)
-
-        print(f"depthmapの欠損値の数 = {np.sum(depth_image == 0)}")
-        print(f"interpolated_depth_mapの欠損値の数 = {np.sum(interpolated_depth_image == 0)}")
-        # depth_map_hstack = cv2.hconcat([depth_map, interpolated_depth_map])
-        # cv2.imshow("depth_map", depth_map_hstack)
-        # cv2.waitKey(0)
-
-        # # 16bitの画像（例: depth_map_hstack）を表示する前にスケーリング
-        # depth_map_hstack = cv2.hconcat([depth_image, interpolated_depth_image])
-        # depth_map_hstack = depth_map_hstack.astype(np.float32) / 65535.0
-
-        fig,axes = plt.subplots(1, 2, figsize=(10, 5))
-        axes[0].imshow(depth_image)
-        axes[1].imshow(interpolated_depth_image)
-        plt.show()
+        # fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+        # axes[0].imshow(depth_image)
+        # axes[1].imshow(interpolated_depth_image)
+        # plt.show()
 
 
         frame_keypoints_3d = []
@@ -344,6 +262,7 @@ def main():
         keypoints_diagonal_left_2d, _, dia_left_frame_2d = read_2d_openpose(mkv_diagonal_left)
 
         print(f"keypoints_sagittal_2d_tf = {keypoints_sagittal_2d_tf.shape}")
+
         #矢状面2d用の処理
         mid_hip_sagttal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 8, :], sagi_frame_2d) #[frame, 2]
         neck_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 1, :], sagi_frame_2d)
@@ -437,7 +356,7 @@ def main():
             df_diagonal_right = pd.DataFrame(dict_diagonal_right, index = dia_right_frame_2d)
         except ValueError:
             df_diagonal_right = pd.DataFrame(dict_diagonal_right, index = dia_right_frame_2d[:-1])
-        df_diagonal_right.to_csv(f"{frontal_df_path}/df_diagonal_right_{condition_num}.csv")
+        df_diagonal_right.to_csv(f"{frontal_df_path}/{condition_num}_df_diagonal_right.csv")
 
         # leftの関節角度を計算
         point_diagonal_left_2d_array = np.array([mid_hip_diagonal_left_2d_filltered, neck_diagonal_left_2d_filltered, lhip_diagonal_left_2d_filltered, lknee_diagonal_left_2d_filltered, lankle_diagonal_left_2d_filltered, lbigtoe_diagonal_left_2d_filltered, lsmalltoe_diagonal_left_2d_filltered, lheel_diagonal_left_2d_filltered])
@@ -450,7 +369,7 @@ def main():
             df_diagonal_left = pd.DataFrame(dict_diagonal_left, index = dia_left_frame_2d)
         except ValueError:
             df_diagonal_left = pd.DataFrame(dict_diagonal_left, index = dia_left_frame_2d[:-1])
-        df_diagonal_left.to_csv(f"{frontal_df_path}/df_diagonal_left_{condition_num}.csv")
+        df_diagonal_left.to_csv(f"{frontal_df_path}/{condition_num}_df_diagonal_left.csv")
 
         # インデックスを統合して、新しいインデックスセットを作成
         combined_index = df_diagonal_right.index.union(df_diagonal_left.index)
@@ -472,7 +391,7 @@ def main():
 
         # 結果を表示、CSVファイルに保存
         print(f"df_frontal = {df_frontal}")
-        df_frontal.to_csv(f"{frontal_df_path}/df_frontal_{condition_num}.csv")
+        df_frontal.to_csv(f"{frontal_df_path}/{condition_num}_df_frontal.csv")
         df_frontal = df_frontal.replace(0, np.nan)
 
         # フレームの範囲を定義
@@ -517,6 +436,9 @@ def main():
         df_frontal_filtered = df_frontal_interpolated.apply(lambda col: butter_lowpass_filter_df(col, order=4, cutoff_freq=6, frame_range=frame_range))
 
         df_frontal = df_frontal_filtered
+
+        # 補間後のデータを保存
+        df_frontal.to_csv(f"{frontal_df_path}/{condition_num}_df_frontal_interpolated.csv")
 
         # keypoints_frontal = df_frontal.to_numpy()
 
@@ -635,9 +557,11 @@ def main():
         knee_angle_mocap = df_mocap_angle["l_knee_angle"].loc[common_frame]
         ankle_angle_mocap = df_mocap_angle["l_ankle_angle"].loc[common_frame]
 
-        # pd.set_option('display.max_rows', 500)
-        # print(F"hip_angle_sagittal_2d = {hip_angle_sagittal_2d.loc[common_frame]}")
-        # print(f"hip_angle_sagittal_2d_filtered = {hip_angle_sagittal_2d_filtered.loc[common_frame]}")
+        print(f"hip_angle_sagittal_2d = {hip_angle_sagittal_2d}")
+        print(f"hip_angle_sagittal_2d_filtered = {hip_angle_sagittal_2d_filtered}")
+        pd.set_option('display.max_rows', 500)
+        print(F"hip_angle_sagittal_2d = {hip_angle_sagittal_2d.loc[common_frame]}")
+        print(f"hip_angle_sagittal_2d_filtered = {hip_angle_sagittal_2d_filtered.loc[common_frame]}")
 
         if condition_num != "0":
             for ic_frame in ic_frame_mocap:
