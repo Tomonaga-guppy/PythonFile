@@ -8,14 +8,7 @@ from scipy.signal import butter, filtfilt
 import json
 
 def read_3d_optitrack(csv_path, down_hz):
-    col_names = range(1, 100,1)  #データの形が汚い場合に対応するためあらかじめ列数を設定
-    df = pd.read_csv(csv_path, names=col_names, sep='\t')  #Qualysis
-    # df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 3,4,5,6,7,8,], header=[0, 2])  #Qualysis
-    # df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])  #Motive
-
-    # pd.set_option('display.max_rows', None)  # 表示する行数を増やす
-    print(f"df = {df.head(100)}")
-    # print(f"df = {df.head(100)}")
+    df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])  #Motive
 
     if down_hz:
         df_down = df[::4].reset_index(drop=True)
@@ -24,10 +17,13 @@ def read_3d_optitrack(csv_path, down_hz):
 
     marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
 
-    # marker_set = ["RASI[frame_num,:]", "LASI[frame_num,:])","RPSI[frame_num,:]","LPSI[frame_num,:]","RKNE","LKNE", "RTHI", "LTHI", "RANK[frame_num,:]","LANK", "RTIB", "LTIB","RTOE[frame_num,:]","LTOE[frame_num,:]","RHEE[frame_num,:]","LHEE[frame_num, :]",
-    #             "RSHO", "LSHO","C7", "T10", "CLAV", "STRN", "RBAK", "RKNE2", "LKNE2", "RANK[frame_num,:]2", "LANK2[frame_num,:]"]
+    # marker_set = ["RASI", "LASI","RPSI","LPSI","RKNE","LKNE", "RTHI", "LTHI", "RANK","LANK", "RTIB", "LTIB","RTOE","LTOE","RHEE","LHEE",
+    #             "RSHO", "LSHO","C7", "T10", "CLAV", "STRN", "RBAK", "RKNE2", "LKNE2", "RANK2", "LANK2"]
 
     marker_set_df = df_down[[col for col in df_down.columns if any(marker in col[0] for marker in marker_set)]].copy()
+
+    print(f"Marker set dataframe shape: {marker_set_df.shape}")
+
     success_frame_list = []
 
     for frame in range(0, len(marker_set_df)):
@@ -113,8 +109,8 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバ�
 
 def main():
     down_hz = False
-    csv_path_dir = r"F:\Tomson\gait_pattern\20240822\qualysis"
-    csv_paths = glob.glob(os.path.join(csv_path_dir, "sub3*.tsv"))
+    csv_path_dir = r"F:\Tomson\gait_pattern\20240808\Motive"
+    csv_paths = glob.glob(os.path.join(csv_path_dir, "[0-9]*.csv"))
 
     for i, csv_path in enumerate(csv_paths):
         keypoints_mocap, full_range = read_3d_optitrack(csv_path, down_hz)
@@ -148,9 +144,8 @@ def main():
             #メモ
             d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
             d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:]) / 2)
-            # r = 0.0159 #[m] サイズ違うかも確認必要 https://www.optitrack.jp/products/accessories/marker.html
-            r = 0.0127 #[m] 三宅君
-            h = 1.7 #[m] 山本先生1.703 三宅君1.7
+            r = 0.0127 #[m] Opti確認：https://www.optitrack.jp/products/accessories/marker.html
+            h = 1.7 #[m]
             k = h/1.7
             beta = 0.1 * np.pi #[rad]
             theta = 0.496 #[rad]

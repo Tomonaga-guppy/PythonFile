@@ -9,7 +9,7 @@ import json
 
 def read_3d_optitrack(csv_path, down_hz):
     col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
-    df = pd.read_csv(csv_path, names=col_names, sep='\t', skiprows=[0,1,2,3,4,5,6,7,8,10])  #Qualysis
+    df = pd.read_csv(csv_path, names=col_names, sep='\t', skiprows=[0,1,2,3,4,5,6,7,8,10])  #Qualisis
     df.columns = df.iloc[0]  # 最初の行をヘッダーに
     df = df.drop(0).reset_index(drop=True)  # ヘッダーにした行をデータから削除し、インデックスをリセット
 
@@ -64,7 +64,7 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバ�
 
 def main():
     down_hz = False
-    csv_path_dir = r"F:\Tomson\gait_pattern\20240822\qualysis"
+    csv_path_dir = r"F:\Tomson\gait_pattern\20240822\qualisis"
     csv_paths = glob.glob(os.path.join(csv_path_dir, "sub3*.tsv"))
 
     for i, csv_path in enumerate(csv_paths):
@@ -406,8 +406,6 @@ def main():
             filtered_list = sorted(filtered_list)
             print(f"フィルタリング後のリスト:{filtered_list}")
             np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_{os.path.basename(csv_path).split('.')[0]}.csv"), filtered_list)
-
-
 
 
 if __name__ == "__main__":
