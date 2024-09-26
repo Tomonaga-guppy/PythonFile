@@ -12,9 +12,9 @@ from scipy.interpolate import CubicSpline
 from sklearn.metrics import mean_absolute_error
 
 root_dir = r"F:\Tomson\gait_pattern\20240808"
-# root_dir = r"F:\Tomson\gait_pattern\20240712"
 
-condition_list = ["0", "1", "2", "3", "4"]  #0がTポーズ,1が通常歩行, 2が通常歩行（遅）, 3が疑似麻痺歩行, 4が疑似麻痺歩行（遅）
+# condition_list = ["0", "1", "2", "3", "4"]  #0がTポーズ,1が通常歩行, 2が通常歩行（遅）, 3が疑似麻痺歩行, 4が疑似麻痺歩行（遅）
+condition_list = ["0", "1"]  #0がTポーズ,1が通常歩行, 2が通常歩行（遅）, 3が疑似麻痺歩行, 4が疑似麻痺歩行（遅）
 condition_keynum = condition_list[:]
 
 def load_keypoints_for_frame(frame_number, json_folder_path):
@@ -281,9 +281,9 @@ def main():
         keypoints_diagonal_right_2d, keypoints_diagonal_right_2d_tf, dia_right_frame_2d = read_2d_openpose(mkv_diagonal_right)
         keypoints_diagonal_left_2d, keypoints_diagonal_left_2d_tf, dia_left_frame_2d = read_2d_openpose(mkv_diagonal_left)
 
+        print(f"keypoints_sagittal_2d_tf = {keypoints_sagittal_2d_tf.shape}")
         #矢状面2d用の処理
         mid_hip_sagttal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 8, :], sagi_frame_2d) #[frame, 2]
-
         neck_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 1, :], sagi_frame_2d)
         lhip_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 12, :], sagi_frame_2d)
         lknee_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d_tf[:, 13, :], sagi_frame_2d)
@@ -601,12 +601,6 @@ def main():
         # plt.show() #5frame
         plt.cla()
 
-        # mae_hip_sagittal = mean_absolute_error(hip_angle_sagittal_2d.iloc[common_frame], hip_angle_mocap)
-        # mae_knee_sagittal = mean_absolute_error(knee_angle_sagittal_2d.iloc[common_frame], knee_angle_mocap)
-        # mae_ankle_sagittal = mean_absolute_error(ankle_angle_sagittal_2d.iloc[common_frame], ankle_angle_mocap)
-        # mae_hip_frontal = mean_absolute_error(hip_angle_frontal_3d, hip_angle_mocap)
-        # mae_knee_frontal = mean_absolute_error(knee_angle_frontal_3d, knee_angle_mocap)
-        # mae_ankle_frontal = mean_absolute_error(ankle_angle_frontal_3d, ankle_angle_mocap)
 
         hip_absolute_error = abs(hip_angle_sagittal_2d_filtered.loc[common_frame].values.flatten() - hip_angle_mocap.values.flatten())
         mae_hip_sagittal = np.nanmean(hip_absolute_error)
@@ -618,10 +612,6 @@ def main():
         print(f"mae_hip_sagittal = {mae_hip_sagittal:.3f}")
         print(f"mae_knee_sagittal = {mae_knee_sagittal:.3f}")
         print(f"mae_ankle_sagittal = {mae_ankle_sagittal:.3f}")
-
-        # print(f"mae_hip_frontal = {mae_hip_frontal}")
-        # print(f"mae_knee_frontal = {mae_knee_frontal}")
-        # print(f"mae_ankle_frontal = {mae_ankle_frontal}")
 
         npz_path = os.path.join(os.path.dirname(mkv_files[0]), f"{os.path.basename(mkv_files[0]).split('.')[0].split('_')[0]}_keypoints&frame.npz")
         # np.savez(npz_path, diagonal_right=keypoints_diagonal_right, diagonal_left=keypoints_diagonal_left, frontal=keypoints_frontal, mocap=keypoints_mocap, common_frame=common_frame, sagittal_3d=keypoints_sagittal_3d, sagittal_2d=keypoints_sagittal_2d)

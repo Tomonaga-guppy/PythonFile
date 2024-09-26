@@ -12,7 +12,7 @@ from helpers import convert_to_bgra_if_required
 
 def main():
     mkv_folder = r"F:\Tomson\gait_pattern\20240822"
-    mkv_files = glob.glob(os.path.join(mkv_folder, 'sub3*.mkv'))
+    mkv_files = glob.glob(os.path.join(mkv_folder, 'calibration_sub3_0_dev2.mkv'))
     print(f"mkv_files = {mkv_files}")
 
     for i, mkv_file_path in enumerate(mkv_files):

@@ -4,6 +4,7 @@ from pyk4a import PyK4A, connected_device_count,  PyK4APlayback, CalibrationType
 import os
 import sys
 import glob
+import time
 
 helpers_dir = r"C:\Users\pyk4a\example"
 # helpers_dir = r"C:\Users\tus\pyk4a\example"
@@ -13,7 +14,7 @@ from helpers import convert_to_bgra_if_required
 
 root_dir = r"F:\Tomson\gait_pattern\20240808"
 aruco_dir = os.path.dirname(root_dir)
-keyward = "calibration_0"
+keyward = "calibration"
 
 def target_aruco_frame(rgb_image, target_ids, detector, aruco):
     corners, ids, __ = detector.detectMarkers(rgb_image)
@@ -69,12 +70,13 @@ def main():
         os.makedirs(aruco_dir+"/aruco_images")
 
     # 録画したMKVファイルのパス
+    # mkv_file_paths = glob.glob(os.path.join(root_dir, f'*{keyward}*.mkv'),recursive=True)
     mkv_file_paths = glob.glob(os.path.join(root_dir, f'*{keyward}*.mkv'),recursive=True)
 
     for i, mkv_file_path in enumerate(mkv_file_paths):
         print(f" {i+1}/{len(mkv_file_paths)} mkv_file_path = {mkv_file_path}")
-        id = (os.path.basename(mkv_file_path).split('.')[0]).split('_')[-1]
-        print(f"id = {id}")
+        device_id = (os.path.basename(mkv_file_path).split('.')[0]).split('_')[-1]
+        print(f"device id = {device_id}")
 
         # MKVファイルの再生
         playback = PyK4APlayback(mkv_file_path)
@@ -83,7 +85,7 @@ def main():
 
         frame_count = 1
 
-        start_frame_caount = 60
+        start_frame_count = 60
         record_framecount = 60
         target_ids = [0, 1, 3]  # 検出したいマーカーID
         aruco0_3d_sum, aruco1_3d_sum, aruco3_3d_sum = np.zeros(3), np.zeros(3), np.zeros(3)
@@ -94,15 +96,25 @@ def main():
 
         while True:
             # 60フレーム目から60フレーム分のデータから取得
-            if frame_count < start_frame_caount:
+            if frame_count < start_frame_count:
                 frame_count += 1
                 continue
 
-            if frame_count == start_frame_caount + record_framecount:
+            if frame_count == start_frame_count + record_framecount:
                 break
+
+            print(f"frame_count = {frame_count}")
 
             # 画像をキャプチャ
             capture = playback.get_next_capture()
+
+            # try:
+            #     # 画像をキャプチャ
+            #     capture = playback.get_next_capture()
+            # except:
+            #     print(f"再生を終了します frame_count = {frame_count}")
+            #     break
+
 
             # キャプチャが有効でない場合（ファイルの終わり）ループを抜ける
             if capture is None:
@@ -116,9 +128,25 @@ def main():
             rgb_image = convert_to_bgra_if_required(playback.configuration["color_format"], capture.color)
             depth_image = capture.transformed_depth
 
+            # #RGB確認
+            # mini_rgb_image = cv2.resize(rgb_image, (1080,720))
+            # cv2.imshow("RGB Image", mini_rgb_image)
+            # # キーが押されるまで待機
+            # if cv2.waitKey(1) & 0xFF == ord('q'):
+            #     break
+
             try:
-                __, select_corners, select_ids = target_aruco_frame(rgb_image, target_ids, detector, aruco)
+                annotated_frame, select_corners, select_ids = target_aruco_frame(rgb_image, target_ids, detector, aruco)
                 centroid = calculate_3d_centroid(select_corners,select_ids, depth_image, calibration)
+                print(f"centroid = {centroid}")
+
+                cv2.imshow("Annotated Frame", annotated_frame)
+
+                # キーが押されるまで待機
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+
+                time.time(1)
 
                 aruco0_3d_sum += centroid[0]
                 aruco1_3d_sum += centroid[1]
@@ -131,6 +159,7 @@ def main():
                 aruco3_2d_sum += np.mean(sorted_select_corners[2][0], axis=0)
 
             except:
+                print("ここだよ")
                 continue
 
             print(f"frame_count = {frame_count}")
@@ -141,13 +170,15 @@ def main():
 
         print(f"aruco0_2d = {aruco0_2d}, aruco1_2d = {aruco1_2d}, aruco3_2d = {aruco3_2d}")
 
-        if id == "0":
+        if device_id == "0":
+        # if device_id == "dev0":
             basez_0 = (aruco0_3d - aruco3_3d)/np.linalg.norm(aruco0_3d - aruco3_3d)
             basey = (aruco1_3d - aruco0_3d)/np.linalg.norm(aruco1_3d - aruco0_3d)
             basex = np.cross(basey, basez_0)/np.linalg.norm(np.cross(basey, basez_0))
             basez = np.cross(basex, basey)/np.linalg.norm(np.cross(basex, basey))
             t1 = aruco0_3d
-            t2 = [-410, -446, -55]
+            t2 = [-410, -446, -55] #8/8
+            # t2 = [-466, -221, -240] #8/22
 
             rot_90 = np.array([[0, 1], [-1, 0]]).T
             basex_2d = (aruco0_2d - aruco3_2d)/np.linalg.norm(aruco0_2d - aruco3_2d)
@@ -156,13 +187,14 @@ def main():
             t_2d = aruco0_2d
 
 
-        elif id == "1" or id == "2":
+        elif device_id == "1" or device_id == "2":
+        # elif device_id == "dev1" or device_id == "dev2":
             basex = (aruco3_3d - aruco0_3d)/np.linalg.norm(aruco3_3d - aruco0_3d)
-
             basey = (aruco1_3d - aruco0_3d)/np.linalg.norm(aruco1_3d - aruco0_3d)
             basez = np.cross(basex, basey)/np.linalg.norm(np.cross(basex, basey))
             t1 = aruco0_3d
-            t2 = [-245, -446, 0]
+            t2 = [-245, -446, 0] #8/8
+            # t2 = [-618, -163, -240] #8/22
 
         transformation_matrix_1 = np.array([[basex[0], basey[0], basez[0], t1[0]],
                                             [basex[1], basey[1], basez[1], t1[1]],
@@ -183,7 +215,7 @@ def main():
         cv2.destroyAllWindows()
 
         #transformation_matrix_meanを保存
-        npy_save_path = os.path.join(os.path.dirname(mkv_file_path) ,f"tf_matrix_calibration_{id}.npz")
+        npy_save_path = os.path.join(os.path.dirname(mkv_file_path) ,f"tf_matrix_calibration_{device_id}.npz")
         print(f"npy_save_path = {npy_save_path}")
         np.savez(npy_save_path, a1 = transformation_matrix_1, a2 = transformation_matrix_2, a_2d = transformation_matrix_2d)
 
