@@ -14,10 +14,10 @@ sys.path.append(helpers_dir)
 from helpers import convert_to_bgra_if_required
 
 def main():
-    mkv_folder = r"F:\Tomson\gait_pattern\20240822"
-    # mkv_folder = r"F:\Tomson\gait_pattern\20240808"
-    mkv_files = glob.glob(os.path.join(mkv_folder, 'sub3_normalgait_f*.mkv'))
-    # mkv_files = glob.glob(os.path.join(mkv_folder, '0_*_1.mkv'))
+    # mkv_folder = r"F:\Tomson\gait_pattern\20240822"
+    mkv_folder = r"F:\Tomson\gait_pattern\20240808"
+    # mkv_files = glob.glob(os.path.join(mkv_folder, 'sub3_normalgait_f*.mkv'))
+    mkv_files = glob.glob(os.path.join(mkv_folder, '[0-9]*.mkv'))
     # mkv_files = glob.glob(os.path.join(mkv_folder, '1_walk*.mkv'))
     # mkv_files = glob.glob(os.path.join(mkv_folder, '2_walk_slow*.mkv'))
     print(f"mkv_files = {mkv_files}")
@@ -27,7 +27,7 @@ def main():
         if os.path.exists(folder_path) == False:
             os.mkdir(folder_path)
 
-        # MKVファイルの再生
+        # MKVファイルの再生S
         playback = PyK4APlayback(mkv_file_path)
         playback.open()
         calibration = playback.calibration
@@ -98,8 +98,9 @@ def main():
         if not os.path.exists(depth_image_folder_path):
             os.mkdir(depth_image_folder_path)
 
-        # fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') # ファイル形式(ここではmp4)
-        # jet_writer = cv2.VideoWriter(folder_path + "/jet.mp4", fmt, 30, (1920, 1080)) # ライター作成
+        fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') # ファイル形式(ここではmp4)
+        jet_writer = cv2.VideoWriter(folder_path + "/jet_depth.mp4", fmt, 30, (1920, 1080)) # ライター作成
+        ebit_writer = cv2.VideoWriter(folder_path + "/8bit_depth.mp4", fmt, 30, (1920, 1080), isColor=False) # ライター作成
 
         while True:
             try:
@@ -177,7 +178,8 @@ def main():
 
             # cv2.waitKey(1)
 
-            # jet_writer.write(depth_image_jet)
+            jet_writer.write(depth_image_jet)
+            ebit_writer.write(depth_image_8bit)
 
             # 画像の保存
             original_depth_image_path = os.path.join(original_depth_image_folder_path, f"{str(frame_count).zfill(4)}.png")
@@ -211,11 +213,11 @@ def main():
             # check_val2 = check_depth_img[400, 1000]
             # print(f"check_val2 = {check_val2}")
 
-            print(f"{i}/{len(mkv_files)} Depth frame_count = {frame_count}")
+            print(f"{i+1}/{len(mkv_files)} Depth frame_count = {frame_count}")
             frame_count += 1
 
-        # gray_writer.release()
-        # jet_writer.release()
+        ebit_writer.release()
+        jet_writer.release()
 
 
 if __name__ == '__main__':

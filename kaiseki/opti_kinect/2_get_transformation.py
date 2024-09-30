@@ -12,50 +12,9 @@ os.chdir(helpers_dir)
 sys.path.append(helpers_dir)
 from helpers import convert_to_bgra_if_required
 
-root_dir = r"F:\Tomson\gait_pattern\20240808"
+root_dir = r"F:\Tomson\gait_pattern\20240912"
 aruco_dir = os.path.dirname(root_dir)
-keyward = "calibration"
-
-def target_aruco_frame(rgb_image, target_ids, detector, aruco):
-    corners, ids, __ = detector.detectMarkers(rgb_image)
-    selected_corners = []
-    selected_ids = []
-
-    if ids is not None:
-        for i in range(len(ids)):
-            if ids[i][0] in target_ids:
-                selected_corners.append(corners[i])
-                selected_ids.append(ids[i])
-
-        if selected_corners:
-            selected_ids = np.array(selected_ids)
-            annotated_frame = aruco.drawDetectedMarkers(rgb_image, selected_corners, selected_ids)
-        else:
-            annotated_frame = rgb_image
-    else:
-        annotated_frame = rgb_image
-
-    return annotated_frame, selected_corners, selected_ids
-
-def calculate_3d_centroid(select_corners, select_ids, depth_image, calibration):
-    sorted_indices = np.argsort(select_ids.flatten()) #idが小さい方から順に番号を振る
-    sorted_select_corners = [select_corners[i] for i in sorted_indices] #idが昇順になるようにcornersを並び替える
-    centroids = {}
-    for i, corners in enumerate(sorted_select_corners):
-        # 各マーカーのコーナー位置を取得
-        marker_corners = corners[0]
-        postion3d_list = []
-
-        for xpic in range(int(min(marker_corners[:,0])),int(max(marker_corners[:,0]))):
-            for ypic in range(int(min(marker_corners[:,1])),int(max(marker_corners[:,1]))):
-                if depth_image[ypic, xpic] == 0:
-                    continue
-                x,y,z = calibration.convert_2d_to_3d(coordinates=(xpic, ypic), depth=depth_image[ypic, xpic], source_camera=CalibrationType.COLOR)
-                postion3d_list.append([x,y,z])
-
-        centroids[i] = np.mean(postion3d_list, axis=0)
-
-    return centroids
+keyward = "calibration*dev2*"
 
 def main():
     # ArUcoのライブラリを導入
@@ -70,7 +29,6 @@ def main():
         os.makedirs(aruco_dir+"/aruco_images")
 
     # 録画したMKVファイルのパス
-    # mkv_file_paths = glob.glob(os.path.join(root_dir, f'*{keyward}*.mkv'),recursive=True)
     mkv_file_paths = glob.glob(os.path.join(root_dir, f'*{keyward}*.mkv'),recursive=True)
 
     for i, mkv_file_path in enumerate(mkv_file_paths):
@@ -93,6 +51,13 @@ def main():
         t1, t2 = np.zeros(3), np.zeros(3)
         t_2d = np.zeros(2)
 
+        mp4file = os.path.dirname(mkv_file_path) + f"/aruco_detection_{device_id}.mp4"
+        fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') # ファイル形式(ここではmp4)
+        fps = 30.0
+        size = (1920,1080)
+        writer = cv2.VideoWriter(mp4file, fmt, fps, size) # ライター作成
+
+        hidden_flag = False #マーカーの検出ができなかったフレームがある場合はTrueに
 
         while True:
             # 60フレーム目から60フレーム分のデータから取得
@@ -103,18 +68,10 @@ def main():
             if frame_count == start_frame_count + record_framecount:
                 break
 
-            print(f"frame_count = {frame_count}")
+            print(f"frame_count = {frame_count} mkvfile = {mkv_file_path}")
 
             # 画像をキャプチャ
             capture = playback.get_next_capture()
-
-            # try:
-            #     # 画像をキャプチャ
-            #     capture = playback.get_next_capture()
-            # except:
-            #     print(f"再生を終了します frame_count = {frame_count}")
-            #     break
-
 
             # キャプチャが有効でない場合（ファイルの終わり）ループを抜ける
             if capture is None:
@@ -128,50 +85,95 @@ def main():
             rgb_image = convert_to_bgra_if_required(playback.configuration["color_format"], capture.color)
             depth_image = capture.transformed_depth
 
-            # #RGB確認
-            # mini_rgb_image = cv2.resize(rgb_image, (1080,720))
-            # cv2.imshow("RGB Image", mini_rgb_image)
-            # # キーが押されるまで待機
-            # if cv2.waitKey(1) & 0xFF == ord('q'):
-            #     break
+            def target_aruco_frame(rgb_image, target_ids, detector, aruco):
+                corners, ids, __ = detector.detectMarkers(rgb_image)
+                select_corners = []
+                select_ids = []
 
-            try:
-                annotated_frame, select_corners, select_ids = target_aruco_frame(rgb_image, target_ids, detector, aruco)
-                centroid = calculate_3d_centroid(select_corners,select_ids, depth_image, calibration)
-                print(f"centroid = {centroid}")
+                if ids is not None:
+                    for i in range(len(ids)):
+                        if ids[i][0] in target_ids:
+                            select_corners.append(corners[i])
+                            select_ids.append(ids[i])
 
-                cv2.imshow("Annotated Frame", annotated_frame)
+                    if select_corners:
+                        select_ids = np.argsort(np.array(select_ids).flatten()) #idが小さい方から順に番号を振る
+                        select_corners = [select_corners[i] for i in select_ids] #idが昇順になるようにcornersを並び替える
+                        aruco.drawDetectedMarkers(rgb_image, select_corners, select_ids)  #rgb_imageにマーカーを描画
 
-                # キーが押されるまで待機
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
+                return rgb_image, select_corners, select_ids
 
-                time.time(1)
+            annotated_frame, select_corners, select_ids = target_aruco_frame(rgb_image, target_ids, detector, aruco)
 
+            def calculate_3d_centroid(select_corners, select_ids, depth_image, calibration):
+                centroids = {}
+                for i, corners in enumerate(select_corners):
+                    # 各マーカーのコーナー位置を取得
+                    marker_corners = corners[0]
+                    postion3d_list = []
+
+                    for xpic in range(int(min(marker_corners[:,0])),int(max(marker_corners[:,0]))):
+                        for ypic in range(int(min(marker_corners[:,1])),int(max(marker_corners[:,1]))):
+                            if depth_image[ypic, xpic] == 0:
+                                continue
+                            x,y,z = calibration.convert_2d_to_3d(coordinates=(xpic, ypic), depth=depth_image[ypic, xpic], source_camera=CalibrationType.COLOR)
+                            postion3d_list.append([x,y,z])
+
+                    centroids[i] = np.mean(postion3d_list, axis=0)
+
+                return centroids
+
+            centroid = calculate_3d_centroid(select_corners,select_ids, depth_image, calibration)
+
+            cv2.imshow("Annotated Frame", rgb_image)
+
+            # キーが押されるまで待機
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+            try:  #マーカーが検出できなかった場合はKeyErrorが発生する
                 aruco0_3d_sum += centroid[0]
                 aruco1_3d_sum += centroid[1]
                 aruco3_3d_sum += centroid[2]
+            except KeyError:
+                hidden_flag = True
 
-                sorted_indices = np.argsort(select_ids.flatten()) #idが小さい方から順に番号を振る
-                sorted_select_corners = [select_corners[i] for i in sorted_indices] #idが昇順になるようにcornersを並び替える
-                aruco0_2d_sum += np.mean(sorted_select_corners[0][0], axis=0)
-                aruco1_2d_sum += np.mean(sorted_select_corners[1][0], axis=0)
-                aruco3_2d_sum += np.mean(sorted_select_corners[2][0], axis=0)
+                # def interpolate_aruco(rgb_image, select_corners, select_ids, detector, aruco):
 
-            except:
-                print("ここだよ")
+
+                # interpolated_image = interpolate_aruco(rgb_image, select_corners, select_ids, detector, aruco)
+
+                re_rgb = cv2.aruco.refineDetectedMarkers(rgb_image, select_corners, select_ids, depth_image, calibration, parameters)
+                print(re_rgb)
+                annotated_frame = rgb_image
+                writer.write(annotated_frame)
+                frame_count += 1
                 continue
 
-            print(f"frame_count = {frame_count}")
+            sorted_indices = np.argsort(select_ids.flatten()) #idが小さい方から順に番号を振る
+            sorted_select_corners = [select_corners[i] for i in sorted_indices] #idが昇順になるようにcornersを並び替える
+            aruco0_2d_sum += np.mean(sorted_select_corners[0][0], axis=0)
+            aruco1_2d_sum += np.mean(sorted_select_corners[1][0], axis=0)
+            aruco3_2d_sum += np.mean(sorted_select_corners[2][0], axis=0)
+
+            writer.write(annotated_frame)
+
             frame_count += 1
+
+        writer.release()
+
+        if hidden_flag:  #マーカーの検出ができなかったフレームがある場合はファイル名を変更
+            aruco_video = os.path.dirname(mkv_file_path) + f"/aruco_detection_{device_id}.mp4"
+            if not os.path.exists(aruco_video):
+                os.rename(aruco_video, aruco_video.replace(".mp4", "_hidden.mp4"))
 
         aruco0_3d, aruco1_3d, aruco3_3d = aruco0_3d_sum / record_framecount, aruco1_3d_sum / record_framecount, aruco3_3d_sum / record_framecount
         aruco0_2d, aruco1_2d, aruco3_2d = aruco0_2d_sum / record_framecount, aruco1_2d_sum / record_framecount, aruco3_2d_sum / record_framecount
 
         print(f"aruco0_2d = {aruco0_2d}, aruco1_2d = {aruco1_2d}, aruco3_2d = {aruco3_2d}")
 
-        if device_id == "0":
-        # if device_id == "dev0":
+        # if device_id == "0":
+        if device_id == "dev0":
             basez_0 = (aruco0_3d - aruco3_3d)/np.linalg.norm(aruco0_3d - aruco3_3d)
             basey = (aruco1_3d - aruco0_3d)/np.linalg.norm(aruco1_3d - aruco0_3d)
             basex = np.cross(basey, basez_0)/np.linalg.norm(np.cross(basey, basez_0))
@@ -183,12 +185,10 @@ def main():
             rot_90 = np.array([[0, 1], [-1, 0]]).T
             basex_2d = (aruco0_2d - aruco3_2d)/np.linalg.norm(aruco0_2d - aruco3_2d)
             basey_2d = np.dot(rot_90, basex_2d)
-            # basey_2d = (aruco1_2d - aruco0_2d)/np.linalg.norm(aruco1_2d - aruco0_2d)
             t_2d = aruco0_2d
 
-
-        elif device_id == "1" or device_id == "2":
-        # elif device_id == "dev1" or device_id == "dev2":
+        # elif device_id == "1" or device_id == "2":
+        elif device_id == "dev1" or device_id == "dev2":
             basex = (aruco3_3d - aruco0_3d)/np.linalg.norm(aruco3_3d - aruco0_3d)
             basey = (aruco1_3d - aruco0_3d)/np.linalg.norm(aruco1_3d - aruco0_3d)
             basez = np.cross(basex, basey)/np.linalg.norm(np.cross(basex, basey))
