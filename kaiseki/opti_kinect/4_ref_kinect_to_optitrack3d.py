@@ -77,35 +77,55 @@ def get_3d_coordinates(pixel, depth_image, calibration, point_name):
         print(f"    {point_name} Openposeで検出できてない")
         return [0, 0, 0]
 
-    pixel_x, pixel_y = pixel[0], pixel[1]
-    x0, x1 = int(math.floor(pixel_x)), int(math.ceil(pixel_x))
-    y0, y1 = int(math.floor(pixel_y)), int(math.ceil(pixel_y))
-
     height, width = depth_image.shape
 
-    if not (0 <= x0 < width and 0 <= x1 < width and 0 <= y0 < height and 0 <= y1 < height):
-        print(f"    {(x0, y0)}や{(x1, y1)}は画像の範囲外です (画像サイズ：{width}*{height})")
+    if not (0 <= pixel[0] < width and 0 <= pixel[1] < height):
+        print(f" {pixel}は画像の範囲外です (画像サイズ：{width}*{height})")
         return [0, 0, 0]
 
-    depth_value_x0_y0 = depth_image[y0, x0]
-    depth_value_x1_y0 = depth_image[y0, x1]
-    depth_value_x0_y1 = depth_image[y1, x0]
-    depth_value_x1_y1 = depth_image[y1, x1]
+    depth = depth_image[int(pixel[1]), int(pixel[0])]
+    print(f"depth = {depth}")
 
     try:
-        point_x0_y0 = calibration.convert_2d_to_3d(coordinates=(x0, y0), depth=depth_value_x0_y0, source_camera=CalibrationType.COLOR)
-        point_x1_y0 = calibration.convert_2d_to_3d(coordinates=(x1, y0), depth=depth_value_x1_y0, source_camera=CalibrationType.COLOR)
-        point_x0_y1 = calibration.convert_2d_to_3d(coordinates=(x0, y1), depth=depth_value_x0_y1, source_camera=CalibrationType.COLOR)
-        point_x1_y1 = calibration.convert_2d_to_3d(coordinates=(x1, y1), depth=depth_value_x1_y1, source_camera=CalibrationType.COLOR)
+        x, y, z = calibration.convert_2d_to_3d(pixel, depth, CalibrationType.COLOR)
     except ValueError as e:
         print(f"    {point_name}の3D変換時にエラー: {e}")
         return [0, 0, 0]
+    point = [x, y, z]
 
-    point_y0 = [linear_interpolation(pixel_x, x0, x1, point_x0_y0[i], point_x1_y0[i]) for i in range(3)]
-    point_y1 = [linear_interpolation(pixel_x, x0, x1, point_x0_y1[i], point_x1_y1[i]) for i in range(3)]
+    # pixel_x, pixel_y = pixel[0], pixel[1]
+    # x0, x1 = int(math.floor(pixel_x)), int(math.ceil(pixel_x))
+    # y0, y1 = int(math.floor(pixel_y)), int(math.ceil(pixel_y))
 
-    point = [linear_interpolation(pixel_y, y0, y1, point_y0[i], point_y1[i]) for i in range(3)]
-    # print(f"type = {type(point)}")  #<class 'list'>
+    # height, width = depth_image.shape
+
+    # if not (0 <= x0 < width and 0 <= x1 < width and 0 <= y0 < height and 0 <= y1 < height):
+    #     print(f"    {(x0, y0)}や{(x1, y1)}は画像の範囲外です (画像サイズ：{width}*{height})")
+    #     return [0, 0, 0]
+
+    # depth_value_x0_y0 = depth_image[y0, x0]
+    # depth_value_x1_y0 = depth_image[y0, x1]
+    # depth_value_x0_y1 = depth_image[y1, x0]
+    # depth_value_x1_y1 = depth_image[y1, x1]
+
+    # try:
+    #     point_x0_y0 = calibration.convert_2d_to_3d(coordinates=(x0, y0), depth=depth_value_x0_y0, source_camera=CalibrationType.COLOR)
+    #     point_x1_y0 = calibration.convert_2d_to_3d(coordinates=(x1, y0), depth=depth_value_x1_y0, source_camera=CalibrationType.COLOR)
+    #     point_x0_y1 = calibration.convert_2d_to_3d(coordinates=(x0, y1), depth=depth_value_x0_y1, source_camera=CalibrationType.COLOR)
+    #     point_x1_y1 = calibration.convert_2d_to_3d(coordinates=(x1, y1), depth=depth_value_x1_y1, source_camera=CalibrationType.COLOR)
+    #     # point_x0_y0 = calibration.convert_2d_to_3d(coordinates=(x0, y0), depth=depth_value_x0_y0, source_camera=CalibrationType.COLOR)
+    #     # point_x1_y0 = calibration.convert_2d_to_3d(coordinates=(x1, y0), depth=depth_value_x1_y0, source_camera=CalibrationType.COLOR)
+    #     # point_x0_y1 = calibration.convert_2d_to_3d(coordinates=(x0, y1), depth=depth_value_x0_y1, source_camera=CalibrationType.COLOR)
+    #     # point_x1_y1 = calibration.convert_2d_to_3d(coordinates=(x1, y1), depth=depth_value_x1_y1, source_camera=CalibrationType.COLOR)
+    # except ValueError as e:
+    #     print(f"    {point_name}の3D変換時にエラー: {e}")
+    #     return [0, 0, 0]
+
+    # point_y0 = [linear_interpolation(pixel_x, x0, x1, point_x0_y0[i], point_x1_y0[i]) for i in range(3)]
+    # point_y1 = [linear_interpolation(pixel_x, x0, x1, point_x0_y1[i], point_x1_y1[i]) for i in range(3)]
+
+    # point = [linear_interpolation(pixel_y, y0, y1, point_y0[i], point_y1[i]) for i in range(3)]
+    # # print(f"type = {type(point)}")  #<class 'list'>
 
     return point
 
@@ -287,7 +307,7 @@ def main():
 
 
 
-        """
+        # """
         #前額面3d用の処理
         print("3dようの処理を開始しました")
         mid_hip_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 8, :], dia_right_frame_2d)
@@ -637,7 +657,7 @@ def main():
         # print(f"ankle_angle_left = {ankle_angle_left}")
 
         print("3dようの処理が終了しました")
-        """
+        # """
 
 
 
