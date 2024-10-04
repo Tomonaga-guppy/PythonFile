@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from pyk4a import PyK4A, connected_device_count,  PyK4APlayback, CalibrationType, Calibration
+from pyk4a import PyK4A,  PyK4APlayback, CalibrationType, Calibration
 import os
 import sys
 import glob
@@ -36,6 +36,7 @@ def main():
         print(f" {i+1}/{len(mkv_file_paths)} mkv_file_path = {mkv_file_path}")
         device_id = (os.path.basename(mkv_file_path).split('.')[0]).split('_')[-1]
 
+        ###   ArUcoマーカー検出   ############################################################################################################
         # MKVファイルの再生
         playback = PyK4APlayback(mkv_file_path)
         playback.open()
@@ -116,9 +117,9 @@ def main():
 
                 aruco.drawDetectedMarkers(rgb_image, select_corners, select_ids)  #rgb_imageにマーカーを描画
 
-                plt.figure()
-                plt.imshow(rgb_image)
-                plt.show()
+                # plt.figure()
+                # plt.imshow(rgb_image)
+                # plt.show()
 
                 annotated_img_path = os.path.join(os.path.dirname(rgb_img_path), "annotated" + f"/{frame_count}_{device_id}.png")
                 if not os.path.exists(os.path.dirname(annotated_img_path)):
@@ -136,8 +137,111 @@ def main():
         else:
             pass
 
-        if aruco_detect == True and device_id == "dev1" or device_id == "dev2":  #前額面カメラのDLT法実行
-            print(f"select_corners = {select_corners} select_ids_args = {select_ids_args}")
+        ###   前額面カメラのDLT法実行   ############################################################################################################
+        if aruco_detect == True and device_id == "dev1" or device_id == "dev2":
+            # print(f"select_corners = {select_corners} select_ids_args = {select_ids_args}")
+
+            cal_points_2d = np.array([corner[0] for corner in select_corners])
+            cal_points_2d = cal_points_2d.reshape(-1, 2)
+            if device_id == "dev1":  # モーキャプのL字型のマーカーの座標（マニュアル）
+                cal_points_2d = np.append(cal_points_2d, [[776.,  804.]], axis=0)
+            elif device_id == "dev2":
+                cal_points_2d = np.append(cal_points_2d, [[1087., 820.]], axis=0)
+            print(f"cal_points_2d = {cal_points_2d}")
+            cal_points_3d = np.array([[-618, 208, 285.5], [-618, 118.5, 285.5], [-618, 118.5, 197], [-618, 208, 197],
+                                    [-618, 208, 374], [-618, 118.5, 374], [-618, 118.5, 295.5], [-618, 208, 295.5],
+                                    [-618, 108.5, 374], [-618, 19, 374], [-618, 19, 295.5], [-618, 108.5, 295.5],
+                                    [-618, 108.5, 285.5], [-618, 19, 285.5], [-618, 19, 197], [-618, 108.5, 197],
+                                    [0, 365, 0]])
+            # cal_points_3d = np.array([[-618, 208, 285.5], [-618, 118.5, 285.5], [-618, 118.5, 197], [-618, 208, 197],
+            #                         [-618, 208, 374], [-618, 118.5, 374], [-618, 118.5, 295.5], [-618, 208, 295.5],
+            #                         [-618, 108.5, 374], [-618, 19, 374], [-618, 19, 295.5], [-618, 108.5, 295.5],
+            #                         [-618, 108.5, 285.5], [-618, 19, 285.5], [-618, 19, 197], [-618, 108.5, 197]])
+
+            def dlt(cal_points_2d, cal_points_3d):
+                A = []
+                for i in range(len(cal_points_2d)):
+                    x, y = cal_points_2d[i]
+                    X, Y, Z = cal_points_3d[i]
+                    A.append([X, Y, Z, 1, 0, 0, 0, 0, -x*X, -x*Y, -x*Z])
+                    A.append([0, 0, 0, 0, X, Y, Z, 1, -y*X, -y*Y, -y*Z])
+                A = np.array(A)
+                b = cal_points_2d.reshape(-1, 1)
+                print(f"A = {A}")
+                print(f"b = {b}")
+                p  = np.linalg.pinv(A).dot(b)  #疑似逆行列を求めてbと掛け合わせる
+
+                # A_p = np.linalg.inv(A.T.dot(A)).dot(A.T)
+                # print(f"A_p = {A_p}")
+
+                P = np.append(p, [1]).reshape(3,4)
+                return P
+
+            if device_id == "dev1":
+                P_dev1 = dlt(cal_points_2d, cal_points_3d)
+                cal_points_2d_dev1 = cal_points_2d
+                np.save(root_dir + f"/calibration/P_1.npy", P_dev1)
+            elif device_id == "dev2":
+                P_dev2 = dlt(cal_points_2d, cal_points_3d)
+                cal_points_2d_dev2 = cal_points_2d
+                np.save(root_dir + f"/calibration/P_2.npy", P_dev2)
+
+
+    ###  3D座標の再構成（テスト）   ############################################################################################################
+
+    print(f"P_dev1 = {P_dev1}")
+    print(f"P_dev2 = {P_dev2}")
+    print(f"cal_points_2d_dev1 = {cal_points_2d_dev1}")
+    print(f"cal_points_2d_dev2 = {cal_points_2d_dev2}")
+    print(f"cal_points_3d = {cal_points_3d}")
+
+
+    # test
+    def reconstruction_3d(P1, P2, point_2d_1, point_2d_2):
+        # print(f"P1 = {P1}")
+        # print(f"P2 = {P2}")
+        # print(f"point_2d_1 = {point_2d_1}")
+        # print(f"point_2d_2 = {point_2d_2}")
+        A = np.array([[P1[2,0]*point_2d_1[0] - P1[0,0], P1[2,1]*point_2d_1[0] - P1[0,1], P1[2,2]*point_2d_1[0] - P1[0,2]],
+                      [P1[2,0]*point_2d_1[1] - P1[1,0], P1[2,1]*point_2d_1[1] - P1[1,1], P1[2,2]*point_2d_1[1] - P1[1,2]],
+                      [P2[2,0]*point_2d_2[0] - P2[0,0], P2[2,1]*point_2d_2[0] - P2[0,1], P2[2,2]*point_2d_2[0] - P2[0,2]],
+                      [P2[2,0]*point_2d_2[1] - P2[1,0], P2[2,1]*point_2d_2[1] - P2[1,1], P2[2,2]*point_2d_2[1] - P2[1,2]]])
+        b  = np.array([P1[0,3] - point_2d_1[0],
+                       P1[1,3] - point_2d_1[1],
+                       P2[0,3] - point_2d_2[0],
+                       P2[1,3] - point_2d_2[1]])
+        X = np.linalg.pinv(A).dot(b)
+
+        # print(f"X = {X}")
+        return X
+
+
+    test_3d = np.array([])
+    for i in range(len(cal_points_2d)):
+        point3d = reconstruction_3d(P_dev1, P_dev2, cal_points_2d_dev1[i], cal_points_2d_dev2[i])
+        test_3d = np.append(test_3d, point3d)
+
+    test_3d = test_3d.reshape(-1, 3)
+    # test_3d = ", ".join([f"{val:.2f}" for val in test_3d])
+    print(f"test_3d = {test_3d}")
+    # 元の配列の形状を保持しつつフォーマットする場合
+    for row in test_3d:
+        formatted_row = ", ".join([f"{val:.2f}" for val in row])
+        print(f"[{formatted_row}]")
+
+
+    # 較正点の3d座標と比較してX,Y,ZごとにMAEを求める
+    error = test_3d - cal_points_3d
+    print(f"error = {error}")
+    # error_std = np.std(error, axis=0)
+    # print(f"error_std = {error_std}")
+    error_mae = np.mean(np.abs(error), axis=0)
+    print(f"error_mae = {error_mae}")
+    formatted_errors = ", ".join([f"{val:.2f}" for val in error_mae])
+    print(f"error_mae = [{formatted_errors}]")
+
+
+
 
 
 if __name__ == "__main__":
