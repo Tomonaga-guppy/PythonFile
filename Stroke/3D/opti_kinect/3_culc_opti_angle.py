@@ -110,7 +110,7 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバ�
 def main():
     down_hz = False
     csv_path_dir = r"F:\Tomson\gait_pattern\20240808\Motive"
-    csv_paths = glob.glob(os.path.join(csv_path_dir, "[0-9]*.csv"))
+    csv_paths = glob.glob(os.path.join(csv_path_dir, "1_walk*.csv"))
 
     for i, csv_path in enumerate(csv_paths):
         keypoints_mocap, full_range = read_3d_optitrack(csv_path, down_hz)
