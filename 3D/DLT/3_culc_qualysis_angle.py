@@ -7,16 +7,28 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 import json
 
-def read_3d_optitrack(csv_path, down_hz):
+def read_3DMC(csv_path, down_hz):
     col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
     df = pd.read_csv(csv_path, names=col_names, sep='\t', skiprows=[0,1,2,3,4,5,6,7,8,10])  #Qualisis
     df.columns = df.iloc[0]  # 最初の行をヘッダーに
     df = df.drop(0).reset_index(drop=True)  # ヘッダーにした行をデータから削除し、インデックスをリセット
+    # print(f"df = {df}")
+
+    # # dfの両端2.5%を削除 補間時の乱れを防ぐため
+    df_index = df.index
+    df = df.iloc[int(len(df)*0.025):int(len(df)*0.975)]
 
     if down_hz:
-        df_down = df[::4].reset_index(drop=True)
+        df_down = df[::4].reset_index()
+        df_down.index = df_down.index + df_down['index'].iloc[0]//4
+        df_down = df_down.drop("index", axis=1)
+        df95_index = df_down.index
+        sampling_freq = 30
     else:
         df_down = df
+        df95_index = df_index[df.index]
+        df.index = df95_index
+        sampling_freq = 120
 
     marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
     marker_dict = dict()
@@ -31,78 +43,84 @@ def read_3d_optitrack(csv_path, down_hz):
     marker_set_df = pd.DataFrame(columns=marker_dict.keys())
     for column in marker_set_df.columns:
         marker_set_df[column] = df_down.iloc[:, marker_dict[column]].values
+    marker_set_df.index = df95_index
 
     marker_set_df = marker_set_df.apply(pd.to_numeric, errors='coerce')  #文字列として読み込まれたデータを数値に変換
-    success_frame_list = []
+    interpolated_df = marker_set_df.interpolate(method='spline', order=3)  #3次スプライン補間
+    marker_set_df = interpolated_df.apply(butter_lowpass_fillter, args=(4, 6, sampling_freq, df95_index))
 
-    for frame in range(0, len(marker_set_df)):
-        if not marker_set_df.iloc[frame].isna().any():
-            success_frame_list.append(frame)
-
-    full_range = range(min(success_frame_list), max(success_frame_list) + 1)
-    success_df = marker_set_df.reindex(full_range)
-    interpolate_success_df = success_df.interpolate(method='spline', order=3)
-
-    for i, index in enumerate(full_range):
-        marker_set_df.loc[index, :] = interpolate_success_df.iloc[i, :]
     marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path).split('.')[0]}.csv"))
 
-    keypoints = marker_set_df.values
-    keypoints_mocap = keypoints.reshape(-1, len(marker_set), 3)  #xyzで組になるように変形
+    return marker_set_df, df95_index
 
-    return keypoints_mocap, full_range
-
-def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバターワースローパスフィルタ
-    sampling_freq = 30
+def butter_lowpass_fillter(column_data, order, cutoff_freq, sampling_freq, frame_list):  #4次のバターワースローパスフィルタ
     nyquist_freq = sampling_freq / 2
     normal_cutoff = cutoff_freq / nyquist_freq
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    y = filtfilt(b, a, data[frame_list])
-    data_fillter = np.copy(data)
-    data_fillter[frame_list] = y
-    return data_fillter
+    data_to_filter = column_data[frame_list]
+    filtered_data = filtfilt(b, a, data_to_filter)
+    column_data[frame_list] = filtered_data
+    return column_data
 
 def main():
     down_hz = False
-    csv_path_dir = r"F:\Tomson\gait_pattern\20240822\qualisis"
-    csv_paths = glob.glob(os.path.join(csv_path_dir, "sub3*.tsv"))
+    csv_path_dir = r"F:\Tomson\gait_pattern\20240912\qualisys"
+    csv_paths = glob.glob(os.path.join(csv_path_dir, "sub3*normal*f0001*.tsv"))
 
     for i, csv_path in enumerate(csv_paths):
-        keypoints_mocap, full_range = read_3d_optitrack(csv_path, down_hz)
-        print(keypoints_mocap.shape)
+        marker_set_df, df_index = read_3DMC(csv_path, down_hz)
+        # keypoints = marker_set_df.values
+        # keypoints_mocap = keypoints.reshape(-1, len(marker_set), 3)  #xyzで組になるように変形
+        # print(keypoints_mocap.shape)
+        print(f"marker_set_df = {marker_set_df}")
         print(f"csv_path = {csv_path}")
 
         angle_list = []
-        dist_list = []
         bector_list = []
 
-        e_z_lshank_list = []
-        e_z_lfoot_list = []
-        #["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
-        rasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 0, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 1, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 2, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 3, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 4, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 5, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 6, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 7, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rtoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 8, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        ltoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 9, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 10, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 11, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 12, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 13, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        rank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 14, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
-        lank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 15, x], order=4, cutoff_freq=6, frame_list=full_range) for x in range(3)]).T
+        rasi = marker_set_df[['RASI_X', 'RASI_Y', 'RASI_Z']].to_numpy()
+        lasi = marker_set_df[['LASI_X', 'LASI_Y', 'LASI_Z']].to_numpy()
+        rpsi = marker_set_df[['RPSI_X', 'RPSI_Y', 'RPSI_Z']].to_numpy()
+        lpsi = marker_set_df[['LPSI_X', 'LPSI_Y', 'LPSI_Z']].to_numpy()
+        rknee = marker_set_df[['RKNE_X', 'RKNE_Y', 'RKNE_Z']].to_numpy()
+        lknee = marker_set_df[['LKNE_X', 'LKNE_Y', 'LKNE_Z']].to_numpy()
+        rank = marker_set_df[['RANK_X', 'RANK_Y', 'RANK_Z']].to_numpy()
+        lank = marker_set_df[['LANK_X', 'LANK_Y', 'LANK_Z']].to_numpy()
+        rtoe = marker_set_df[['RTOE_X', 'RTOE_Y', 'RTOE_Z']].to_numpy()
+        ltoe = marker_set_df[['LTOE_X', 'LTOE_Y', 'LTOE_Z']].to_numpy()
+        rhee = marker_set_df[['RHEE_X', 'RHEE_Y', 'RHEE_Z']].to_numpy()
+        lhee = marker_set_df[['LHEE_X', 'LHEE_Y', 'LHEE_Z']].to_numpy()
+        rknee2 = marker_set_df[['RKNE2_X', 'RKNE2_Y', 'RKNE2_Z']].to_numpy()
+        lknee2 = marker_set_df[['LKNE2_X', 'LKNE2_Y', 'LKNE2_Z']].to_numpy()
+        rank2 = marker_set_df[['RANK2_X', 'RANK2_Y', 'RANK2_Z']].to_numpy()
+        lank2 = marker_set_df[['LANK2_X', 'LANK2_Y', 'LANK2_Z']].to_numpy()
 
-        for frame_num in full_range:
+        #["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
+        # rasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 0, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # lasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 1, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # rpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 2, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # lpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 3, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # rknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 4, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # lknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 5, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # rank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 6, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # lank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 7, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # rtoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 8, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # ltoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 9, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # rhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 10, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # lhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 11, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # rknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 12, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # lknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 13, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # rank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 14, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+        # lank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 15, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
+
+        # for frame_num in full_range:
+        for frame_num in df_index:
+            frame_num = frame_num - df_index[0]
             #メモ
             d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
             d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:]) / 2)
-            # r = 0.0159 #[m] サイズ違うかも確認必要 https://www.optitrack.jp/products/accessories/marker.html
-            r = 0.0127 #[m] 三宅君
-            h = 1.74
+            r = 0.012 #9/12
+            h = 1.74 #sub3
             k = h/1.7
             beta = 0.1 * np.pi #[rad]
             theta = 0.496 #[rad]
@@ -179,20 +197,6 @@ def main():
             e_y_lshank = np.cross(e_z_lshank, e_x_lshank)
             rot_lshank = np.array([e_x_lshank, e_y_lshank, e_z_lshank]).T
 
-            # #右足節座標系（原点はrfoot）
-            # e_z_rfoot = e_z_pelvis
-            # e_x0_rfoot = rtoe[frame_num,:] - rhee[frame_num,:]
-            # e_y_rfoot = np.cross(e_z_rfoot, e_x0_rfoot)/np.linalg.norm(np.cross(e_z_rfoot, e_x0_rfoot))
-            # e_x_rfoot = np.cross(e_y_rfoot, e_z_rfoot)
-            # rot_rfoot = np.array([e_x_rfoot, e_y_rfoot, e_z_rfoot]).T
-
-            # #左足節座標系（原点はlfoot）
-            # e_z_lfoot = e_z_pelvis
-            # e_x0_lfoot = ltoe[frame_num,:] - lhee[frame_num, :]
-            # e_y_lfoot = np.cross(e_z_lfoot, e_x0_lfoot)/np.linalg.norm(np.cross(e_z_lfoot, e_x0_lfoot))
-            # e_x_lfoot = np.cross(e_y_lfoot, e_z_lfoot)
-            # rot_lfoot = np.array([e_x_lfoot, e_y_lfoot, e_z_lfoot]).T
-
             #右足節座標系 AIST参照（原点はrfoot）
             e_z_rfoot = (rtoe[frame_num,:] - rhee[frame_num,:]) / np.linalg.norm(rtoe[frame_num,:] - rhee[frame_num,:])
             e_y0_rfoot = rank[frame_num,:] - rank2[frame_num,:]
@@ -200,25 +204,12 @@ def main():
             e_y_rfoot = np.cross(e_z_rfoot, e_x_rfoot)
             rot_rfoot = np.array([e_x_rfoot, e_y_rfoot, e_z_rfoot]).T
 
-            # e_x_rfoot = (rtoe[frame_num,:] - rhee[frame_num,:]) / np.linalg.norm(rtoe[frame_num,:] - rhee[frame_num,:])
-            # e_y0_rfoot = rank[frame_num,:]2 - rank[frame_num,:]
-            # e_z_rfoot = np.cross(e_x_rfoot, e_y0_rfoot)/np.linalg.norm(np.cross(e_x_rfoot, e_y0_rfoot))
-            # e_y_rfoot = np.cross(e_z_rfoot, e_x_rfoot)
-            # rot_rfoot = np.array([e_x_rfoot, e_y_rfoot, e_z_rfoot]).T
-
             #左足節座標系 AIST参照（原点はlfoot）
             e_z_lfoot = (ltoe[frame_num,:] - lhee[frame_num, :]) / np.linalg.norm(ltoe[frame_num,:] - lhee[frame_num, :])
             e_y0_lfoot = lank2[frame_num,:] - lank[frame_num,:]
             e_x_lfoot = np.cross(e_z_lfoot, e_y0_lfoot)/np.linalg.norm(np.cross(e_z_lfoot, e_y0_lfoot))
             e_y_lfoot = np.cross(e_z_lfoot, e_x_lfoot)
             rot_lfoot = np.array([e_x_lfoot, e_y_lfoot, e_z_lfoot]).T
-
-            # e_x_lfoot = (ltoe[frame_num,:] - lhee[frame_num, :]) / np.linalg.norm(ltoe[frame_num,:] - lhee[frame_num, :])
-            # e_y0_lfoot = lank[frame_num, :] - lank2[frame_num,:]
-            # e_z_lfoot = np.cross(e_x_lfoot, e_y0_lfoot)/np.linalg.norm(np.cross(e_x_lfoot, e_y0_lfoot))
-            # e_y_lfoot = np.cross(e_z_lfoot, e_x_lfoot)
-            # rot_lfoot = np.array([e_x_lfoot, e_y_lfoot, e_z_lfoot]).T
-
 
             r_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_rthigh)
             r_hip_angle = R.from_matrix(r_hip_realative_rotation).as_euler('yzx', degrees=True)[0]
@@ -247,27 +238,8 @@ def main():
             r_ankle_angle = 90 - r_ankle_angle
             l_ankle_angle = 90 - l_ankle_angle
 
-
             angles = [r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle]
             angle_list.append(angles)
-
-            # def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配列を入力)
-            #     angle_list = []
-            #     for frame in range(len(vector1)):
-            #         dot_product = np.dot(vector1[frame], vector2[frame])
-            #         cross_product = np.cross(vector1[frame], vector2[frame])
-            #         angle = np.arctan2(np.linalg.norm(cross_product), dot_product)
-            #         angle = angle * 180 / np.pi
-            #         angle_list.append(angle)
-
-            #     return angle_list
-
-            # trans_mat_pelvis = np.array([[e_x_pelvis[0], e_y_pelvis[0], e_z_pelvis[0], hip[0]],
-            #                       [e_x_pelvis[1], e_y_pelvis[1], e_z_pelvis[1], hip[1]],
-            #                       [e_x_pelvis[2], e_y_pelvis[2], e_z_pelvis[2], hip[2]],
-            #                       [0, 0, 0, 1]])
-            # lhee_basse_pelvis = np.dot(trans_mat_pelvis, np.append(lhee[frame_num,:], 1))[:3]
-            # print(f"lhee_basse_pelvis = {lhee_basse_pelvis}")
 
             plot_flag = False
             if plot_flag:
@@ -356,56 +328,50 @@ def main():
                 plt.legend()
                 plt.show()
 
-            # e_z_lshank_list.append(e_z_lshank)
-            # e_z_lfoot_list.append(e_z_lfoot)
-
             #骨盤とかかとの距離計算
-            dist = np.linalg.norm(lhee[frame_num, :] - hip[:])
-            bector = lhee[frame_num, :] - hip[:]
-            dist_list.append(dist)
+            heel = lhee[frame_num, :]
+            bector = heel - hip[:]
             bector_list.append(bector)
-            # bector_list.append(lhee_basse_pelvis)
 
         angle_array = np.array(angle_list)
         # print(f"angle_array = {angle_array}")
         # print(f"angle_array.shape = {angle_array.shape}")
         df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
-        df.index = df.index + full_range.start
+        # df.index = df.index + full_range.start
+        df.index = df_index
         if down_hz:
             df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_30Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
         else:
             df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_120Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
 
-        # ankle_angle = calculate_angle(e_z_lshank_list, e_z_lfoot_list)
-        # print(f"ankle_angle = {ankle_angle}")
+        bector_array = np.array(bector_list)
+        lhee_pel_z = bector_array[:, 0]
+        lhee_pel_z = bector_array[:, 2]  #motiveの場合
+        df = pd.DataFrame({"lhee_pel_z":lhee_pel_z})
+        df.index = df_index
+        df = df.sort_values(by="lhee_pel_z", ascending=True)
+        # df = df.sort_values(by="lhee_pel_z", ascending=False)  #motiveの場合
+        print(f"df2 = {df}")
+        ic_list = df.index[:120].values
+        print(f"ic_list = {ic_list}")
 
-        # fig, ax = plt.subplots()
-        # ax.plot(full_range, dist_list)
-        # plt.show()
-        # plt.cla
+        filtered_list = []
+        skip_values = set()
+        for value in ic_list:
+            # すでにスキップリストにある場合はスキップ
+            if value in skip_values:
+                continue
+            # 現在の値を結果リストに追加
+            filtered_list.append(value)
+            # 10個以内の数値をスキップリストに追加
+            skip_values.update(range(value - 10, value + 11))
+        filtered_list = sorted(filtered_list)
+        print(f"フィルタリング後のリスト:{filtered_list}")
 
         if down_hz:
-            bector_array = np.array(bector_list)
-            lhee_pel_z = bector_array[:, 2]
-            df = pd.DataFrame({"frame":full_range, "lhee_pel_z":lhee_pel_z})
-            df = df.sort_values(by="lhee_pel_z", ascending=False)
-            # print(df)
-            ic_list = df.head(30)["frame"].values
-            print(f"ic_list = {ic_list}")
-
-            filtered_list = []
-            skip_values = set()
-            for value in ic_list:
-                # すでにスキップリストにある場合はスキップ
-                if value in skip_values:
-                    continue
-                # 現在の値を結果リストに追加
-                filtered_list.append(value)
-                # 10個以内の数値をスキップリストに追加
-                skip_values.update(range(value - 10, value + 11))
-            filtered_list = sorted(filtered_list)
-            print(f"フィルタリング後のリスト:{filtered_list}")
-            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_{os.path.basename(csv_path).split('.')[0]}.csv"), filtered_list)
+            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_30Hz_{os.path.basename(csv_path).split('.')[0]}.npy"), filtered_list)
+        else:
+            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_120Hz_{os.path.basename(csv_path).split('.')[0]}.npy"), filtered_list)
 
 
 if __name__ == "__main__":

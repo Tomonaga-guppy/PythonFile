@@ -14,12 +14,8 @@ sys.path.append(helpers_dir)
 from helpers import convert_to_bgra_if_required
 
 def main():
-    # mkv_folder = r"F:\Tomson\gait_pattern\20240822"
-    mkv_folder = r"F:\Tomson\gait_pattern\20240808"
-    # mkv_files = glob.glob(os.path.join(mkv_folder, 'sub3_normalgait_f*.mkv'))
-    mkv_files = glob.glob(os.path.join(mkv_folder, '[0-9]*.mkv'))
-    # mkv_files = glob.glob(os.path.join(mkv_folder, '1_walk*.mkv'))
-    # mkv_files = glob.glob(os.path.join(mkv_folder, '2_walk_slow*.mkv'))
+    mkv_folder = r"F:\Tomson\gait_pattern\20240912"
+    mkv_files = glob.glob(os.path.join(mkv_folder, '*larg*_f_1*.mkv'))
     print(f"mkv_files = {mkv_files}")
 
     for i, mkv_file_path in enumerate(mkv_files):
@@ -34,7 +30,7 @@ def main():
 
         frame_count = 1
 
-        """
+        # """
         # mp4ファイルの作成
         mp4file = folder_path + "/original.mp4"
         fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') # ファイル形式(ここではmp4)
@@ -77,9 +73,9 @@ def main():
         playback.close()
         cv2.destroyAllWindows()
         writer.release()
+        # """
+
         """
-
-
         # depth画像の保存
         original_depth_image_folder_path = folder_path + "/depth_image_original"
         if not os.path.exists(original_depth_image_folder_path):
@@ -218,6 +214,7 @@ def main():
 
         ebit_writer.release()
         jet_writer.release()
+        """
 
 
 if __name__ == '__main__':
