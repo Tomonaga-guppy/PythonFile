@@ -16,3 +16,5 @@ theta = math.radians(FOV_H/2)
 y = 1 / math.tan(theta)
 print(f"y = {y}")
 
+theta = math.degrees(math.atan(1/30))
+print(f"theta = {theta}")
