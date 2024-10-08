@@ -77,6 +77,7 @@ def main():
 
         angle_list = []
         bector_list = []
+        dist_list = []
 
         rasi = marker_set_df[['RASI_X', 'RASI_Y', 'RASI_Z']].to_numpy()
         lasi = marker_set_df[['LASI_X', 'LASI_Y', 'LASI_Z']].to_numpy()
@@ -94,24 +95,6 @@ def main():
         lknee2 = marker_set_df[['LKNE2_X', 'LKNE2_Y', 'LKNE2_Z']].to_numpy()
         rank2 = marker_set_df[['RANK2_X', 'RANK2_Y', 'RANK2_Z']].to_numpy()
         lank2 = marker_set_df[['LANK2_X', 'LANK2_Y', 'LANK2_Z']].to_numpy()
-
-        #["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
-        # rasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 0, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # lasi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 1, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # rpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 2, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # lpsi = np.array([butter_lowpass_fillter(keypoints_mocap[:, 3, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # rknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 4, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # lknee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 5, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # rank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 6, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # lank = np.array([butter_lowpass_fillter(keypoints_mocap[:, 7, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # rtoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 8, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # ltoe = np.array([butter_lowpass_fillter(keypoints_mocap[:, 9, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # rhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 10, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # lhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 11, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # rknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 12, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # lknee2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 13, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # rank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 14, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
-        # lank2 = np.array([butter_lowpass_fillter(keypoints_mocap[:, 15, x], order=4, cutoff_freq=6, frame_list=df_index) for x in range(3)]).T
 
         # for frame_num in full_range:
         for frame_num in df_index:
@@ -332,6 +315,7 @@ def main():
             heel = lhee[frame_num, :]
             bector = heel - hip[:]
             bector_list.append(bector)
+            dist_list.append(np.linalg.norm(bector))
 
         angle_array = np.array(angle_list)
         # print(f"angle_array = {angle_array}")
@@ -346,7 +330,7 @@ def main():
 
         bector_array = np.array(bector_list)
         lhee_pel_z = bector_array[:, 0]
-        lhee_pel_z = bector_array[:, 2]  #motiveの場合
+        # lhee_pel_z = bector_array[:, 2]  #motiveの場合
         df = pd.DataFrame({"lhee_pel_z":lhee_pel_z})
         df.index = df_index
         df = df.sort_values(by="lhee_pel_z", ascending=True)
@@ -354,6 +338,16 @@ def main():
         print(f"df2 = {df}")
         ic_list = df.index[:120].values
         print(f"ic_list = {ic_list}")
+
+
+        dist_array = np.array(dist_list)
+        df = pd.DataFrame({"dist": dist_array})
+        df.index = df_index
+        # df = df.sort_values(by="dist", ascending=True)
+
+        plt.figure()
+        plt.plot(df.index, df["dist"])
+        plt.show()
 
         filtered_list = []
         skip_values = set()

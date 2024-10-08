@@ -47,8 +47,9 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list):  #4次のバ�
 def cubic_spline_interpolation(keypoints_set, frame_range):
     # 新しい配列を作成して補間結果を保持します
     interpolated_keypoints = np.copy(keypoints_set)
+    # print(f"keypoints_set.shape = {keypoints_set.shape}")  # [frame, 3]
 
-    for axis in range(keypoints_set.shape[1]):
+    for axis in range(keypoints_set.shape[1]-1):
         # 指定されたフレーム範囲のデータを取り出す
         frames = frame_range
         values = np.nan_to_num(keypoints_set[frames, axis])
@@ -60,6 +61,8 @@ def cubic_spline_interpolation(keypoints_set, frame_range):
         interpolated_values = spline(frames)
         interpolated_keypoints[frames, axis] = interpolated_values
 
+    # print(f"interpolated_keypoints.shape = {interpolated_keypoints.shape}")  # [frame, 3]
+
     return interpolated_keypoints
 
 def read_2d_openpose(mkv_file):
@@ -67,13 +70,12 @@ def read_2d_openpose(mkv_file):
     id = os.path.basename(mkv_file).split('.')[0].split('_')[-1]
     json_folder_path = os.path.join(os.path.dirname(mkv_file), os.path.basename(mkv_file).split('.')[0], 'estimated.json')
     all_keypoints_2d = []  # 各フレームの2Dキーポイントを保持するリスト
-    all_keypoints_2d_tf = []
     check_openpose_list = [1, 8, 12, 13, 14, 19, 20, 21]
     valid_frames = []
     json_files = glob.glob(os.path.join(json_folder_path, "*.json"))
     for i, json_file in enumerate(json_files):
         keypoints_data = load_keypoints_for_frame(i, json_folder_path) #[25, 3]
-        print(f"i = {i} mkv = {mkv_file} keypoints_data = {keypoints_data}")
+        # print(f"i = {i} mkv = {mkv_file} keypoints_data = {keypoints_data}")
 
         # キーポイント抽出が出来ているフレームを記録
         if all(not np.all(np.isnan(keypoints_data[point, :])) for point in check_openpose_list):
@@ -84,106 +86,174 @@ def read_2d_openpose(mkv_file):
 
     return keypoints_2d_openpose, valid_frames
 
-def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配列を入力)
-    angle_list = []
-    for frame in range(len(vector1)):
-        dot_product = np.dot(vector1[frame], vector2[frame])
-        cross_product = np.cross(vector1[frame], vector2[frame])
-        angle = np.arctan2(np.linalg.norm(cross_product), dot_product)
-        angle = angle * 180 / np.pi
-        angle_list.append(angle)
 
-    return angle_list
 
 def main():
-    for mkv_file in mkv_files:
-        mkv_sagittal = mkv_files[0]
-        mkv_diagonal_right = mkv_files[1]
-        mkv_diagonal_left = mkv_files[2]
 
-        #モーキャプから求めた関節角度データを取得
-        angle_csv_files = glob.glob(os.path.join(root_dir, "Motive", f"angle_30Hz_{condition}*.csv"))[0]
-        df_mocap_angle = pd.read_csv(angle_csv_files, index_col=0)
-        mocap_frame = df_mocap_angle.index.values
-        #モーキャプから求めた初期接地時のフレーム
-        ic_frame_path = glob.glob(os.path.join(root_dir, "Motive",f"ic_frame_{condition}*.npy"))[0]
-        ic_frame_mocap = np.load(ic_frame_path)
+    check_side = "right"
+    # check_side = "left"
 
-        #2d上でのキーポイントを取得 [frame, 25, 3]
-        keypoints_sagittal_2d, sagi_frame_2d = read_2d_openpose(mkv_sagittal)
-        keypoints_diagonal_right_2d, dia_right_frame_2d = read_2d_openpose(mkv_diagonal_right)
-        keypoints_diagonal_left_2d, dia_left_frame_2d = read_2d_openpose(mkv_diagonal_left)
+    mkv_sagittal = mkv_files[0]
+    mkv_right = mkv_files[1]
+    mkv_left = mkv_files[2]
 
-        print(f"keypoints_sagittal_2d = {keypoints_sagittal_2d.shape}")
+    #モーキャプから求めた関節角度データを取得
+    angle_csv_files = glob.glob(os.path.join(root_dir, "qualisys", f"angle_30Hz_{condition}*.csv"))[0]
+    df_mocap_angle = pd.read_csv(angle_csv_files, index_col=0)
+    mocap_frame = df_mocap_angle.index.values
+    #モーキャプから求めた初期接地時のフレーム
+    ic_frame_path = glob.glob(os.path.join(root_dir, "qualisys",f"ic_frame_30Hz_{condition}*.npy"))[0]
+    ic_frame_mocap = np.load(ic_frame_path)
 
-        #矢状面2d用の処理
-        mid_hip_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 8, :], sagi_frame_2d) #[frame, 2]        neck_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 1, :], sagi_frame_2d)
-        lhip_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 12, :], sagi_frame_2d)
-        lknee_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 13, :], sagi_frame_2d)
-        lankle_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 14, :], sagi_frame_2d)
-        lbigtoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 19, :], sagi_frame_2d)
-        lsmalltoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 20, :], sagi_frame_2d)
-        lheel_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 21, :], sagi_frame_2d)
+    #2d上でのキーポイントを取得 [frame, 25, 3]
+    keypoints_sagittal_2d, sagi_frame_2d = read_2d_openpose(mkv_sagittal)
+    keypoints_right_2d, dia_right_frame_2d = read_2d_openpose(mkv_right)
+    keypoints_left_2d, dia_left_frame_2d = read_2d_openpose(mkv_left)
 
-        mid_hip_sagittal_2d = np.array([butter_lowpass_fillter(mid_hip_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
-        neck_sagittal_2d = np.array([butter_lowpass_fillter(neck_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
-        lhip_sagittal_2d = np.array([butter_lowpass_fillter(lhip_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
-        lknee_sagittal_2d = np.array([butter_lowpass_fillter(lknee_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
-        lankle_sagittal_2d = np.array([butter_lowpass_fillter(lankle_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
-        lbigtoe_sagittal_2d = np.array([butter_lowpass_fillter(lbigtoe_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
-        lsmalltoe_sagittal_2d = np.array([butter_lowpass_fillter(lsmalltoe_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
-        lheel_sagittal_2d = np.array([butter_lowpass_fillter(lheel_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+    # print(f"keypoints_sagittal_2d = {keypoints_sagittal_2d}")
+    print(f"keypoints_sagittal_2d.shape = {keypoints_sagittal_2d.shape}")
 
-        trunk_vector_sagittal_2d = neck_sagittal_2d - mid_hip_sagittal_2d
-        thigh_vector_l_sagittal_2d = lknee_sagittal_2d - lhip_sagittal_2d
-        lower_leg_vector_l_sagittal_2d = lknee_sagittal_2d - lankle_sagittal_2d
-        foot_vector_l_sagittal_2d = (lbigtoe_sagittal_2d + lsmalltoe_sagittal_2d) / 2 - lheel_sagittal_2d
-
+    #矢状面2d用の処理
+    neck_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 1, :], sagi_frame_2d)   #[frame, 2]        neck_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 1, :], sagi_frame_2d)
+    mid_hip_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 8, :], sagi_frame_2d)
+    if check_side == "right":
+        hip_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 9, :], sagi_frame_2d)
+        knee_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 10, :], sagi_frame_2d)
+        ankle_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 11, :], sagi_frame_2d)
+        bigtoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 22, :], sagi_frame_2d)
+        smalltoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 23, :], sagi_frame_2d)
+        heel_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 24, :], sagi_frame_2d)
+    elif check_side == "left":
+        hip_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 12, :], sagi_frame_2d)
+        knee_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 13, :], sagi_frame_2d)
+        ankle_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 14, :], sagi_frame_2d)
+        bigtoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 19, :], sagi_frame_2d)
+        smalltoe_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 20, :], sagi_frame_2d)
+        heel_sagittal_2d = cubic_spline_interpolation(keypoints_sagittal_2d[:, 21, :], sagi_frame_2d)
 
 
+    mid_hip_sagittal_2d = np.array([butter_lowpass_fillter(mid_hip_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+    neck_sagittal_2d = np.array([butter_lowpass_fillter(neck_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+    hip_sagittal_2d = np.array([butter_lowpass_fillter(hip_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+    knee_sagittal_2d = np.array([butter_lowpass_fillter(knee_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+    ankle_sagittal_2d = np.array([butter_lowpass_fillter(ankle_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+    bigtoe_sagittal_2d = np.array([butter_lowpass_fillter(bigtoe_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+    smalltoe_sagittal_2d = np.array([butter_lowpass_fillter(smalltoe_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
+    heel_sagittal_2d = np.array([butter_lowpass_fillter(heel_sagittal_2d[:, x], order = 4, cutoff_freq = 6, frame_list = sagi_frame_2d) for x in range(2)]).T
 
-        # """
-        #3次元DLT法の処理
-        print("3次元DLT法の処理を開始しました")
-        mid_hip_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 8, :], dia_right_frame_2d)
-        neck_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 1, :], dia_right_frame_2d)
-        lhip_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 12, :], dia_right_frame_2d)
-        lknee_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 13, :], dia_right_frame_2d)
-        lankle_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 14, :], dia_right_frame_2d)
-        lbigtoe_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 19, :], dia_right_frame_2d)
-        lsmalltoe_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 20, :], dia_right_frame_2d)
-        lheel_diagonal_right_2d = cubic_spline_interpolation(keypoints_diagonal_right_2d[:, 21, :], dia_right_frame_2d)
-
-        mid_hip_diagonal_right_2d = np.array([butter_lowpass_fillter(mid_hip_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
-        neck_diagonal_right_2d = np.array([butter_lowpass_fillter(neck_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
-        lhip_diagonal_right_2d = np.array([butter_lowpass_fillter(lhip_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
-        lknee_diagonal_right_2d = np.array([butter_lowpass_fillter(lknee_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
-        lankle_diagonal_right_2d = np.array([butter_lowpass_fillter(lankle_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
-        lbigtoe_diagonal_right_2d = np.array([butter_lowpass_fillter(lbigtoe_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
-        lsmalltoe_diagonal_right_2d = np.array([butter_lowpass_fillter(lsmalltoe_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
-        lheel_diagonal_right_2d = np.array([butter_lowpass_fillter(lheel_diagonal_right_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_right_frame_2d) for x in range(2)]).T
-
-        mid_hip_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 8, :], dia_left_frame_2d)
-        neck_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 1, :], dia_left_frame_2d)
-        lhip_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 12, :], dia_left_frame_2d)
-        lknee_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 13, :], dia_left_frame_2d)
-        lankle_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 14, :], dia_left_frame_2d)
-        lbigtoe_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 19, :], dia_left_frame_2d)
-        lsmalltoe_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 20, :], dia_left_frame_2d)
-        lheel_diagonal_left_2d = cubic_spline_interpolation(keypoints_diagonal_left_2d[:, 21, :], dia_left_frame_2d)
-
-        mid_hip_diagonal_left_2d = np.array([butter_lowpass_fillter(mid_hip_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
-        neck_diagonal_left_2d = np.array([butter_lowpass_fillter(neck_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
-        lhip_diagonal_left_2d = np.array([butter_lowpass_fillter(lhip_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
-        lknee_diagonal_left_2d = np.array([butter_lowpass_fillter(lknee_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
-        lankle_diagonal_left_2d = np.array([butter_lowpass_fillter(lankle_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
-        lbigtoe_diagonal_left_2d = np.array([butter_lowpass_fillter(lbigtoe_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
-        lsmalltoe_diagonal_left_2d = np.array([butter_lowpass_fillter(lsmalltoe_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
-        lheel_diagonal_left_2d = np.array([butter_lowpass_fillter(lheel_diagonal_left_2d[:, x], order = 4, cutoff_freq = 6, frame_list = dia_left_frame_2d) for x in range(2)]).T
+    trunk_vector_sagittal_2d = neck_sagittal_2d - mid_hip_sagittal_2d
+    thigh_vector_sagittal_2d = knee_sagittal_2d - hip_sagittal_2d
+    lower_leg_vector_sagittal_2d = knee_sagittal_2d - ankle_sagittal_2d
+    foot_vector_sagittal_2d = (bigtoe_sagittal_2d + smalltoe_sagittal_2d) / 2 - heel_sagittal_2d
 
 
-        print("3次元DLT法の処理が終了しました")
-        # """
+    # """
+    #3次元DLT法の処理
+    print("3次元DLT法の処理を開始しました")
+    mid_hip_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 8, :], dia_right_frame_2d)
+    neck_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 1, :], dia_right_frame_2d)
+    if check_side == "right":
+        hip_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 9, :], dia_right_frame_2d)
+        knee_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 10, :], dia_right_frame_2d)
+        ankle_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 11, :], dia_right_frame_2d)
+        bigtoe_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 22, :], dia_right_frame_2d)
+        smalltoe_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 23, :], dia_right_frame_2d)
+        heel_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 24, :], dia_right_frame_2d)
+    elif check_side == "left":
+        hip_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 12, :], dia_right_frame_2d)
+        knee_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 13, :], dia_right_frame_2d)
+        ankle_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 14, :], dia_right_frame_2d)
+        bigtoe_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 19, :], dia_right_frame_2d)
+        smalltoe_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 20, :], dia_right_frame_2d)
+        heel_right_2d = cubic_spline_interpolation(keypoints_right_2d[:, 21, :], dia_right_frame_2d)
+
+    mid_hip_right_2d = np.hstack([np.array([butter_lowpass_fillter(mid_hip_right_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_right_frame_2d) for x in range(2)]).T, mid_hip_right_2d[:, 2:3]])
+    neck_right_2d = np.hstack([np.array([butter_lowpass_fillter(neck_right_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_right_frame_2d) for x in range(2)]).T, neck_right_2d[:, 2:3]])
+    hip_right_2d = np.hstack([np.array([butter_lowpass_fillter(hip_right_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_right_frame_2d) for x in range(2)]).T, hip_right_2d[:, 2:3]])
+    knee_right_2d = np.hstack([np.array([butter_lowpass_fillter(knee_right_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_right_frame_2d) for x in range(2)]).T, knee_right_2d[:, 2:3]])
+    ankle_right_2d = np.hstack([np.array([butter_lowpass_fillter(ankle_right_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_right_frame_2d) for x in range(2)]).T, ankle_right_2d[:, 2:3]])
+    bigtoe_right_2d = np.hstack([np.array([butter_lowpass_fillter(bigtoe_right_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_right_frame_2d) for x in range(2)]).T, bigtoe_right_2d[:, 2:3]])
+    smalltoe_right_2d = np.hstack([np.array([butter_lowpass_fillter(smalltoe_right_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_right_frame_2d) for x in range(2)]).T, smalltoe_right_2d[:, 2:3]])
+    heel_right_2d = np.hstack([np.array([butter_lowpass_fillter(heel_right_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_right_frame_2d) for x in range(2)]).T, heel_right_2d[:, 2:3]])
+
+    mid_hip_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 8, :], dia_left_frame_2d)
+    neck_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 1, :], dia_left_frame_2d)
+    if check_side == "right":
+        hip_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 9, :], dia_left_frame_2d)
+        knee_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 10, :], dia_left_frame_2d)
+        ankle_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 11, :], dia_left_frame_2d)
+        bigtoe_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 22, :], dia_left_frame_2d)
+        smalltoe_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 23, :], dia_left_frame_2d)
+        heel_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 24, :], dia_left_frame_2d)
+    elif check_side == "left":
+        hip_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 12, :], dia_left_frame_2d)
+        knee_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 13, :], dia_left_frame_2d)
+        ankle_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 14, :], dia_left_frame_2d)
+        bigtoe_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 19, :], dia_left_frame_2d)
+        smalltoe_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 20, :], dia_left_frame_2d)
+        heel_left_2d = cubic_spline_interpolation(keypoints_left_2d[:, 21, :], dia_left_frame_2d)
+
+    mid_hip_left_2d = np.hstack([np.array([butter_lowpass_fillter(mid_hip_left_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_left_frame_2d) for x in range(2)]).T, mid_hip_left_2d[:, 2:3]])
+    neck_left_2d = np.hstack([np.array([butter_lowpass_fillter(neck_left_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_left_frame_2d) for x in range(2)]).T, neck_left_2d[:, 2:3]])
+    hip_left_2d = np.hstack([np.array([butter_lowpass_fillter(hip_left_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_left_frame_2d) for x in range(2)]).T, hip_left_2d[:, 2:3]])
+    knee_left_2d = np.hstack([np.array([butter_lowpass_fillter(knee_left_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_left_frame_2d) for x in range(2)]).T, knee_left_2d[:, 2:3]])
+    ankle_left_2d = np.hstack([np.array([butter_lowpass_fillter(ankle_left_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_left_frame_2d) for x in range(2)]).T, ankle_left_2d[:, 2:3]])
+    bigtoe_left_2d = np.hstack([np.array([butter_lowpass_fillter(bigtoe_left_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_left_frame_2d) for x in range(2)]).T, bigtoe_left_2d[:, 2:3]])
+    smalltoe_left_2d = np.hstack([np.array([butter_lowpass_fillter(smalltoe_left_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_left_frame_2d) for x in range(2)]).T, smalltoe_left_2d[:, 2:3]])
+    heel_left_2d = np.hstack([np.array([butter_lowpass_fillter(heel_left_2d[:, x], order=4, cutoff_freq=6, frame_list=dia_left_frame_2d) for x in range(2)]).T, heel_left_2d[:, 2:3]])
+
+    # 射影行列の読み込み
+    P_1 = np.load(os.path.join(root_dir, "calibration" ,"P_1.npy"))
+    P_2 = np.load(os.path.join(root_dir, "calibration" ,"P_2.npy"))
+
+    # フレーム数が異なる場合は短い方に合わせる
+    openpose_frame = min(len(mid_hip_sagittal_2d), len(mid_hip_right_2d), len(mid_hip_left_2d))
+    mid_hip_sagittal_2d = mid_hip_sagittal_2d[:openpose_frame]
+    mid_hip_right_2d = mid_hip_right_2d[:openpose_frame]
+    mid_hip_left_2d = mid_hip_left_2d[:openpose_frame]
+
+    def reconstruction_dlt(P1, P2, point_array_2d_1, point_array_2d_2):
+        X_array = np.array([])
+        for frame in range(openpose_frame):
+            x1, y1, c1 = point_array_2d_1[frame]
+            x2, y2, c2 = point_array_2d_2[frame]
+            # print(f"x1 = {x1}, y1 = {y1}, c1 = {c1}")
+            # print(f"x2 = {x2}, y2 = {y2}, c2 = {c2}")
+
+            A = np.array([[c1 * (P1[2, 0] * x1 - P1[0, 0]), c1 * (P1[2, 1] * x1 - P1[0, 1]), c1 * (P1[2, 2] * x1 - P1[0, 2])],
+                          [c1 * (P1[2, 0] * y1 - P1[1, 0]), c1 * (P1[2, 1] * y1 - P1[1, 1]), c1 * (P1[2, 2] * y1 - P1[1, 2])],
+                          [c2 * (P2[2, 0] * x2 - P2[0, 0]), c2 * (P2[2, 1] * x2 - P2[0, 1]), c2 * (P2[2, 2] * x2 - P2[0, 2])],
+                          [c2 * (P2[2, 0] * y2 - P2[1, 0]), c2 * (P2[2, 1] * y2 - P2[1, 1]), c2 * (P2[2, 2] * y2 - P2[1, 2])]])
+
+            b = np.array([c1 * (P1[0, 3] - x1),
+                            c1 * (P1[1, 3] - y1),
+                            c2 * (P2[0, 3] - x2),
+                            c2 * (P2[1, 3] - y2)])
+
+            X = np.linalg.pinv(A).dot(b)
+            X_array = np.append(X_array, X)
+
+        X_array = X_array.reshape(openpose_frame, 3)
+        print(f"X_array = {X_array}")
+        print(f"X_array.shape = {X_array.shape}")
+        return X_array
+
+    mid_hip_3d = reconstruction_dlt(P_1, P_2, mid_hip_right_2d, mid_hip_left_2d)
+    neck_3d = reconstruction_dlt(P_1, P_2, neck_right_2d, neck_left_2d)
+    hip_3d = reconstruction_dlt(P_1, P_2, hip_right_2d, hip_left_2d)
+    knee_3d = reconstruction_dlt(P_1, P_2, knee_right_2d, knee_left_2d)
+    ankle_3d = reconstruction_dlt(P_1, P_2, ankle_right_2d, ankle_left_2d)
+    bigtoe_3d = reconstruction_dlt(P_1, P_2, bigtoe_right_2d, bigtoe_left_2d)
+    smalltoe_3d = reconstruction_dlt(P_1, P_2, smalltoe_right_2d, smalltoe_left_2d)
+    heel_3d = reconstruction_dlt(P_1, P_2, heel_right_2d, heel_left_2d)
+
+    trunk_vector_3d = neck_3d - mid_hip_3d
+    thigh_vector_3d = knee_3d - hip_3d
+    lower_leg_vector_3d = knee_3d - ankle_3d
+    foot_vector_3d = (bigtoe_3d + smalltoe_3d) / 2 - heel_3d
+
+    print("3次元DLT法の処理が終了しました")
+    # """
 
 
 
@@ -191,97 +261,154 @@ def main():
 
 
 
-        #すべてで記録できているフレームを抽出
-        print(f"sagi_frame_2d = {sagi_frame_2d}")
-        # print(f"dia_right_frame_3d = {dia_right_frame_3d}")
-        # print(f"dia_left_frame_3d = {dia_left_frame_3d}")
-        print(f"mocap_frame = {mocap_frame}")
-        # common_frame = sorted(list(set(sagi_frame_2d) & set(dia_right_frame_3d) & set(dia_left_frame_3d) & set(mocap_frame)))
-        common_frame = sorted(list(set(sagi_frame_2d) & set(mocap_frame)))
+    #すべてで記録できているフレームを抽出
+    print(f"sagi_frame_2d = {sagi_frame_2d}")
+    print(f"mocap_frame = {mocap_frame}")
+    common_frame = sorted(list(set(sagi_frame_2d) & set(mocap_frame)))
+    common_frame = range(ic_frame_mocap[3], ic_frame_mocap[9])
 
-        hip_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(trunk_vector_sagittal_2d, thigh_vector_l_sagittal_2d))
-        knee_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(thigh_vector_l_sagittal_2d, lower_leg_vector_l_sagittal_2d))
-        ankle_angle_sagittal_2d_filtered = pd.DataFrame(calculate_angle(lower_leg_vector_l_sagittal_2d, foot_vector_l_sagittal_2d))
+    def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配列を入力)
+        angle_list = []
+        if vector1.shape[1] == 2:  #2Dベクトル
+            for frame in range(len(vector1)):
+                dot_product = np.dot(vector1[frame,:], vector2[frame,:])
+                cross_product = np.cross(vector1[frame,:], vector2[frame,:])
+                angle = np.rad2deg(np.arctan2(cross_product, dot_product))
+                angle_list.append(angle)
 
-        hip_angle_sagittal_2d_filtered = 180 - hip_angle_sagittal_2d_filtered
-        knee_angle_sagittal_2d_filtered = 180 - knee_angle_sagittal_2d_filtered
-        ankle_angle_sagittal_2d_filtered =  90 - ankle_angle_sagittal_2d_filtered
+        elif vector1.shape[1] == 3:  #3Dベクトル
+            for frame in range(len(vector1)):
+                dot_product = np.dot(vector1[frame, :], vector2[frame, :])
+                cross_product = np.cross(vector1[frame, :], vector2[frame, :])
+                angle = np.rad2deg(np.arctan2(cross_product, dot_product))  # atan2を使って角度を計算
+                angle_list.append(angle)
 
-        # df_mocap_angle.index = df_mocap_angle.index - 5
-        # df_mocap_angle = df_mocap_angle.reindex(common_frame)
-        # df_mocap_angle.iloc[-5:, :] = 0
+        return angle_list
 
-        hip_angle_mocap = df_mocap_angle["l_hip_angle"].loc[common_frame]
-        knee_angle_mocap = df_mocap_angle["l_knee_angle"].loc[common_frame]
-        ankle_angle_mocap = df_mocap_angle["l_ankle_angle"].loc[common_frame]
+    hip_angle_sagittal_2d = pd.DataFrame(calculate_angle(thigh_vector_sagittal_2d, trunk_vector_sagittal_2d))
+    knee_angle_sagittal_2d = pd.DataFrame(calculate_angle(thigh_vector_sagittal_2d, lower_leg_vector_sagittal_2d))
+    ankle_angle_sagittal_2d = pd.DataFrame(calculate_angle(foot_vector_sagittal_2d, lower_leg_vector_sagittal_2d))
 
-        # pd.set_option('display.max_rows', 500)
-        # print(F"hip_angle_sagittal_2d = {hip_angle_sagittal_2d.loc[common_frame]}")
-        # print(f"hip_angle_sagittal_2d_filtered = {hip_angle_sagittal_2d_filtered.loc[common_frame]}")
+    #3D DLT法で求めた関節角度(基準は3DMCの軸)
+    hip_angle_3d = - pd.DataFrame(calculate_angle(thigh_vector_3d, trunk_vector_3d)).iloc[:, 1]
+    knee_angle_3d = - pd.DataFrame(calculate_angle(thigh_vector_3d, lower_leg_vector_3d)).iloc[:, 1]
+    ankle_angle_3d = - pd.DataFrame(calculate_angle(foot_vector_3d, lower_leg_vector_3d)).iloc[:, 1]
 
-        if ic_frame_mocap is not None:
-            for ic_frame in ic_frame_mocap:
-                plt.axvline(x=ic_frame, color='gray', linestyle='--')
-        plt.plot(common_frame, hip_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
-        # plt.plot(common_frame, hip_angle_frontal.loc[common_frame], label="3D frontal", color='#ff7f0e')
-        plt.plot(common_frame, hip_angle_mocap, label="Mocap", color='#ff7f0e')  #color='#2ca02c' 緑     color='#ff7f0e' オレンジ  color='#1f77b4' 青
-        # plt.plot(common_frame, hip_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
-        # plt.plot(common_frame, hip_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.title("Hip Angle")
-        plt.legend()
-        plt.xlabel("frame [-]")
-        plt.ylabel("angle [°]")
-        plt.savefig(os.path.join(root_dir, f"{condition}_hip_angle.png"))
-        # plt.show()  #5frame
-        plt.cla()
+    if check_side == "right":
+        hip_angle_sagittal_2d = hip_angle_sagittal_2d.where(hip_angle_sagittal_2d <= 100, hip_angle_sagittal_2d - 360)
+        knee_angle_sagittal_2d = knee_angle_sagittal_2d.where(knee_angle_sagittal_2d <= 0, knee_angle_sagittal_2d - 360)
+        ankle_angle_sagittal_2d = ankle_angle_sagittal_2d.where(ankle_angle_sagittal_2d <= 0, ankle_angle_sagittal_2d - 360)
+        hip_angle_sagittal_2d = hip_angle_sagittal_2d + 180
+        knee_angle_sagittal_2d = knee_angle_sagittal_2d + 180
+        ankle_angle_sagittal_2d = ankle_angle_sagittal_2d + 90
 
-        if ic_frame_mocap is not None:
-            for ic_frame in ic_frame_mocap:
-                plt.axvline(x=ic_frame, color='gray', linestyle='--')
-        plt.plot(common_frame, knee_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
-        # plt.plot(common_frame, knee_angle_frontal.iloc[common_frame], label="3D frontal", color='#ff7f0e')
-        plt.plot(common_frame, knee_angle_mocap, label="Mocap", color='#ff7f0e')
-        # plt.plot(common_frame, knee_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
-        # plt.plot(common_frame, knee_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.title("Knee Angle")
-        plt.legend()
-        plt.xlabel("frame [-]")
-        plt.ylabel("angle [°]")
-        plt.savefig(os.path.join(root_dir, f"{condition}_knee_angle.png"))
-        # plt.show() #3frame
-        plt.cla()
+        hip_angle_3d = hip_angle_3d.where(hip_angle_3d <= 100, hip_angle_3d - 360)
+        knee_angle_3d = knee_angle_3d.where(knee_angle_3d <= 100, knee_angle_3d - 360)
+        ankle_angle_3d = ankle_angle_3d.where(ankle_angle_3d <= 0, ankle_angle_3d - 360)
+        hip_angle_3d = hip_angle_3d + 180
+        knee_angle_3d = knee_angle_3d + 180
+        ankle_angle_3d = ankle_angle_3d + 90
 
-        if ic_frame_mocap is not None:
-            for ic_frame in ic_frame_mocap:
-                plt.axvline(x=ic_frame, color='gray', linestyle='--')
-        plt.plot(common_frame, ankle_angle_sagittal_2d_filtered.loc[common_frame], label="2D sagittal", color='#1f77b4')
-        # plt.plot(common_frame, ankle_angle_frontal.loc[common_frame], label="3D frontal", color='#ff7f0e')
-        plt.plot(common_frame, ankle_angle_mocap, label="Mocap", color='#ff7f0e')
-        # plt.plot(common_frame, ankle_angle_sagittal_2d.loc[common_frame], color='#1f77b4', alpha=0.5)
-        # plt.plot(common_frame, ankle_angle_frontal_3d_ori, label="3D frontal_ori", color='#ff7f0e', alpha=0.5)
-        plt.title("Ankle Angle")
-        plt.legend()
-        plt.xlabel("frame [-]")
-        plt.ylabel("angle [°]")
-        plt.savefig(os.path.join(root_dir, f"{condition}_ankle_angle.png"))
-        # plt.show() #5frame
-        plt.cla()
+    elif check_side == "left":
+        hip_angle_sagittal_2d = 180 - hip_angle_sagittal_2d
+        knee_angle_sagittal_2d = 180 - knee_angle_sagittal_2d
+        ankle_angle_sagittal_2d = 90 - ankle_angle_sagittal_2d
+
+        hip_angle_sagittal_2d = hip_angle_sagittal_2d.where(hip_angle_sagittal_2d <= 200, hip_angle_sagittal_2d + 360)
+        knee_angle_sagittal_2d = knee_angle_sagittal_2d.where(knee_angle_sagittal_2d <= 200, knee_angle_sagittal_2d + 360)
+        ankle_angle_sagittal_2d = ankle_angle_sagittal_2d.where(ankle_angle_sagittal_2d < 90, ankle_angle_sagittal_2d + 270)
 
 
-        hip_absolute_error = abs(hip_angle_sagittal_2d_filtered.loc[common_frame].values.flatten() - hip_angle_mocap.values.flatten())
-        mae_hip_sagittal = np.nanmean(hip_absolute_error)
-        knee_absolute_error = abs(knee_angle_sagittal_2d_filtered.loc[common_frame].values.flatten() - knee_angle_mocap.values.flatten())
-        mae_knee_sagittal = np.nanmean(knee_absolute_error)
-        ankle_absolute_error = abs(ankle_angle_sagittal_2d_filtered.loc[common_frame].values.flatten() - ankle_angle_mocap.values.flatten())
-        mae_ankle_sagittal = np.nanmean(ankle_absolute_error)
 
-        print(f"mae_hip_sagittal = {mae_hip_sagittal:.3f}")
-        print(f"mae_knee_sagittal = {mae_knee_sagittal:.3f}")
-        print(f"mae_ankle_sagittal = {mae_ankle_sagittal:.3f}")
+    if check_side == "right":
+        hip_angle_mocap = df_mocap_angle["r_hip_angle"]
+        knee_angle_mocap = df_mocap_angle["r_knee_angle"]
+        ankle_angle_mocap = df_mocap_angle["r_ankle_angle"]
+    elif check_side == "left":
+        hip_angle_mocap = df_mocap_angle["l_hip_angle"]
+        knee_angle_mocap = df_mocap_angle["l_knee_angle"]
+        ankle_angle_mocap = df_mocap_angle["l_ankle_angle"]
 
-        npz_path = os.path.join(os.path.dirname(mkv_files[0]), f"{os.path.basename(mkv_files[0]).split('.')[0].split('_')[0]}_keypoints&frame.npz")
-        # np.savez(npz_path, diagonal_right=keypoints_diagonal_right, diagonal_left=keypoints_diagonal_left, frontal=keypoints_frontal, mocap=keypoints_mocap, common_frame=common_frame, sagittal_3d=keypoints_sagittal_3d, sagittal_2d=keypoints_sagittal_2d)
-        # np.savez(npz_path, diagonal_right=keypoints_diagonal_right, diagonal_left=keypoints_diagonal_left, frontal=keypoints_frontal, common_frame=common_frame, sagittal_3d=keypoints_sagittal_3d, sagittal_2d=keypoints_sagittal_2d)
+    # pd.set_option('display.max_rows', 500)
+    # print(F"hip_angle_sagittal_2d = {hip_angle_sagittal_2d.loc[common_frame]}")
+    # print(f"hip_angle_sagittal_2d = {hip_angle_sagittal_2d.loc[common_frame]}")
+
+
+    frame_range = range(ic_frame_mocap[3], ic_frame_mocap[9])
+
+    if ic_frame_mocap is not None:
+        for ic_frame in ic_frame_mocap:
+            plt.axvline(x=ic_frame, color='gray', linestyle='--')
+    plt.plot(common_frame, hip_angle_sagittal_2d.loc[common_frame], label="2D sagittal", color='tab:blue')
+    plt.plot(common_frame, hip_angle_3d.loc[common_frame], label="3D DLT", color='tab:green')
+    plt.plot(common_frame, hip_angle_mocap.loc[common_frame], label="Mocap", color='tab:orange')
+    plt.xlim(common_frame[0], common_frame[-1])
+    plt.ylim(-30, 70)
+    plt.title("Hip Angle")
+    plt.legend()
+    plt.xlabel("frame [-]")
+    plt.ylabel("angle [°]")
+    plt.savefig(os.path.join(root_dir, f"{condition}_hip_angle.png"))
+    plt.show()
+    plt.cla()
+
+    if ic_frame_mocap is not None:
+        for ic_frame in ic_frame_mocap:
+            plt.axvline(x=ic_frame, color='gray', linestyle='--')
+    plt.plot(common_frame, knee_angle_sagittal_2d.loc[common_frame], label="2D sagittal", color='tab:blue')
+    plt.plot(common_frame, knee_angle_3d.loc[common_frame], label="3D DLT", color='tab:green')
+    plt.plot(common_frame, knee_angle_mocap.loc[common_frame], label="Mocap", color='tab:orange')
+    plt.xlim(common_frame[0], common_frame[-1])
+    plt.ylim(-30, 70)
+    plt.title("Knee Angle")
+    plt.legend()
+    plt.xlabel("frame [-]")
+    plt.ylabel("angle [°]")
+    plt.savefig(os.path.join(root_dir, f"{condition}_knee_angle.png"))
+    plt.show()
+    plt.cla()
+
+    if ic_frame_mocap is not None:
+        for ic_frame in ic_frame_mocap:
+            plt.axvline(x=ic_frame, color='gray', linestyle='--')
+    plt.plot(common_frame, ankle_angle_sagittal_2d.loc[common_frame], label="2D sagittal", color='tab:blue')
+    plt.plot(common_frame, ankle_angle_3d.loc[common_frame], label="3D DLT", color='tab:green')
+    plt.plot(common_frame, ankle_angle_mocap.loc[common_frame], label="Mocap", color='tab:orange')
+    plt.xlim(common_frame[0], common_frame[-1])
+    plt.ylim(-30, 70)
+    plt.title("Ankle Angle")
+    plt.legend()
+    plt.xlabel("frame [-]")
+    plt.ylabel("angle [°]")
+    plt.savefig(os.path.join(root_dir, f"{condition}_ankle_angle.png"))
+    plt.show()
+    plt.cla()
+
+
+    hip_absolute_error_2d = abs(hip_angle_sagittal_2d.loc[common_frame].values.flatten() - hip_angle_mocap.loc[common_frame].values.flatten())
+    knee_absolute_error_2d = abs(knee_angle_sagittal_2d.loc[common_frame].values.flatten() - knee_angle_mocap.loc[common_frame].values.flatten())
+    ankle_absolute_error_2d = abs(ankle_angle_sagittal_2d.loc[common_frame].values.flatten() - ankle_angle_mocap.loc[common_frame].values.flatten())
+
+    mae_hip_sagittal_2d = np.nanmean(hip_absolute_error_2d)
+    mae_knee_sagittal_2d = np.nanmean(knee_absolute_error_2d)
+    mae_ankle_sagittal_2d = np.nanmean(ankle_absolute_error_2d)
+
+    print(f"mae_hip_sagittal_2d = {mae_hip_sagittal_2d:.3f}")
+    print(f"mae_knee_sagittal_2d = {mae_knee_sagittal_2d:.3f}")
+    print(f"mae_ankle_sagittal_2d = {mae_ankle_sagittal_2d:.3f}")
+
+    hip_absolute_error_3d = abs(hip_angle_3d.loc[common_frame].values.flatten() - hip_angle_mocap.loc[common_frame].values.flatten())
+    knee_absolute_error_3d = abs(knee_angle_3d.loc[common_frame].values.flatten() - knee_angle_mocap.loc[common_frame].values.flatten())
+    ankle_absolute_error_3d = abs(ankle_angle_3d.loc[common_frame].values.flatten() - ankle_angle_mocap.loc[common_frame].values.flatten())
+    mae_hip_3d = np.nanmean(hip_absolute_error_3d)
+    mae_knee_3d = np.nanmean(knee_absolute_error_3d)
+    mae_ankle_3d = np.nanmean(ankle_absolute_error_3d)
+
+    print(f"mae_hip_3d = {mae_hip_3d:.3f}")
+    print(f"mae_knee_3d = {mae_knee_3d:.3f}")
+    print(f"mae_ankle_3d = {mae_ankle_3d:.3f}")
+
+
 
 if __name__ == "__main__":
     main()
