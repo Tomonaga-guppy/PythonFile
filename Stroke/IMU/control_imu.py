@@ -2,6 +2,29 @@ import serial
 import time
 import struct
 import ctypes
+import csv
+
+def configure_16bit(ser):
+    # 外部拡張端子計測&エッジデータ出力設定
+    header = 0x9A
+    cmd = 0x1E  # 16ビットデータ設定コマンド
+    data1 = 0x00  # 計測を行わない
+    data2 = 0x00  # 計測を行わない
+    data3 = 0x00  # 計測を行わない
+    data4 = 0x00  # 計測を行わない
+    data5 = 0x00  # 計測を行わない
+
+    # チェックサムの計算
+    check = header ^ cmd ^ data1 ^ data2 ^ data3 ^ data4 ^ data5
+
+    # コマンドリストを作成
+    command = bytearray([header, cmd, data1, data2, data3, data4, data5, check])
+
+    # コマンド送信
+    ser.read(100)
+    ser.write(command)
+    response = ser.read(3)
+    print(f"\n外部拡張端子計測設定: {response}")
 
 def configure_accelgyro(ser):
     # 加速度、角速度計測の設定
@@ -18,10 +41,19 @@ def configure_accelgyro(ser):
     command = bytearray([header, cmd, data1, data2, data3, check])
 
     # コマンド送信
+    ser.read(100)
     ser.write(command)
-    time.sleep(0.1)
-    response = ser.read(100)
-    print(f"加速度レスポンス: {response}")
+    response = ser.read(3)
+    print(f"\n加速度レスポンス: {response}")
+
+    if len(response) == 3:
+        result = response[2]
+        if result == 0:
+            print("加速度の設定は正常に完了しました。")
+        else:
+            print("加速度の設定に失敗しました。")
+    else:
+        print("加速度のレスポンスを確認してください。")
 
 def configure_magnetic(ser):
     # 地磁気計測の設定
@@ -38,10 +70,19 @@ def configure_magnetic(ser):
     command = bytearray([header, cmd, data1, data2, data3, check])
 
     # コマンド送信
+    ser.read(100)
     ser.write(command)
-    time.sleep(0.1)
-    response = ser.read(100)
+    response = ser.read(3)
     print(f"地磁気レスポンス: {response}")
+
+    if len(response) == 3:
+        result = response[2]
+        if result == 0:
+            print("地磁気の設定は正常に完了しました。")
+        else:
+            print("地磁気の設定に失敗しました。")
+    else:
+        print("地磁気のレスポンスを確認してください。")
 
 def start_measurement(ser):
     # 計測開始コマンド
@@ -71,10 +112,148 @@ def start_measurement(ser):
                          emode, eyear, emonth, eday, ehour, emin, esec, check])
 
     # コマンド送信
+    ser.read(100)
     ser.write(command)
-    time.sleep(0.1)
-    response = ser.read(100)
-    print(f"計測開始レスポンス: {response}")
+    response = ser.read(15)
+    print(f"\n計測開始レスポンス: {response}")
+
+    if len(response) == 15:
+        header = response[0]
+        cmd_code = response[1]
+        setting_status = response[2]
+        start_year = 2000 + response[3]
+        start_month = response[4]
+        start_day = response[5]
+        start_hour = response[6]
+        start_minute = response[7]
+        start_second = response[8]
+        end_year = 2000 + response[9]
+        end_month = response[10]
+        end_day = response[11]
+        end_hour = response[12]
+        end_minute = response[13]
+        end_second = response[14]
+
+        # print(f"コマンドコード: {cmd_code}")
+        # print(f"計測時刻設定状態: {setting_status}")
+        print(f"開始時刻: {start_year}/{start_month}/{start_day} {start_hour}:{start_minute}:{start_second}")
+        # print(f"終了時刻: {end_year}/{end_month}/{end_day} {end_hour}:{end_minute}:{end_second}")
+
+    if len(response) != 15:
+        print(f"Byte数が不正です。 {len(response)}")
+
+def stop_measurement(ser):
+    # 計測停止コマンド
+    header = 0x9A
+    cmd = 0x15  # 計測停止/計測予約クリアコマンド
+    option = 0x00  # 固定
+
+    # チェックサムの計算
+    check = header ^ cmd ^ option
+
+    # コマンドリスト作成
+    command = bytearray([header, cmd, option, check])
+
+    # コマンド送信
+    # ser.read(100)
+    ser.reset_input_buffer()
+    ser.write(command)
+    response = ser.readline()
+    print(f"\n計測を停止しました。")
+
+def get_entry_count(ser):
+    # 計測データ記録エントリ件数取得コマンド
+    header = 0x9A
+    cmd = 0x36  # 計測データ記録エントリ件数取得コマンド
+    option = 0x00  # 固定
+
+    # チェックサムの計算
+    check = header ^ cmd ^ option
+
+    # コマンドリスト作成
+    command = bytearray([header, cmd, option, check])
+
+    # コマンド送信
+    ser.readline()
+    ser.write(command)
+    response = ser.readline()
+    print(f"\nエントリ件数レスポンス: {response}")
+    if response[1] == 0xB6:
+        entry_count = response[2]
+        print(f"有効なエントリの件数: {entry_count}")
+        return entry_count
+    else:
+        print("エントリ件数の取得に失敗しました。")
+        return 0
+
+def read_entry(ser, entry_number):
+    # 計測データ記録メモリ読み出しコマンドを作成
+    header = 0x9A
+    cmd = 0x39  # 計測データ記録メモリ読み出しコマンド
+    entry = entry_number  # 読み出したいエントリ番号（1～80）
+
+    # チェックサムの計算
+    check = header ^ cmd ^ entry
+    # コマンドリストを作成
+    command = bytearray([header, cmd, entry, check])
+
+    # コマンド送信
+    ser.reset_input_buffer()  # 受信バッファをクリア
+    ser.write(command)
+
+    # レスポンスの読み取り
+    response = ser.readline()
+
+    # レスポンスの内容を表示
+    print(f"レスポンス: {response}")
+
+    accel_gyro_data = []
+    geomagnetic_data = []
+
+    i = 0
+    while i < len(response):
+        if response[i] == 0x9a:
+            if response[i + 1] == 0x80 and i + 24 <= len(response):
+                # # 加速度角速度データ
+                timestamp = struct.unpack('<I', response[i + 2:i + 6])[0]
+                accel_x = parse_3byte_signed(response[i + 6:i + 9])
+                accel_y = parse_3byte_signed(response[i + 9:i + 12])
+                accel_z = parse_3byte_signed(response[i + 12:i + 15])
+                gyro_x = parse_3byte_signed(response[i + 15:i + 18])
+                gyro_y = parse_3byte_signed(response[i + 18:i + 21])
+                gyro_z = parse_3byte_signed(response[i + 21:i + 24])
+                accel_gyro_data.append([timestamp, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z])
+                i += 24
+            elif response[i + 1] == 0x81 and i + 12 <= len(response):
+                # 地磁気データ
+                timestamp = struct.unpack('<I', response[i + 2:i + 6])[0]
+                geo_x = parse_3byte_signed(response[i + 6:i + 9])
+                geo_y = parse_3byte_signed(response[i + 9:i + 12])
+                geo_z = parse_3byte_signed(response[i + 12:i + 15])
+                geomagnetic_data.append([timestamp, geo_x, geo_y, geo_z])
+                i += 15
+            else:
+                # 予期しないデータブロックの場合は次に進む
+                i += 1
+        else:
+            # 予期しないデータの場合は次に進む
+            i += 1
+
+    return accel_gyro_data, geomagnetic_data
+
+def save_to_csv(accel_gyro_data, geomagnetic_data, filename):
+    with open(filename, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Type", "Timestamp", "X", "Y", "Z", "Gyro_X", "Gyro_Y", "Gyro_Z"])
+
+        # 書き込み: 加速度・角速度データ
+        for data in accel_gyro_data:
+            writer.writerow(["ags"] + data)
+
+        # 書き込み: 地磁気データ
+        for data in geomagnetic_data:
+            writer.writerow(["geo"] + data)
+
 
 def read_sensor_data(ser):
     while True:
@@ -104,13 +283,13 @@ def read_sensor_data(ser):
                 acc_x = read_3byte_signed(ser)
                 acc_y = read_3byte_signed(ser)
                 acc_z = read_3byte_signed(ser)
-                print(f"加速度データ (X, Y, Z): {acc_x * 0.1} mg, {acc_y * 0.1} mg, {acc_z * 0.1} mg")
+                print(f"加速度データ (X, Y, Z): {acc_x} mg, {acc_y} mg, {acc_z} mg")
 
                 # 角速度データ X, Y, Z を読み取る (各3バイト)
                 gyro_x = read_3byte_signed(ser)
                 gyro_y = read_3byte_signed(ser)
                 gyro_z = read_3byte_signed(ser)
-                print(f"角速度データ (X, Y, Z): {gyro_x * 0.01} dps, {gyro_y * 0.01} dps, {gyro_z * 0.01} dps")
+                print(f"角速度データ (X, Y, Z): {gyro_x} dps, {gyro_y} dps, {gyro_z} dps")
 
             elif ord(cmd) == 0x81:  # 地磁気データ
                 # 4バイトのTickTimeを読み取る
@@ -122,7 +301,23 @@ def read_sensor_data(ser):
                 mag_x = read_3byte_signed(ser)
                 mag_y = read_3byte_signed(ser)
                 mag_z = read_3byte_signed(ser)
-                print(f"地磁気データ (X, Y, Z): {mag_x * 0.1} uT, {mag_y * 0.1} uT, {mag_z * 0.1} uT")
+                print(f"地磁気データ (X, Y, Z): {mag_x} uT, {mag_y} uT, {mag_z} uT")
+
+def parse_3byte_signed(data):
+    """3バイトの符号付きデータを整数として解釈する"""
+    if len(data) != 3:
+        raise ValueError("データ長が3バイトでありません")
+
+    # 3バイトのデータを4バイトに変換（符号拡張）
+    if data[2] & 0x80:  # 負の数の場合
+        data4 = 0xFF  # 負の数の場合、符号拡張として 0xFF
+    else:
+        data4 = 0x00  # 正の数の場合、符号拡張として 0x00
+
+    # 4バイトの整数として結合
+    value = data[0] + (data[1] << 8) + (data[2] << 16) + (data4 << 24)
+
+    return ctypes.c_int(value).value
 
 def read_3byte_signed(ser):
     """3バイトの符号付きデータを読み取って、符号付き整数として返す"""
@@ -142,12 +337,16 @@ def read_3byte_signed(ser):
 def main():
     # シリアルポートの設定
     ser = serial.Serial()
-    ser.port = "COMfaefa"  # デバイスに応じて変更
+    ser.port = "COM11"  # デバイスに応じて変更
     ser.timeout = 1.0
     ser.baudrate = 115200
 
     # シリアルポートを開く
     ser.open()
+    ser.reset_input_buffer()  # バッファをクリア
+
+    # 拡張 16bitAD 計測設定を行う
+    configure_16bit(ser)
 
     # 加速度、角速度、地磁気の計測設定を行う
     configure_accelgyro(ser)
@@ -155,15 +354,24 @@ def main():
 
     # 計測を開始する
     start_measurement(ser)
-
-    print("全てのセンサーの計測設定が完了し、計測を開始しました。")
+    print("計測設定が完了し、計測を開始しました。\n")
 
     # 加速度、角速度、地磁気のデータを読み取るループを開始
     try:
         read_sensor_data(ser)
     finally:
+        stop_measurement(ser)
+
+        # 最新の計測記録を取得し、CSVに保存
+        entry_count = get_entry_count(ser)
+        if entry_count > 0:
+            accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count)
+            # CSVに保存
+            save_to_csv(accel_gyro_data, geomagnetic_data, 'sensor_data.csv')
+
         # シリアルポートを閉じる
         ser.close()
+        print("計測を停止し、シリアルポートを閉じました。")
 
 if __name__ == '__main__':
     main()
