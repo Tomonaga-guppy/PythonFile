@@ -62,6 +62,66 @@ def configure_magnetic(ser):
     else:
         print("地磁気のレスポンスを確認してください。")
 
+def configure_external_terminal(ser, mode1, mode2, mode3, mode4):
+    # 外部拡張端子のモード設定コマンド
+    header = 0x9A
+    cmd = 0x30  # 外部拡張端子設定コマンド
+    data1 = mode1  # 外部端子1のモード
+    data2 = mode2  # 外部端子2のモード
+    data3 = mode3  # 外部端子3のモード
+    data4 = mode4  # 外部端子4のモード
+
+    # チェックサムの計算
+    check = header ^ cmd ^ data1 ^ data2 ^ data3 ^ data4
+
+    # コマンドリストを作成
+    command = bytearray([header, cmd, data1, data2, data3, data4, check])
+
+    # コマンド送信
+    ser.read(100)
+    ser.write(command)
+    response = ser.read(2)  # コマンドレスポンスは2バイト（HeaderとCommand Code）
+
+    if len(response) == 2 and response[1] == 0x8F:
+        result = ser.read(1)  # コマンド受付結果を読む
+        if result == b'\x00':
+            print("外部拡張端子の設定が正常に完了しました。")
+        else:
+            print("外部拡張端子の設定に失敗しました。")
+    else:
+        print("レスポンスが正しくありません。")
+
+def send_sync_signal(ser, level):
+    # 外部拡張端子の出力レベルを設定（HighまたはLow）
+    header = 0x9A
+    cmd = 0x30  # 外部拡張端子設定コマンド
+    data1 = level  # 外部端子1を High (9) か Low (8) に設定
+    data2 = 0x00  # 外部端子2は未使用
+    data3 = 0x00  # 外部端子3は未使用
+    data4 = 0x00  # 外部端子4は未使用
+
+    # チェックサムの計算
+    check = header ^ cmd ^ data1 ^ data2 ^ data3 ^ data4
+
+    # コマンドリスト作成
+    command = bytearray([header, cmd, data1, data2, data3, data4, check])
+
+    # コマンド送信
+    ser.reset_input_buffer()
+    ser.write(command)
+    response = ser.read(2)
+
+    if len(response) == 2 and response[1] == 0x8F:
+        result = ser.read(1)
+        if result == b'\x00':
+            print("同期信号の送信が正常に完了しました。")
+        else:
+            print("同期信号の送信に失敗しました。")
+    else:
+        print("同期信号のレスポンスが正しくありません。")
+
+
+
 def start_measurement(ser):
     # 計測開始コマンド
     header = 0x9A
@@ -179,11 +239,17 @@ def read_entry(ser, entry_number):
     ser.reset_input_buffer()  # 受信バッファをクリア
     ser.write(command)
 
-    # レスポンスの読み取り
-    response = ser.readline()
+    response = b''  # レスポンスデータを格納する変数
 
-    # レスポンスの内容を表示
-    print(f"レスポンス: {response}")
+    time.sleep(1)  # データの受信を待つ
+    while ser.in_waiting > 0:
+        response += ser.read(100)
+        time.sleep(0.01)
+
+    # # レスポンスの内容を表示
+    # print(f"レスポンス: {response}")
+
+    print(f"内部目盛りから全てのデータを取得しました。")
 
     accel_gyro_data = []
     geomagnetic_data = []
@@ -312,31 +378,60 @@ def read_3byte_signed(ser):
     value = data[0] + (data[1] << 8) + (data[2] << 16) + (ord(data4) << 24)
     return ctypes.c_int(value).value
 
+def clear_measurement_data(ser):
+    # 計測データ記録クリアコマンド
+    header = 0x9A
+    cmd = 0x35  # 計測データ記録クリアコマンド
+    option = 0x00  # 固定
+
+    # チェックサムの計算
+    check = header ^ cmd ^ option
+    # コマンドリスト作成
+    command = bytearray([header, cmd, option, check])
+
+    # コマンド送信
+    ser.reset_input_buffer()
+    ser.write(command)
+    response = ser.read(2)  # コマンドレスポンスは 2 バイト（Header と Command Code）
+
+    if len(response) == 2 and response[1] == 0x8F:
+        result = ser.read(1)  # コマンド受付結果を読む
+        if result == b'\x00':
+            print("計測データの記録クリアが正常に完了しました。")
+        else:
+            print("計測データの記録クリアに失敗しました。")
+    else:
+        print("レスポンスが正しくありません。")
+
 def main():
-    ports = ["COM11", "COM6", "COM8"]
+    ports = ['COM11', 'COM6', 'COM8']
 
     for port in ports:
         # シリアルポートの設定
         ser = serial.Serial()
-        ser.port = port
+        ser.port = port  # デバイスに応じて変更
         ser.timeout = 1.0
         ser.baudrate = 115200
 
+        print(f"シリアルポート {port} を開きます。")
+
         # シリアルポートを開く
         ser.open()
-        ser.reset_input_buffer()  # バッファをクリア
+
+
+        # # 外部拡張端子を設定（例として外部端子1をHigh出力に設定）
+        # configure_external_terminal(ser, mode1=9, mode2=0, mode3=0, mode4=0)  # 外部端子1をHigh出力
 
         # 加速度、角速度、地磁気の計測設定を行う
         configure_accelgyro(ser)
         configure_magnetic(ser)
 
-    print(f"全てのセンサの設定が完了しました。\n")
-
-    time.sleep(5)
-
     # 計測を開始する
     start_measurement(ser)
     print("計測設定が完了し、計測を開始しました。\n")
+
+    # カメラに同期信号を送信（計測開始のタイミングでHigh信号を送る）
+    send_sync_signal(ser, level=9)  # 外部端子1をHighにする
 
     # 加速度、角速度、地磁気のデータを読み取るループを開始
     try:
@@ -350,6 +445,10 @@ def main():
             accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count)
             # CSVに保存
             save_to_csv(accel_gyro_data, geomagnetic_data, 'sensor_data.csv')
+            print("計測データをCSVに保存しました。")
+
+        # 計測データの記録をクリア
+        clear_measurement_data(ser)
 
         # シリアルポートを閉じる
         ser.close()
