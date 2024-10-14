@@ -4,28 +4,6 @@ import struct
 import ctypes
 import csv
 
-# def configure_16bit(ser):
-    # # 外部拡張端子計測&エッジデータ出力設定
-    # header = 0x9A
-    # cmd = 0x1E  # 16ビットデータ設定コマンド
-    # data1 = 0x00  # 計測を行わない
-    # data2 = 0x00  # 計測を行わない
-    # data3 = 0x00  # 計測を行わない
-    # data4 = 0x00  # 計測を行わない
-    # data5 = 0x00  # 計測を行わない
-
-    # # チェックサムの計算
-    # check = header ^ cmd ^ data1 ^ data2 ^ data3 ^ data4 ^ data5
-
-    # # コマンドリストを作成
-    # command = bytearray([header, cmd, data1, data2, data3, data4, data5, check])
-
-    # # コマンド送信
-    # ser.read(100)
-    # ser.write(command)
-    # response = ser.read(3)
-    # print(f"\n外部拡張端子計測設定: {response}")
-
 def configure_accelgyro(ser):
     # 加速度、角速度計測の設定
     header = 0x9A
@@ -201,17 +179,11 @@ def read_entry(ser, entry_number):
     ser.reset_input_buffer()  # 受信バッファをクリア
     ser.write(command)
 
-    response = b''  # レスポンスデータを格納する変数
+    # レスポンスの読み取り
+    response = ser.readline()
 
-    time.sleep(1)  # データの受信を待つ
-    while ser.in_waiting > 0:
-        response += ser.read(100)
-        time.sleep(0.01)
-
-    # # レスポンスの内容を表示
-    # print(f"レスポンス: {response}")
-
-    print(f"内部目盛りから全てのデータを取得しました。")
+    # レスポンスの内容を表示
+    print(f"レスポンス: {response}")
 
     accel_gyro_data = []
     geomagnetic_data = []
@@ -340,48 +312,27 @@ def read_3byte_signed(ser):
     value = data[0] + (data[1] << 8) + (data[2] << 16) + (ord(data4) << 24)
     return ctypes.c_int(value).value
 
-def clear_measurement_data(ser):
-    # 計測データ記録クリアコマンド
-    header = 0x9A
-    cmd = 0x35  # 計測データ記録クリアコマンド
-    option = 0x00  # 固定
-
-    # チェックサムの計算
-    check = header ^ cmd ^ option
-    # コマンドリスト作成
-    command = bytearray([header, cmd, option, check])
-
-    # コマンド送信
-    ser.reset_input_buffer()
-    ser.write(command)
-    response = ser.read(2)  # コマンドレスポンスは 2 バイト（Header と Command Code）
-
-    if len(response) == 2 and response[1] == 0x8F:
-        result = ser.read(1)  # コマンド受付結果を読む
-        if result == b'\x00':
-            print("計測データの記録クリアが正常に完了しました。")
-        else:
-            print("計測データの記録クリアに失敗しました。")
-    else:
-        print("レスポンスが正しくありません。")
-
 def main():
-    # シリアルポートの設定
-    ser = serial.Serial()
-    ser.port = "COM11"  # デバイスに応じて変更
-    ser.timeout = 1.0
-    ser.baudrate = 115200
+    ports = ["COM11", "COM6", "COM8"]
 
-    # シリアルポートを開く
-    ser.open()
-    # ser.reset_input_buffer()  # バッファをクリア
+    for port in ports:
+        # シリアルポートの設定
+        ser = serial.Serial()
+        ser.port = port
+        ser.timeout = 1.0
+        ser.baudrate = 115200
 
-    # # 拡張 16bitAD 計測設定を行う
-    # configure_16bit(ser)
+        # シリアルポートを開く
+        ser.open()
+        ser.reset_input_buffer()  # バッファをクリア
 
-    # 加速度、角速度、地磁気の計測設定を行う
-    configure_accelgyro(ser)
-    configure_magnetic(ser)
+        # 加速度、角速度、地磁気の計測設定を行う
+        configure_accelgyro(ser)
+        configure_magnetic(ser)
+
+    print(f"全てのセンサの設定が完了しました。\n")
+
+    time.sleep(5)
 
     # 計測を開始する
     start_measurement(ser)
@@ -399,10 +350,6 @@ def main():
             accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count)
             # CSVに保存
             save_to_csv(accel_gyro_data, geomagnetic_data, 'sensor_data.csv')
-            print("計測データをCSVに保存しました。")
-
-        # 計測データの記録をクリア
-        clear_measurement_data(ser)
 
         # シリアルポートを閉じる
         ser.close()
