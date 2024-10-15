@@ -3,6 +3,10 @@ import time
 import struct
 import ctypes
 import csv
+import threading
+
+#各スレッドで終了をするためのイベント
+stop_event = threading.Event()
 
 def configure_accelgyro(ser):
     # 加速度、角速度計測の設定
@@ -62,40 +66,11 @@ def configure_magnetic(ser):
     else:
         print("地磁気のレスポンスを確認してください。")
 
-def configure_external_terminal(ser, mode1, mode2, mode3, mode4):
-    # 外部拡張端子のモード設定コマンド
-    header = 0x9A
-    cmd = 0x30  # 外部拡張端子設定コマンド
-    data1 = mode1  # 外部端子1のモード
-    data2 = mode2  # 外部端子2のモード
-    data3 = mode3  # 外部端子3のモード
-    data4 = mode4  # 外部端子4のモード
-
-    # チェックサムの計算
-    check = header ^ cmd ^ data1 ^ data2 ^ data3 ^ data4
-
-    # コマンドリストを作成
-    command = bytearray([header, cmd, data1, data2, data3, data4, check])
-
-    # コマンド送信
-    ser.read(100)
-    ser.write(command)
-    response = ser.read(2)  # コマンドレスポンスは2バイト（HeaderとCommand Code）
-
-    if len(response) == 2 and response[1] == 0x8F:
-        result = ser.read(1)  # コマンド受付結果を読む
-        if result == b'\x00':
-            print("外部拡張端子の設定が正常に完了しました。")
-        else:
-            print("外部拡張端子の設定に失敗しました。")
-    else:
-        print("レスポンスが正しくありません。")
-
 def send_sync_signal(ser, level):
     # 外部拡張端子の出力レベルを設定（HighまたはLow）
     header = 0x9A
     cmd = 0x30  # 外部拡張端子設定コマンド
-    data1 = level  # 外部端子1を High (9) か Low (8) に設定
+    data1 = int(level)  # 外部端子1を High (9) か Low (8) に設定
     data2 = 0x00  # 外部端子2は未使用
     data3 = 0x00  # 外部端子3は未使用
     data4 = 0x00  # 外部端子4は未使用
@@ -107,20 +82,7 @@ def send_sync_signal(ser, level):
     command = bytearray([header, cmd, data1, data2, data3, data4, check])
 
     # コマンド送信
-    ser.reset_input_buffer()
     ser.write(command)
-    response = ser.read(2)
-
-    if len(response) == 2 and response[1] == 0x8F:
-        result = ser.read(1)
-        if result == b'\x00':
-            print("同期信号の送信が正常に完了しました。")
-        else:
-            print("同期信号の送信に失敗しました。")
-    else:
-        print("同期信号のレスポンスが正しくありません。")
-
-
 
 def start_measurement(ser):
     # 計測開始コマンド
@@ -212,9 +174,10 @@ def get_entry_count(ser):
     command = bytearray([header, cmd, option, check])
 
     # コマンド送信
-    ser.readline()
+    ser.read(100)
     ser.write(command)
     response = ser.readline()
+
     print(f"\nエントリ件数レスポンス: {response}")
     if response[1] == 0xB6:
         entry_count = response[2]
@@ -249,7 +212,7 @@ def read_entry(ser, entry_number):
     # # レスポンスの内容を表示
     # print(f"レスポンス: {response}")
 
-    print(f"内部目盛りから全てのデータを取得しました。")
+    print(f"内部メモリから全てのデータを取得しました。")
 
     accel_gyro_data = []
     geomagnetic_data = []
@@ -300,52 +263,58 @@ def save_to_csv(accel_gyro_data, geomagnetic_data, filename):
 
 
 def read_sensor_data(ser):
-    while True:
-        # データを1バイトずつ読み取る
-        str = ser.read(1)
+    try:
+        while not stop_event.is_set():
+            # データを1バイトずつ読み取る
+            str = ser.read(1)
 
-        # データが受信できていない場合はタイムアウト
-        if len(str) == 0:
-            print("データが受信されていません。")
-            continue
-
-        # ヘッダが 0x9A であることを確認
-        if ord(str) == 0x9A:
-            # コマンドの種類を読み取る
-            cmd = ser.read(1)
-
-            if len(cmd) == 0:
+            # データが受信できていない場合はタイムアウト
+            if len(str) == 0:
+                print("データが受信されていません。")
                 continue
 
-            if ord(cmd) == 0x80:  # 加速度・角速度データ
-                # 4バイトのTickTimeを読み取る
-                tick_time = ser.read(4)
-                tick_time_ms = struct.unpack('<I', tick_time)[0]
-                print(f"TickTime: {tick_time_ms} ms")
+            # ヘッダが 0x9A であることを確認
+            if ord(str) == 0x9A:
+                # コマンドの種類を読み取る
+                cmd = ser.read(1)
 
-                # 加速度データ X, Y, Z を読み取る (各3バイト)
-                acc_x = read_3byte_signed(ser)
-                acc_y = read_3byte_signed(ser)
-                acc_z = read_3byte_signed(ser)
-                print(f"加速度データ (X, Y, Z): {acc_x} mg, {acc_y} mg, {acc_z} mg")
+                if len(cmd) == 0:
+                    continue
 
-                # 角速度データ X, Y, Z を読み取る (各3バイト)
-                gyro_x = read_3byte_signed(ser)
-                gyro_y = read_3byte_signed(ser)
-                gyro_z = read_3byte_signed(ser)
-                print(f"角速度データ (X, Y, Z): {gyro_x} dps, {gyro_y} dps, {gyro_z} dps")
+                if ord(cmd) == 0x80:  # 加速度・角速度データ
+                    # send_sync_pulse(ser)  # 同期パルスを送信
 
-            elif ord(cmd) == 0x81:  # 地磁気データ
-                # 4バイトのTickTimeを読み取る
-                tick_time = ser.read(4)
-                tick_time_ms = struct.unpack('<I', tick_time)[0]
-                print(f"TickTime: {tick_time_ms} ms")
+                    # 4バイトのTickTimeを読み取る
+                    tick_time = ser.read(4)
+                    tick_time_ms = struct.unpack('<I', tick_time)[0]
+                    print(f"TickTime: {tick_time_ms} ms")
 
-                # 地磁気データ X, Y, Z を読み取る (各3バイト)
-                mag_x = read_3byte_signed(ser)
-                mag_y = read_3byte_signed(ser)
-                mag_z = read_3byte_signed(ser)
-                print(f"地磁気データ (X, Y, Z): {mag_x} uT, {mag_y} uT, {mag_z} uT")
+                    # 加速度データ X, Y, Z を読み取る (各3バイト)
+                    acc_x = read_3byte_signed(ser)
+                    acc_y = read_3byte_signed(ser)
+                    acc_z = read_3byte_signed(ser)
+                    print(f"加速度データ (X, Y, Z): {acc_x} mg, {acc_y} mg, {acc_z} mg")
+
+                    # 角速度データ X, Y, Z を読み取る (各3バイト)
+                    gyro_x = read_3byte_signed(ser)
+                    gyro_y = read_3byte_signed(ser)
+                    gyro_z = read_3byte_signed(ser)
+                    print(f"角速度データ (X, Y, Z): {gyro_x} dps, {gyro_y} dps, {gyro_z} dps")
+
+                elif ord(cmd) == 0x81:  # 地磁気データ
+                    # 4バイトのTickTimeを読み取る
+                    tick_time = ser.read(4)
+                    tick_time_ms = struct.unpack('<I', tick_time)[0]
+                    print(f"TickTime: {tick_time_ms} ms")
+
+                    # 地磁気データ X, Y, Z を読み取る (各3バイト)
+                    mag_x = read_3byte_signed(ser)
+                    mag_y = read_3byte_signed(ser)
+                    mag_z = read_3byte_signed(ser)
+                    print(f"地磁気データ (X, Y, Z): {mag_x} uT, {mag_y} uT, {mag_z} uT")
+
+    except KeyboardInterrupt:
+        pass
 
 def parse_3byte_signed(data):
     """3バイトの符号付きデータを整数として解釈する"""
@@ -403,35 +372,28 @@ def clear_measurement_data(ser):
     else:
         print("レスポンスが正しくありません。")
 
-def main():
-    ports = ['COM11', 'COM6', 'COM8']
+def send_sync_pulse(ser):
+    send_sync_signal(ser, level=8)  # Low出力 (8)
+    time.sleep(0.0001)  # 少しの間Lowに保持
+    send_sync_signal(ser, level=9)  # High出力 (9)
 
-    for port in ports:
-        # シリアルポートの設定
-        ser = serial.Serial()
-        ser.port = port  # デバイスに応じて変更
-        ser.timeout = 1.0
-        ser.baudrate = 115200
+def run_imu_on_port(port, barrier):
+    ser = serial.Serial()
+    ser.port = port
+    ser.timeout = 1.0
+    ser.baudrate = 115200
+    # シリアルポートを開く
+    ser.open()
 
-        print(f"シリアルポート {port} を開きます。")
+    print(f"{port} is open")
+    configure_accelgyro(ser)
+    configure_magnetic(ser)
 
-        # シリアルポートを開く
-        ser.open()
-
-
-        # # 外部拡張端子を設定（例として外部端子1をHigh出力に設定）
-        # configure_external_terminal(ser, mode1=9, mode2=0, mode3=0, mode4=0)  # 外部端子1をHigh出力
-
-        # 加速度、角速度、地磁気の計測設定を行う
-        configure_accelgyro(ser)
-        configure_magnetic(ser)
+    barrier.wait()  # 他のスレッドと同期
 
     # 計測を開始する
     start_measurement(ser)
-    print("計測設定が完了し、計測を開始しました。\n")
-
-    # カメラに同期信号を送信（計測開始のタイミングでHigh信号を送る）
-    send_sync_signal(ser, level=9)  # 外部端子1をHighにする
+    print(f"計測設定が完了し、計測を開始しました。 ({port})\n")
 
     # 加速度、角速度、地磁気のデータを読み取るループを開始
     try:
@@ -439,20 +401,70 @@ def main():
     finally:
         stop_measurement(ser)
 
-        # 最新の計測記録を取得し、CSVに保存
-        entry_count = get_entry_count(ser)
-        if entry_count > 0:
-            accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count)
-            # CSVに保存
-            save_to_csv(accel_gyro_data, geomagnetic_data, 'sensor_data.csv')
-            print("計測データをCSVに保存しました。")
+def read_memory(port):
+    ser = serial.Serial()
+    ser.port = port
+    ser.timeout = 1.0
+    ser.baudrate = 115200
+    ser.open()
 
-        # 計測データの記録をクリア
-        clear_measurement_data(ser)
+    # 最新の計測記録を取得し、CSVに保存
+    entry_count = get_entry_count(ser)
+    if entry_count > 0:
+        accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count)
+        # CSVに保存
+        save_to_csv(accel_gyro_data, geomagnetic_data, f'sensor_data_{port}.csv')
+        print(f"計測データをCSVに保存しました。 ({port})")
 
-        # シリアルポートを閉じる
-        ser.close()
-        print("計測を停止し、シリアルポートを閉じました。")
+    # 計測データの記録をクリア
+    # clear_measurement_data(ser)
+
+    send_sync_signal(ser, level=9)  # 外部端子1をHigh出力
+
+    # シリアルポートを閉じる
+    ser.close()
+    print(f"計測を終了し、シリアルポートを閉じました。 ({port})")
+
+def main():
+    ports = ["COM6", "COM8", "COM10"]
+    threads = []
+    threads_post = []
+    barrier = threading.Barrier(len(ports))  # スレッド間の同期のためのバリアを作成
+
+    ### 計測処理 ########################################################################################
+    # 各シリアルポートに対してスレッドを作成し、実行
+    for port in ports:
+        thread = threading.Thread(target=run_imu_on_port, args=(port,barrier))
+        threads.append(thread)
+
+    try:
+        for thread in threads:
+            thread.start()
+       # スレッドが実行中はメインスレッドはそのまま継続する
+        while any(thread.is_alive() for thread in threads):
+            time.sleep(0.00001)  # 少し待機しながらスレッドの終了を待つ
+    except KeyboardInterrupt:
+        stop_event.set()  # 終了のイベントをセット
+
+        for thread in threads:  #全てのスレッドが終了するまで待機
+            thread.join()
+
+        print("計測を終了しました。IMUメモリの書き出しを行います")
+
+    ### 内部メモリの書き出し##############################################################################
+    for port in ports:
+        thread_post = threading.Thread(target=read_memory, args=(port,))
+        threads_post.append(thread_post)
+
+    for thread_post in threads_post:
+        thread_post.start()
+
+    print("メモリの書き出しを行っています 少々お待ちください")
+
+    for thread_post in threads_post:
+        thread_post.join()
+
+    print("\n全てのIMUで書き出しを終了しました\n ")
 
 if __name__ == '__main__':
     main()
