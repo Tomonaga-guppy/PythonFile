@@ -4,11 +4,45 @@ import struct
 import ctypes
 import csv
 import threading
+from datetime import datetime
 
 #各スレッドで終了をするためのイベント
 stop_event = threading.Event()
 
-def configure_accelgyro(ser):
+def set_device_time(ser):
+    # ヘッダとコマンドコードを定義
+    header = 0x9A
+    cmd = 0x11  # 時刻設定コマンド
+
+    # 現在の時刻を取得
+    current_time = datetime.now()
+    # 各パラメータの設定
+    year = current_time.year - 2000  # 年 (2000年からの経過年数)
+    month = current_time.month  # 月
+    day = current_time.day  # 日
+    hour = current_time.hour  # 時
+    minute = current_time.minute  # 分
+    second = current_time.second  # 秒
+    millisecond = int(current_time.microsecond / 1000)  # ミリ秒に変換 (マイクロ秒を1000で割る)
+
+    # チェックサムの計算
+    # 年、月、日、時、分、秒、ミリ秒の各値を使って計算
+    check = header ^ cmd ^ year ^ month ^ day ^ hour ^ minute ^ second
+    check ^= (millisecond & 0xFF) ^ (millisecond >> 8)  # ミリ秒は2バイトなので下位と上位を分けて計算
+
+    # コマンドリストを作成
+    command = bytearray([header, cmd, year, month, day, hour, minute, second])
+    command += struct.pack('<H', millisecond)  # ミリ秒を2バイトでパック
+    command.append(check)  # チェックサムを最後に追加
+
+    # コマンド送信
+    ser.read(100)  # バッファをクリア
+    ser.write(command)  # コマンドを送信
+
+def configure_accelgyro(ser, port):
+    # 成功したかどうかのフラグを作成
+    flag = False
+
     # 加速度、角速度計測の設定
     header = 0x9A
     cmd = 0x16  # 加速度計測設定コマンド
@@ -26,18 +60,23 @@ def configure_accelgyro(ser):
     ser.read(100)
     ser.write(command)
     response = ser.read(3)
-    print(f"\n加速度レスポンス: {response}")
+    # print(f"\n加速度レスポンス: {response}")
 
     if len(response) == 3:
         result = response[2]
         if result == 0:
-            print("加速度の設定は正常に完了しました。")
-        else:
-            print("加速度の設定に失敗しました。")
+            print(f"加速度の設定が正常に完了しました {port}")
+        flag = True
     else:
-        print("加速度のレスポンスを確認してください。")
+        print(f"加速度の設定に失敗しました {port}")
+        flag = False
 
-def configure_magnetic(ser):
+    return flag
+
+def configure_magnetic(ser, port):
+    # 成功したかどうかのフラグを作成
+    flag = False
+
     # 地磁気計測の設定
     header = 0x9A
     cmd = 0x18  # 地磁気計測設定コマンド
@@ -55,16 +94,18 @@ def configure_magnetic(ser):
     ser.read(100)
     ser.write(command)
     response = ser.read(3)
-    print(f"地磁気レスポンス: {response}")
+    # print(f"地磁気レスポンス: {response}")
 
     if len(response) == 3:
         result = response[2]
         if result == 0:
-            print("地磁気の設定は正常に完了しました。")
-        else:
-            print("地磁気の設定に失敗しました。")
+            print(f"地磁気の設定が正常に完了しました {port}")
+            flag = True
     else:
-        print("地磁気のレスポンスを確認してください。")
+        print(f"地磁気の設定に失敗しました {port}")
+        flag = False
+
+    return flag
 
 def send_sync_signal(ser, level):
     # 外部拡張端子の出力レベルを設定（HighまたはLow）
@@ -84,7 +125,10 @@ def send_sync_signal(ser, level):
     # コマンド送信
     ser.write(command)
 
-def start_measurement(ser):
+def start_measurement(ser, port, sync_port):
+    # 成功したかどうかのフラグを作成
+    flag = False
+
     # 計測開始コマンド
     header = 0x9A
     cmd = 0x13  # 計測開始/予約コマンド
@@ -115,7 +159,6 @@ def start_measurement(ser):
     ser.read(100)
     ser.write(command)
     response = ser.read(15)
-    print(f"\n計測開始レスポンス: {response}")
 
     if len(response) == 15:
         header = response[0]
@@ -127,22 +170,21 @@ def start_measurement(ser):
         start_hour = response[6]
         start_minute = response[7]
         start_second = response[8]
-        end_year = 2000 + response[9]
-        end_month = response[10]
-        end_day = response[11]
-        end_hour = response[12]
-        end_minute = response[13]
-        end_second = response[14]
 
-        # print(f"コマンドコード: {cmd_code}")
-        # print(f"計測時刻設定状態: {setting_status}")
-        print(f"開始時刻: {start_year}/{start_month}/{start_day} {start_hour}:{start_minute}:{start_second}")
-        # print(f"終了時刻: {end_year}/{end_month}/{end_day} {end_hour}:{end_minute}:{end_second}")
+        print(f"開始時刻: {start_year}/{start_month}/{start_day} {start_hour}:{start_minute}:{start_second} {port}")
+        flag = True
 
-    if len(response) != 15:
-        print(f"Byte数が不正です。 {len(response)}")
+        if port == sync_port:
+            send_sync_pulse(ser)
 
-def stop_measurement(ser):
+    else:
+        print(f"時刻設定時のレスポンスが正しくありません。 {(response)}")
+        flag = False
+
+    return flag
+
+
+def stop_measurement(ser, port):
     # 計測停止コマンド
     header = 0x9A
     cmd = 0x15  # 計測停止/計測予約クリアコマンド
@@ -155,13 +197,40 @@ def stop_measurement(ser):
     command = bytearray([header, cmd, option, check])
 
     # コマンド送信
-    # ser.read(100)
-    ser.reset_input_buffer()
+    ser.read(100)
     ser.write(command)
-    response = ser.readline()
-    print(f"\n計測を停止しました。")
+    print(f"\n計測を停止しました {port}")
 
-def get_entry_count(ser):
+def read_sensor_data(ser, port):  #元々は値の表示用だったけどいまは停止イベントを受け取るだけ
+    try:
+        flag = True
+        print(f"計測中 {port}")
+        while not stop_event.is_set():
+            pass
+    except KeyboardInterrupt:
+        flag = False
+
+def read_3byte_signed(ser):
+    """3バイトの符号付きデータを読み取って、符号付き整数として返す"""
+    data = ser.read(3)
+    if len(data) != 3:
+        return 0
+
+    # 3バイトのデータを4バイトに変換（符号拡張）
+    if data[2] & 0x80:  # 負の数の場合
+        data4 = b'\xFF'
+    else:
+        data4 = b'\x00'
+
+    value = data[0] + (data[1] << 8) + (data[2] << 16) + (ord(data4) << 24)
+    return ctypes.c_int(value).value
+
+def send_sync_pulse(ser):
+    send_sync_signal(ser, level=8)  # Low出力 (8)
+    time.sleep(0.0001)  # 少しの間Lowに保持
+    send_sync_signal(ser, level=9)  # High出力 (9)
+
+def get_entry_count(ser, port):
     # 計測データ記録エントリ件数取得コマンド
     header = 0x9A
     cmd = 0x36  # 計測データ記録エントリ件数取得コマンド
@@ -178,16 +247,17 @@ def get_entry_count(ser):
     ser.write(command)
     response = ser.readline()
 
+    time.sleep(0.1)  # データの受信を待つ
     print(f"\nエントリ件数レスポンス: {response}")
     if response[1] == 0xB6:
         entry_count = response[2]
-        print(f"有効なエントリの件数: {entry_count}")
+        print(f"有効なエントリの件数: {entry_count} {port}")
         return entry_count
     else:
-        print("エントリ件数の取得に失敗しました。")
+        print("エントリ件数の取得に失敗しました {port}")
         return 0
 
-def read_entry(ser, entry_number):
+def read_entry(ser, entry_number, port):
     # 計測データ記録メモリ読み出しコマンドを作成
     header = 0x9A
     cmd = 0x39  # 計測データ記録メモリ読み出しコマンド
@@ -212,7 +282,7 @@ def read_entry(ser, entry_number):
     # # レスポンスの内容を表示
     # print(f"レスポンス: {response}")
 
-    print(f"内部メモリから全てのデータを取得しました。")
+    print(f"内部メモリから全てのデータを取得しました {port}")
 
     accel_gyro_data = []
     geomagnetic_data = []
@@ -261,61 +331,6 @@ def save_to_csv(accel_gyro_data, geomagnetic_data, filename):
         for data in geomagnetic_data:
             writer.writerow(["geo"] + data)
 
-
-def read_sensor_data(ser):
-    try:
-        while not stop_event.is_set():
-            # データを1バイトずつ読み取る
-            str = ser.read(1)
-
-            # データが受信できていない場合はタイムアウト
-            if len(str) == 0:
-                print("データが受信されていません。")
-                continue
-
-            # ヘッダが 0x9A であることを確認
-            if ord(str) == 0x9A:
-                # コマンドの種類を読み取る
-                cmd = ser.read(1)
-
-                if len(cmd) == 0:
-                    continue
-
-                if ord(cmd) == 0x80:  # 加速度・角速度データ
-                    # send_sync_pulse(ser)  # 同期パルスを送信
-
-                    # 4バイトのTickTimeを読み取る
-                    tick_time = ser.read(4)
-                    tick_time_ms = struct.unpack('<I', tick_time)[0]
-                    print(f"TickTime: {tick_time_ms} ms")
-
-                    # 加速度データ X, Y, Z を読み取る (各3バイト)
-                    acc_x = read_3byte_signed(ser)
-                    acc_y = read_3byte_signed(ser)
-                    acc_z = read_3byte_signed(ser)
-                    print(f"加速度データ (X, Y, Z): {acc_x} mg, {acc_y} mg, {acc_z} mg")
-
-                    # 角速度データ X, Y, Z を読み取る (各3バイト)
-                    gyro_x = read_3byte_signed(ser)
-                    gyro_y = read_3byte_signed(ser)
-                    gyro_z = read_3byte_signed(ser)
-                    print(f"角速度データ (X, Y, Z): {gyro_x} dps, {gyro_y} dps, {gyro_z} dps")
-
-                elif ord(cmd) == 0x81:  # 地磁気データ
-                    # 4バイトのTickTimeを読み取る
-                    tick_time = ser.read(4)
-                    tick_time_ms = struct.unpack('<I', tick_time)[0]
-                    print(f"TickTime: {tick_time_ms} ms")
-
-                    # 地磁気データ X, Y, Z を読み取る (各3バイト)
-                    mag_x = read_3byte_signed(ser)
-                    mag_y = read_3byte_signed(ser)
-                    mag_z = read_3byte_signed(ser)
-                    print(f"地磁気データ (X, Y, Z): {mag_x} uT, {mag_y} uT, {mag_z} uT")
-
-    except KeyboardInterrupt:
-        pass
-
 def parse_3byte_signed(data):
     """3バイトの符号付きデータを整数として解釈する"""
     if len(data) != 3:
@@ -330,21 +345,6 @@ def parse_3byte_signed(data):
     # 4バイトの整数として結合
     value = data[0] + (data[1] << 8) + (data[2] << 16) + (data4 << 24)
 
-    return ctypes.c_int(value).value
-
-def read_3byte_signed(ser):
-    """3バイトの符号付きデータを読み取って、符号付き整数として返す"""
-    data = ser.read(3)
-    if len(data) != 3:
-        return 0
-
-    # 3バイトのデータを4バイトに変換（符号拡張）
-    if data[2] & 0x80:  # 負の数の場合
-        data4 = b'\xFF'
-    else:
-        data4 = b'\x00'
-
-    value = data[0] + (data[1] << 8) + (data[2] << 16) + (ord(data4) << 24)
     return ctypes.c_int(value).value
 
 def clear_measurement_data(ser):
@@ -372,46 +372,67 @@ def clear_measurement_data(ser):
     else:
         print("レスポンスが正しくありません。")
 
-def send_sync_pulse(ser):
-    send_sync_signal(ser, level=8)  # Low出力 (8)
-    time.sleep(0.0001)  # 少しの間Lowに保持
-    send_sync_signal(ser, level=9)  # High出力 (9)
 
-def run_imu_on_port(port, barrier):
+
+def run_imu_on_port(port, barrier, sync_port):
     ser = serial.Serial()
     ser.port = port
     ser.timeout = 1.0
     ser.baudrate = 115200
-    # シリアルポートを開く
-    ser.open()
+    try:
+        ser.open()
+    except Exception as e:
+        print(f"シリアルポートを開くことができませんでした。 ({port})")
+        return
 
     print(f"{port} is open")
-    configure_accelgyro(ser)
-    configure_magnetic(ser)
 
-    barrier.wait()  # 他のスレッドと同期
+    try :
+        # 時刻の設定
+        set_device_time(ser)
+        # 加速度の設定
+        flag = configure_accelgyro(ser, port)
+        if not flag:
+            raise Exception(f"加速度の設定に失敗しました。 計測を終了します({port})")
+        # 地磁気の設定
+        flag = configure_magnetic(ser, port)
+        if not flag:
+            raise Exception(f"地磁気の設定に失敗しました。 計測を終了します({port})")
 
-    # 計測を開始する
-    start_measurement(ser)
-    print(f"計測設定が完了し、計測を開始しました。 ({port})\n")
+        barrier.wait(timeout=3)  # 他のスレッドと同期
 
-    # 加速度、角速度、地磁気のデータを読み取るループを開始
-    try:
-        read_sensor_data(ser)
-    finally:
-        stop_measurement(ser)
+        # 計測を開始する
+        flag = start_measurement(ser, port, sync_port)
+        if not flag:
+            raise Exception(f"計測の開始に失敗しました。 計測を終了します({port})")
 
-def read_memory(port):
+        print(f"計測設定が完了し、計測を開始しました。 ({port})\n")
+
+        # 加速度、角速度、地磁気のデータを読み取るループを開始
+        flag = read_sensor_data(ser, port)
+        if not flag:
+            raise Exception(f"計測を終了しました。 ({port})")
+
+    except Exception:
+        stop_measurement(ser, port)
+        ser.close
+
+def read_memory(port, sync_port):
     ser = serial.Serial()
     ser.port = port
     ser.timeout = 1.0
     ser.baudrate = 115200
     ser.open()
 
+    if port == sync_port:
+        while ser.in_waiting > 0:  # バッファ内のデータをクリア 重要！
+            ser.readline()
+            time.sleep(0.01)
+
     # 最新の計測記録を取得し、CSVに保存
-    entry_count = get_entry_count(ser)
+    entry_count = get_entry_count(ser, port)
     if entry_count > 0:
-        accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count)
+        accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count, port)
         # CSVに保存
         save_to_csv(accel_gyro_data, geomagnetic_data, f'sensor_data_{port}.csv')
         print(f"計測データをCSVに保存しました。 ({port})")
@@ -426,7 +447,10 @@ def read_memory(port):
     print(f"計測を終了し、シリアルポートを閉じました。 ({port})")
 
 def main():
-    ports = ["COM6", "COM8", "COM10"]
+    sync_port = "COM" + input("同期用IMU AP09181497 のポート番号を入力:COM")
+    subject_port = "COM" + input("患者用IMU RP1B001592 のポート番号を入力:COM")
+    therapist_port = "COM" + input("療法士用IMU RPRP1B001593 のポート番号を入力:COM")
+    ports = [sync_port, subject_port, therapist_port]
     threads = []
     threads_post = []
     barrier = threading.Barrier(len(ports))  # スレッド間の同期のためのバリアを作成
@@ -434,7 +458,7 @@ def main():
     ### 計測処理 ########################################################################################
     # 各シリアルポートに対してスレッドを作成し、実行
     for port in ports:
-        thread = threading.Thread(target=run_imu_on_port, args=(port,barrier))
+        thread = threading.Thread(target=run_imu_on_port, args=(port,barrier, sync_port))
         threads.append(thread)
 
     try:
@@ -449,22 +473,23 @@ def main():
         for thread in threads:  #全てのスレッドが終了するまで待機
             thread.join()
 
-        print("計測を終了しました。IMUメモリの書き出しを行います")
+        print("計測を終了しました")
 
-    ### 内部メモリの書き出し##############################################################################
-    for port in ports:
-        thread_post = threading.Thread(target=read_memory, args=(port,))
-        threads_post.append(thread_post)
+    # ### 内部メモリの書き出し##############################################################################
+    # print("計測を終了しました。IMUメモリの書き出しを行います")
+    # for port in ports:
+    #     thread_post = threading.Thread(target=read_memory, args=(port,sync_port,))
+    #     threads_post.append(thread_post)
 
-    for thread_post in threads_post:
-        thread_post.start()
+    # for thread_post in threads_post:
+    #     thread_post.start()
 
-    print("メモリの書き出しを行っています 少々お待ちください")
+    # print("メモリの書き出しを行っています 少々お待ちください")
 
-    for thread_post in threads_post:
-        thread_post.join()
+    # for thread_post in threads_post:
+    #     thread_post.join()
 
-    print("\n全てのIMUで書き出しを終了しました\n ")
+    # print("\n全てのIMUで書き出しを終了しました\n ")
 
 if __name__ == '__main__':
     main()
