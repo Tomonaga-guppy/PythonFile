@@ -104,7 +104,11 @@ def read_memory(port):
     print(f"計測を終了し、シリアルポートを閉じました。 ({port})")
 
 def main():
-    ports = ["COM11", "COM6", "COM8"]
+    sync_port = "COM" + input("同期用IMUのポート番号を入力:COM")
+    subject_port = "COM" + input("患者用IMUのポート番号を入力:COM")
+    therapist_port = "COM" + input("療法士用IMUのポート番号を入力:COM")
+    ports = [sync_port, subject_port, therapist_port]
+    # ports = ["COM11", "COM6", "COM8"]
     threads = []
     threads_post = []
     barrier = threading.Barrier(len(ports))  # スレッド間の同期のためのバリアを作成
