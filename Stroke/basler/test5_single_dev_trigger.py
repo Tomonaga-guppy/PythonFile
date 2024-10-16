@@ -70,7 +70,7 @@ def wait_for_trigger_and_start(camera, stop_event):
     camera.TriggerSelector.Value = "FrameStart"
     camera.TriggerMode.Value = "On"
     camera.TriggerSource.Value = "Line1"  # External trigger from Line1
-    camera.TriggerActivation.Value = "FallingEdge"  # Use FallingEdge for trigger activation
+    camera.TriggerActivation.Value = "RisingEdge"
 
     # Wait for the trigger signal
     while not stop_event.is_set():
