@@ -183,6 +183,7 @@ def stop_measurement(ser):
     option = 0x00  # 固定
 
     # チェックサムの計算
+
     check = header ^ cmd ^ option
 
     # コマンドリスト作成
@@ -423,28 +424,29 @@ def main():
     start_measurement(ser)
     print("計測設定が完了し、計測を開始しました。\n")
 
+    # send_sync_signal(ser, level=8)  # Low出力 (8)
     # 加速度、角速度、地磁気のデータを読み取るループを開始
     try:
         read_sensor_data(ser)
     finally:
         stop_measurement(ser)
+        # send_sync_signal(ser, level=9)  # High出力 (9)
 
-        while ser.in_waiting > 0:  # バッファ内のデータをクリア 重要！
-            ser.readline()
-            time.sleep(0.01)
 
-        # 最新の計測記録を取得し、CSVに保存
-        entry_count = get_entry_count(ser)
-        if entry_count > 0:
-            accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count)
-            # CSVに保存
-            save_to_csv(accel_gyro_data, geomagnetic_data, 'sensor_data.csv')
-            print("計測データをCSVに保存しました。")
+        # while ser.in_waiting > 0:  # バッファ内のデータをクリア 重要！
+        #     ser.readline()
+        #     time.sleep(0.01)
 
-        # 計測データの記録をクリア
-        # clear_measurement_data(ser)
+        # # 最新の計測記録を取得し、CSVに保存
+        # entry_count = get_entry_count(ser)
+        # if entry_count > 0:
+        #     accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count)
+        #     # CSVに保存
+        #     save_to_csv(accel_gyro_data, geomagnetic_data, 'sensor_data.csv')
+        #     print("計測データをCSVに保存しました。")
 
-        send_sync_signal(ser, level=9)  # 外部端子1をHigh出力
+        # # 計測データの記録をクリア
+        # # clear_measurement_data(ser)
 
 
         # シリアルポートを閉じる
