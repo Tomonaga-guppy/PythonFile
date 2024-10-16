@@ -399,9 +399,9 @@ def clear_measurement_data(ser):
     ser.write(command)
 
 def send_sync_pulse(ser):
-    send_sync_signal(ser, level=8)  # Low出力 (8)
-    time.sleep(0.0001)  # 少しの間Lowに保持
     send_sync_signal(ser, level=9)  # High出力 (9)
+    time.sleep(0.0001)  # 少しの間Highに保持
+    send_sync_signal(ser, level=8)  # Low出力 (8)
 
 def main():
     # シリアルポートの設定
