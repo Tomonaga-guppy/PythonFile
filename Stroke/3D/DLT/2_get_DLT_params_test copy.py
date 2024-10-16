@@ -73,11 +73,11 @@ def main():
             # fig[0].imshow(rgb_image)
             # fig[1].imshow(undistorted_img)
 
-            # if base_name == "f_dev0" or base_name == "f_dev1":
-            #     plt.figure()
-            #     plt.imshow(undistorted_img)
-            #     plt.title(f"file = {base_name}")
-            #     plt.show()
+            if base_name == "f_dev0" or base_name == "f_dev1":
+                plt.figure()
+                plt.imshow(undistorted_img)
+                plt.title(f"file = {base_name}")
+                plt.show()
 
 
 
@@ -98,7 +98,6 @@ def main():
 
         df_calib = pd.read_csv(root_dir + f"/較正点記録.csv", skiprows=1)
         check_point_list = ['4', '5', '6', '10', '11', '12', '16', '17', '18', '22', '23', '24', '28', '29', '30', '34', '35', '36', "1'", "2'", "3'", "7'", "8'", "9'"]
-        # check_point_list = ['4', '5', '6', '10', '11', '12', '16', '17', '18', '22', '23', '24', '28', '29', '30', '34', '35', '36']
         df_calib = df_calib[df_calib["較正点"].isin(check_point_list)]
 
         if base_name == "f_dev0" or base_name == "f_dev1":
@@ -119,8 +118,6 @@ def main():
                 for i in range(len(cal_points_2d)):
                     x, y = cal_points_2d[i]
                     X, Y, Z = cal_points_3d[i]
-                    A_svd.append([X, Y, Z, 1, 0, 0, 0, 0, -x*X, -x*Y, -x*Z, -x])  # SVDを使った方法の場合？
-                    A_svd.append([0, 0, 0, 0, X, Y, Z, 1, -y*X, -y*Y, -y*Z, -y])
                     A.append([X, Y, Z, 1, 0, 0, 0, 0, -x*X, -x*Y, -x*Z])  # 疑似逆行列を使った方法の場合
                     A.append([0, 0, 0, 0, X, Y, Z, 1, -y*X, -y*Y, -y*Z])
                 A = np.array(A)
@@ -131,12 +128,6 @@ def main():
                 p  = np.linalg.pinv(A).dot(b)  #疑似逆行列を求めてbと掛け合わせる
                 P = np.append(p, 1).reshape(3,4)
                 print(f"P_疑似逆行列 = {P}")
-
-                # """ SVDを使った方法 """
-                # U, S, Vt = np.linalg.svd(A_svd)
-                # P_svd = Vt[-1,:].reshape(3,4)
-                # P_svd = P_svd / P_svd[-1, -1]
-                # print(f"P_SVD = {P_svd}")
 
                 return P
 
@@ -165,7 +156,6 @@ def main():
         # print(f"P2 = {P2}")
         # print(f"point_2d_1 = {point_2d_1}")
         # print(f"point_2d_2 = {point_2d_2}")
-        """ 疑似逆行列を使った方法 """
         A = np.array([[P1[2,0]*point_2d_1[0] - P1[0,0], P1[2,1]*point_2d_1[0] - P1[0,1], P1[2,2]*point_2d_1[0] - P1[0,2]],
                       [P1[2,0]*point_2d_1[1] - P1[1,0], P1[2,1]*point_2d_1[1] - P1[1,1], P1[2,2]*point_2d_1[1] - P1[1,2]],
                       [P2[2,0]*point_2d_2[0] - P2[0,0], P2[2,1]*point_2d_2[0] - P2[0,1], P2[2,2]*point_2d_2[0] - P2[0,2]],
@@ -175,26 +165,6 @@ def main():
                        P2[0,3] - point_2d_2[0],
                        P2[1,3] - point_2d_2[1]])
         X = np.linalg.pinv(A).dot(b)
-        """ ここまで """
-
-        """ SVDを使った方法 意味わからん"""
-        # print(f"P1 = {P1}")
-        # print(f"point_2d_1 = {point_2d_1}")
-        # A = np.array([P1[0] - point_2d_1[0]*P1[2],
-        #                P1[1] - point_2d_1[1]*P1[2],
-        #                P2[0] - point_2d_2[0]*P2[2],
-        #                P2[1] - point_2d_2[1]*P2[2]])
-
-        # # print(f"A0 = {A0}")
-        # print(f"A = {A}")
-        # U, S, Vt = np.linalg.svd(A)
-        # print(f"U = {U}, S = {S}, Vt = {Vt}")
-        # V = Vt[:, -1]
-        # X = V[:3] / V[-1]
-        # print(f"V = {V}")
-        # print(f"X = {X}")
-        """ ここまで """
-
         return X
 
 
@@ -222,6 +192,9 @@ def main():
     for i in range(len(cal_points_3d)):
         print(f"座標：{cal_points_3d[i]}, 誤差：{error[i]}")
 
+    threshold_mae = 20
+    large_error_indices = np.where(np.linalg.norm(error, axis=1) > threshold_mae)[0]
+    print(f"large_error_indices = {large_error_indices}")
 
 
 if __name__ == "__main__":

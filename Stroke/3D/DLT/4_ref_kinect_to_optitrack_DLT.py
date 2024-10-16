@@ -12,7 +12,7 @@ from scipy.interpolate import CubicSpline
 from sklearn.metrics import mean_absolute_error
 
 root_dir = r"F:\Tomson\gait_pattern\20240912"
-condition = "sub3_normalgait_f"
+condition = "sub3_normalgait_f_1"
 mkv_files = glob.glob(os.path.join(root_dir, f"*{condition}*.mkv"))
 
 
@@ -98,11 +98,19 @@ def main():
     mkv_left = mkv_files[2]
 
     #モーキャプから求めた関節角度データを取得
-    angle_csv_files = glob.glob(os.path.join(root_dir, "qualisys", f"angle_30Hz_{condition}*.csv"))[0]
+    global condition
+    print(f"condition = {condition}")
+    condition_parts = "_".join(condition.split('_')[:-1])
+    print(f"condition_parts = {condition_parts}")
+    number_part = f"{int(condition.split('_')[-1]):04d}"
+    print(f"number_part = {number_part}")
+    condition_mocap = f"{condition_parts}{number_part}"
+
+    angle_csv_files = glob.glob(os.path.join(root_dir, "qualisys", f"angle_30Hz_{condition_mocap}*.csv"))[0]
     df_mocap_angle = pd.read_csv(angle_csv_files, index_col=0)
     mocap_frame = df_mocap_angle.index.values
     #モーキャプから求めた初期接地時のフレーム
-    ic_frame_path = glob.glob(os.path.join(root_dir, "qualisys",f"ic_frame_30Hz_{condition}*.npy"))[0]
+    ic_frame_path = glob.glob(os.path.join(root_dir, "qualisys",f"ic_frame_30Hz_{condition_mocap}*.npy"))[0]
     ic_frame_mocap = np.load(ic_frame_path)
 
     #2d上でのキーポイントを取得 [frame, 25, 3]
@@ -257,10 +265,6 @@ def main():
 
 
 
-
-
-
-
     #すべてで記録できているフレームを抽出
     print(f"sagi_frame_2d = {sagi_frame_2d}")
     print(f"mocap_frame = {mocap_frame}")
@@ -288,6 +292,15 @@ def main():
     hip_angle_sagittal_2d = pd.DataFrame(calculate_angle(thigh_vector_sagittal_2d, trunk_vector_sagittal_2d))
     knee_angle_sagittal_2d = pd.DataFrame(calculate_angle(thigh_vector_sagittal_2d, lower_leg_vector_sagittal_2d))
     ankle_angle_sagittal_2d = pd.DataFrame(calculate_angle(foot_vector_sagittal_2d, lower_leg_vector_sagittal_2d))
+
+    # def calculate_angle_3d(vector1, vector2):  #(frame, xyz)の配列を入力
+    #     angle_list = []
+    #     for frame in range(len(vector1)):
+    #         x,y,z = vector1[frame, :]
+    #         e_x, e_y, e_z = x/
+
+    #     return angle_list
+
 
     #3D DLT法で求めた関節角度(基準は3DMCの軸)
     hip_angle_3d = - pd.DataFrame(calculate_angle(thigh_vector_3d, trunk_vector_3d)).iloc[:, 1]
@@ -349,7 +362,7 @@ def main():
     plt.xlabel("frame [-]")
     plt.ylabel("angle [°]")
     plt.savefig(os.path.join(root_dir, f"{condition}_hip_angle.png"))
-    plt.show()
+    # plt.show()
     plt.cla()
 
     if ic_frame_mocap is not None:
@@ -365,7 +378,7 @@ def main():
     plt.xlabel("frame [-]")
     plt.ylabel("angle [°]")
     plt.savefig(os.path.join(root_dir, f"{condition}_knee_angle.png"))
-    plt.show()
+    # plt.show()
     plt.cla()
 
     if ic_frame_mocap is not None:
@@ -381,7 +394,7 @@ def main():
     plt.xlabel("frame [-]")
     plt.ylabel("angle [°]")
     plt.savefig(os.path.join(root_dir, f"{condition}_ankle_angle.png"))
-    plt.show()
+    # plt.show()
     plt.cla()
 
 
