@@ -15,7 +15,7 @@ from helpers import convert_to_bgra_if_required
 
 def main():
     mkv_folder = r"F:\Tomson\gait_pattern\20240912"
-    mkv_files = glob.glob(os.path.join(mkv_folder, '*larg*_f_1*.mkv'))
+    mkv_files = glob.glob(os.path.join(mkv_folder, '*larg*.mkv'))
     print(f"mkv_files = {mkv_files}")
 
     for i, mkv_file_path in enumerate(mkv_files):
@@ -37,6 +37,10 @@ def main():
         fps = 30.0
         size = (1920,1080)
         writer = cv2.VideoWriter(mp4file, fmt, fps, size) # ライター作成
+
+        if os.path.exists(mp4file):
+            print(f"{mp4file} already exists.")
+            continue
 
         while True:
             try:
@@ -65,7 +69,7 @@ def main():
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-            print(f"{i}/{len(mkv_files)} RGB frame_count = {frame_count}")
+            print(f"{i}/{len(mkv_files)} {os.path.basename(mkv_file_path).split('.')[0]} RGB frame_count = {frame_count}")
             writer.write(rgb_image)
             frame_count += 1
 
