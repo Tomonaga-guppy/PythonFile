@@ -10,6 +10,7 @@ name = input("保存するファイル名を入力してください: ")
 current_date = datetime.datetime.now().strftime('%Y%m%d')
 root_dir = fr"f:\Tomson\gait_pattern\{current_date}\{name}"
 
+
 if not os.path.exists(root_dir):
     os.makedirs(root_dir)
 

@@ -344,8 +344,11 @@ def main():
         df.index = df_index
         if down_hz:
             df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_30Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
+            print(f"angle_df saved in angle_30Hz_{os.path.basename(csv_path).split('.')[0]}.csv")
         else:
             df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_120Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
+            print(f"aangle_df saved in angle_120Hz_{os.path.basename(csv_path).split('.')[0]}.csv")
+
 
         bector_array = np.array(bector_list)
         lhee_pel_z = bector_array[:, 0]

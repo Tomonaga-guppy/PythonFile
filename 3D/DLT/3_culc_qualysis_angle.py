@@ -7,6 +7,11 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 import json
 
+down_hz = False
+csv_path_dir = r"F:\Tomson\gait_pattern\20240912\qualisys"
+# csv_paths = glob.glob(os.path.join(csv_path_dir, "sub2*.tsv"))
+csv_paths = glob.glob(os.path.join(csv_path_dir, "sub3*normal*.tsv"))
+
 def read_3DMC(csv_path, down_hz):
     col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
     df = pd.read_csv(csv_path, names=col_names, sep='\t', skiprows=[0,1,2,3,4,5,6,7,8,10])  #Qualisis
@@ -14,20 +19,11 @@ def read_3DMC(csv_path, down_hz):
     df = df.drop(0).reset_index(drop=True)  # ヘッダーにした行をデータから削除し、インデックスをリセット
     # print(f"df = {df}")
 
-    # # dfの両端2.5%を削除 補間時の乱れを防ぐため
-    df_index = df.index
-    df = df.iloc[int(len(df)*0.025):int(len(df)*0.975)]
-
     if down_hz:
         df_down = df[::4].reset_index()
-        df_down.index = df_down.index + df_down['index'].iloc[0]//4
-        df_down = df_down.drop("index", axis=1)
-        df95_index = df_down.index
         sampling_freq = 30
     else:
         df_down = df
-        df95_index = df_index[df.index]
-        df.index = df95_index
         sampling_freq = 120
 
     marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
@@ -43,36 +39,47 @@ def read_3DMC(csv_path, down_hz):
     marker_set_df = pd.DataFrame(columns=marker_dict.keys())
     for column in marker_set_df.columns:
         marker_set_df[column] = df_down.iloc[:, marker_dict[column]].values
-    marker_set_df.index = df95_index
 
     marker_set_df = marker_set_df.apply(pd.to_numeric, errors='coerce')  #文字列として読み込まれたデータを数値に変換
+    marker_set_df.replace(0, np.nan, inplace=True)  #0をnanに変換
+    print(f"marker_set_df.index = {marker_set_df.index}")
     interpolated_df = marker_set_df.interpolate(method='spline', order=3)  #3次スプライン補間
-    marker_set_df = interpolated_df.apply(butter_lowpass_fillter, args=(4, 6, sampling_freq, df95_index))
+    print(f"interpolated_df.index = {interpolated_df.index}")
+    marker_set_fin_df = interpolated_df.apply(butter_lowpass_fillter, args=(4, 6, sampling_freq))
 
-    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path).split('.')[0]}.csv"))
+    marker_set_fin_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path).split('.')[0]}.csv"))
 
-    return marker_set_df, df95_index
 
-def butter_lowpass_fillter(column_data, order, cutoff_freq, sampling_freq, frame_list):  #4次のバターワースローパスフィルタ
+    # fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 10))
+    # ax1.plot(marker_set_df['RKNE2_Y'])
+    # ax2.plot(marker_set_fin_df['RKNE2_Y'])
+    # plt.show()
+
+    return marker_set_fin_df
+
+def butter_lowpass_fillter(column_data, order, cutoff_freq, sampling_freq):  #4次のバターワースローパスフィルタ
     nyquist_freq = sampling_freq / 2
     normal_cutoff = cutoff_freq / nyquist_freq
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    data_to_filter = column_data[frame_list]
+    data_to_filter = column_data
     filtered_data = filtfilt(b, a, data_to_filter)
-    column_data[frame_list] = filtered_data
+    column_data = filtered_data
     return column_data
 
 def main():
-    down_hz = False
-    csv_path_dir = r"F:\Tomson\gait_pattern\20240912\qualisys"
-    csv_paths = glob.glob(os.path.join(csv_path_dir, "sub3*normal*f0001*.tsv"))
 
     for i, csv_path in enumerate(csv_paths):
-        marker_set_df, df_index = read_3DMC(csv_path, down_hz)
+        marker_set_df = read_3DMC(csv_path, down_hz)
+
+        # dfの両端2.5%を削除 補間時の乱れを防ぐため
+        marker_set_df = marker_set_df.iloc[int(len(marker_set_df)*0.025):int(len(marker_set_df)*0.975)]
+        df_index = marker_set_df.index
+
         # keypoints = marker_set_df.values
         # keypoints_mocap = keypoints.reshape(-1, len(marker_set), 3)  #xyzで組になるように変形
         # print(keypoints_mocap.shape)
         print(f"marker_set_df = {marker_set_df}")
+        print(f"df_index = {df_index}")
         print(f"csv_path = {csv_path}")
 
         angle_list = []
@@ -96,10 +103,9 @@ def main():
         rank2 = marker_set_df[['RANK2_X', 'RANK2_Y', 'RANK2_Z']].to_numpy()
         lank2 = marker_set_df[['LANK2_X', 'LANK2_Y', 'LANK2_Z']].to_numpy()
 
-        # for frame_num in full_range:
-        for frame_num in df_index:
+
+        for frame_num in marker_set_df.index:
             frame_num = frame_num - df_index[0]
-            #メモ
             d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
             d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:]) / 2)
             r = 0.012 #9/12
@@ -345,9 +351,9 @@ def main():
         df.index = df_index
         # df = df.sort_values(by="dist", ascending=True)
 
-        plt.figure()
-        plt.plot(df.index, df["dist"])
-        plt.show()
+        # plt.figure()
+        # plt.plot(df.index, df["dist"])
+        # plt.show()
 
         filtered_list = []
         skip_values = set()
@@ -370,4 +376,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
