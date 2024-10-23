@@ -8,9 +8,8 @@ from scipy.signal import butter, filtfilt
 import json
 
 down_hz = False
-csv_path_dir = r"F:\Tomson\gait_pattern\20240912\qualisys"
-# csv_paths = glob.glob(os.path.join(csv_path_dir, "sub2*.tsv"))
-csv_paths = glob.glob(os.path.join(csv_path_dir, "sub3*normal*.tsv"))
+csv_path_dir = r"F:\Tomson\gait_pattern\20240911\qualisys"
+csv_paths = glob.glob(os.path.join(csv_path_dir, "sub2*.tsv"))
 
 def read_3DMC(csv_path, down_hz):
     col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
@@ -42,20 +41,19 @@ def read_3DMC(csv_path, down_hz):
 
     marker_set_df = marker_set_df.apply(pd.to_numeric, errors='coerce')  #文字列として読み込まれたデータを数値に変換
     marker_set_df.replace(0, np.nan, inplace=True)  #0をnanに変換
-    print(f"marker_set_df.index = {marker_set_df.index}")
-    interpolated_df = marker_set_df.interpolate(method='spline', order=3)  #3次スプライン補間
-    print(f"interpolated_df.index = {interpolated_df.index}")
-    marker_set_fin_df = interpolated_df.apply(butter_lowpass_fillter, args=(4, 6, sampling_freq))
 
+    df_copy = marker_set_df.copy()
+    valid_index_mask = df_copy.notna().all(axis=1)
+    valid_index = df_copy[valid_index_mask].index  #欠損値がない行のインデックスを取得、この範囲の値を解析に使用する
+    valid_index = pd.Index(range(valid_index.min(), valid_index.max() + 1))  #欠損値がない行のインデックスを取得、この範囲の値を解析に使用する
+    # print(f"valid_index_mask = {valid_index_mask}")
+    # print(f"valid_index = {valid_index}")
+
+    interpolated_df = marker_set_df.interpolate(method='spline', order=3)  #3次スプライン補間
+    marker_set_fin_df = interpolated_df.apply(butter_lowpass_fillter, args=(4, 6, sampling_freq))  #4次のバターワースローパスフィルタ
     marker_set_fin_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path).split('.')[0]}.csv"))
 
-
-    # fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 10))
-    # ax1.plot(marker_set_df['RKNE2_Y'])
-    # ax2.plot(marker_set_fin_df['RKNE2_Y'])
-    # plt.show()
-
-    return marker_set_fin_df
+    return marker_set_fin_df, valid_index
 
 def butter_lowpass_fillter(column_data, order, cutoff_freq, sampling_freq):  #4次のバターワースローパスフィルタ
     nyquist_freq = sampling_freq / 2
@@ -69,18 +67,10 @@ def butter_lowpass_fillter(column_data, order, cutoff_freq, sampling_freq):  #4�
 def main():
 
     for i, csv_path in enumerate(csv_paths):
-        marker_set_df = read_3DMC(csv_path, down_hz)
+        marker_set_df, valid_index = read_3DMC(csv_path, down_hz)
 
-        # dfの両端2.5%を削除 補間時の乱れを防ぐため
-        marker_set_df = marker_set_df.iloc[int(len(marker_set_df)*0.025):int(len(marker_set_df)*0.975)]
-        df_index = marker_set_df.index
-
-        # keypoints = marker_set_df.values
-        # keypoints_mocap = keypoints.reshape(-1, len(marker_set), 3)  #xyzで組になるように変形
-        # print(keypoints_mocap.shape)
-        print(f"marker_set_df = {marker_set_df}")
-        print(f"df_index = {df_index}")
         print(f"csv_path = {csv_path}")
+        print(f"valid_index = {valid_index}")
 
         angle_list = []
         bector_list = []
@@ -104,8 +94,7 @@ def main():
         lank2 = marker_set_df[['LANK2_X', 'LANK2_Y', 'LANK2_Z']].to_numpy()
 
 
-        for frame_num in marker_set_df.index:
-            frame_num = frame_num - df_index[0]
+        for frame_num in valid_index:
             d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
             d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:]) / 2)
             r = 0.012 #9/12
@@ -328,7 +317,7 @@ def main():
         # print(f"angle_array.shape = {angle_array.shape}")
         df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
         # df.index = df.index + full_range.start
-        df.index = df_index
+        df.index = valid_index
         if down_hz:
             df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_30Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
         else:
@@ -338,17 +327,17 @@ def main():
         lhee_pel_z = bector_array[:, 0]
         # lhee_pel_z = bector_array[:, 2]  #motiveの場合
         df = pd.DataFrame({"lhee_pel_z":lhee_pel_z})
-        df.index = df_index
+        df.index = valid_index
         df = df.sort_values(by="lhee_pel_z", ascending=True)
         # df = df.sort_values(by="lhee_pel_z", ascending=False)  #motiveの場合
-        print(f"df2 = {df}")
+        # print(f"df2 = {df}")
         ic_list = df.index[:120].values
-        print(f"ic_list = {ic_list}")
+        # print(f"ic_list = {ic_list}")
 
 
         dist_array = np.array(dist_list)
         df = pd.DataFrame({"dist": dist_array})
-        df.index = df_index
+        df.index = valid_index
         # df = df.sort_values(by="dist", ascending=True)
 
         # plt.figure()
@@ -366,7 +355,7 @@ def main():
             # 10個以内の数値をスキップリストに追加
             skip_values.update(range(value - 10, value + 11))
         filtered_list = sorted(filtered_list)
-        print(f"フィルタリング後のリスト:{filtered_list}")
+        print(f"フィルタリング後のリスト:{filtered_list}\n")
 
         if down_hz:
             np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_30Hz_{os.path.basename(csv_path).split('.')[0]}.npy"), filtered_list)
