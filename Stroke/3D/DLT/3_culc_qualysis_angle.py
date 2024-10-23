@@ -1,15 +1,13 @@
 import pandas as pd
-import os
-import glob
 import numpy as np
+from pathlib import Path
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
-import json
 
 down_hz = False
-csv_path_dir = r"F:\Tomson\gait_pattern\20240911\qualisys"
-csv_paths = glob.glob(os.path.join(csv_path_dir, "sub2*.tsv"))
+csv_path_dir = Path(r"F:\Tomson\gait_pattern\20240912\qualisys")
+csv_paths = list(csv_path_dir.glob("sub3*normal*.tsv"))
 
 def read_3DMC(csv_path, down_hz):
     col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
@@ -51,7 +49,9 @@ def read_3DMC(csv_path, down_hz):
 
     interpolated_df = marker_set_df.interpolate(method='spline', order=3)  #3次スプライン補間
     marker_set_fin_df = interpolated_df.apply(butter_lowpass_fillter, args=(4, 6, sampling_freq))  #4次のバターワースローパスフィルタ
-    marker_set_fin_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path).split('.')[0]}.csv"))
+    output_csv_path = csv_path.with_name(f"marker_set_{csv_path.stem}.csv")
+
+    marker_set_fin_df.to_csv(output_csv_path)
 
     return marker_set_fin_df, valid_index
 
@@ -220,7 +220,7 @@ def main():
             angle_list.append(angles)
 
             plot_flag = False
-            if plot_flag:
+            if plot_flag:  #各キーポイントの位置をプロット
                 fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
                 ax.set_xlabel("x")
                 ax.set_ylabel("y")
@@ -313,15 +313,12 @@ def main():
             dist_list.append(np.linalg.norm(bector))
 
         angle_array = np.array(angle_list)
-        # print(f"angle_array = {angle_array}")
-        # print(f"angle_array.shape = {angle_array.shape}")
         df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
-        # df.index = df.index + full_range.start
         df.index = valid_index
         if down_hz:
-            df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_30Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
+            df.to_csv(csv_path.with_name(f"angle_30Hz_{csv_path.stem}.csv"))
         else:
-            df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_120Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
+            df.to_csv(csv_path.with_name(f"angle_120Hz_{csv_path.stem}.csv"))
 
         bector_array = np.array(bector_list)
         lhee_pel_z = bector_array[:, 0]
@@ -330,15 +327,12 @@ def main():
         df.index = valid_index
         df = df.sort_values(by="lhee_pel_z", ascending=True)
         # df = df.sort_values(by="lhee_pel_z", ascending=False)  #motiveの場合
-        # print(f"df2 = {df}")
         ic_list = df.index[:120].values
-        # print(f"ic_list = {ic_list}")
 
 
         dist_array = np.array(dist_list)
         df = pd.DataFrame({"dist": dist_array})
         df.index = valid_index
-        # df = df.sort_values(by="dist", ascending=True)
 
         # plt.figure()
         # plt.plot(df.index, df["dist"])
@@ -358,9 +352,9 @@ def main():
         print(f"フィルタリング後のリスト:{filtered_list}\n")
 
         if down_hz:
-            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_30Hz_{os.path.basename(csv_path).split('.')[0]}.npy"), filtered_list)
+            np.save(csv_path.with_name(f"ic_frame_30Hz_{csv_path.stem}.npy"), filtered_list)
         else:
-            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_120Hz_{os.path.basename(csv_path).split('.')[0]}.npy"), filtered_list)
+            np.save(csv_path.with_name(f"ic_frame_120Hz_{csv_path.stem}.npy"), filtered_list)
 
 
 if __name__ == "__main__":
