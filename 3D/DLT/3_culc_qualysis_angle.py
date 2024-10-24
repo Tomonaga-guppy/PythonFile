@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 
 down_hz = False
-csv_path_dir = Path(r"F:\Tomson\gait_pattern\20240911\qualisys")
-csv_paths = list(csv_path_dir.glob("sub2*.tsv"))
+csv_path_dir = Path(r"F:\Tomson\gait_pattern\20240912\qualisys")
+csv_paths = list(csv_path_dir.glob("sub3*large*.tsv"))
 
 def read_3DMC(csv_path, down_hz):
     col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
@@ -361,6 +361,18 @@ def main():
             np.save(csv_path.with_name(f"ic_frame_30Hz_{csv_path.stem}.npy"), filtered_list)
         else:
             np.save(csv_path.with_name(f"ic_frame_120Hz_{csv_path.stem}.npy"), filtered_list)
+
+        # fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6))
+        # ax1.plot(angle_df.index, angle_df["r_hip_angle"], label="r_hip_angle")
+        # ax1.plot(angle_df.index, angle_df["l_hip_angle"], label="l_hip_angle")
+        # ax1.set_ylim(-40, 70)
+        # ax2.plot(angle_df.index, angle_df["r_knee_angle"], label="r_knee_angle")
+        # ax2.plot(angle_df.index, angle_df["l_knee_angle"], label="l_knee_angle")
+        # ax2.set_ylim(-40, 70)
+        # ax3.plot(angle_df.index, angle_df["r_ankle_angle"], label="r_ankle_angle")
+        # ax3.plot(angle_df.index, angle_df["l_ankle_angle"], label="l_ankle_angle")
+        # ax3.set_ylim(-40, 70)
+        # plt.show()
 
 if __name__ == "__main__":
     main()
