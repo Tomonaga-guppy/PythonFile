@@ -6,15 +6,14 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 
 down_hz = False
-csv_path_dir = Path(r"F:\Tomson\gait_pattern\20240912\qualisys")
-csv_paths = list(csv_path_dir.glob("sub3*normal*.tsv"))
+csv_path_dir = Path(r"F:\Tomson\gait_pattern\20240911\qualisys")
+csv_paths = list(csv_path_dir.glob("sub2*.tsv"))
 
 def read_3DMC(csv_path, down_hz):
     col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
     df = pd.read_csv(csv_path, names=col_names, sep='\t', skiprows=[0,1,2,3,4,5,6,7,8,10])  #Qualisis
     df.columns = df.iloc[0]  # 最初の行をヘッダーに
     df = df.drop(0).reset_index(drop=True)  # ヘッダーにした行をデータから削除し、インデックスをリセット
-    # print(f"df = {df}")
 
     if down_hz:
         df_down = df[::4].reset_index()
@@ -42,15 +41,13 @@ def read_3DMC(csv_path, down_hz):
 
     df_copy = marker_set_df.copy()
     valid_index_mask = df_copy.notna().all(axis=1)
-    valid_index = df_copy[valid_index_mask].index  #欠損値がない行のインデックスを取得、この範囲の値を解析に使用する
-    valid_index = pd.Index(range(valid_index.min(), valid_index.max() + 1))  #欠損値がない行のインデックスを取得、この範囲の値を解析に使用する
-    # print(f"valid_index_mask = {valid_index_mask}")
-    # print(f"valid_index = {valid_index}")
-
+    valid_index = df_copy[valid_index_mask].index
+    valid_index = pd.Index(range(valid_index.min(), valid_index.max() + 1))  #欠損値がない行のインデックスを範囲で取得、この範囲の値を解析に使用する
+    marker_set_df = marker_set_df.loc[valid_index, :]  #欠損値のない行のみを抽出
     interpolated_df = marker_set_df.interpolate(method='spline', order=3)  #3次スプライン補間
     marker_set_fin_df = interpolated_df.apply(butter_lowpass_fillter, args=(4, 6, sampling_freq))  #4次のバターワースローパスフィルタ
-    output_csv_path = csv_path.with_name(f"marker_set_{csv_path.stem}.csv")
 
+    output_csv_path = csv_path.with_name(f"marker_set_{csv_path.stem}.csv")
     marker_set_fin_df.to_csv(output_csv_path)
 
     return marker_set_fin_df, valid_index
@@ -95,6 +92,7 @@ def main():
 
 
         for frame_num in valid_index:
+            frame_num = frame_num - valid_index.min()
             d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
             d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:]) / 2)
             r = 0.012 #9/12
@@ -190,17 +188,25 @@ def main():
             rot_lfoot = np.array([e_x_lfoot, e_y_lfoot, e_z_lfoot]).T
 
             r_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_rthigh)
-            r_hip_angle = R.from_matrix(r_hip_realative_rotation).as_euler('yzx', degrees=True)[0]
             l_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_lthigh)
-            l_hip_angle = R.from_matrix(l_hip_realative_rotation).as_euler('yzx', degrees=True)[0]
             r_knee_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rthigh)
-            r_knee_angle =  R.from_matrix(r_knee_realative_rotation).as_euler('yzx', degrees=True)[0]
             l_knee_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lthigh)
-            l_knee_angle = R.from_matrix(l_knee_realative_rotation).as_euler('yzx', degrees=True)[0]
             r_ankle_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rfoot)
-            r_ankle_angle = R.from_matrix(r_ankle_realative_rotation).as_euler('yzx', degrees=True)[0]
             l_ankle_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lfoot)
-            l_ankle_angle = R.from_matrix(l_ankle_realative_rotation).as_euler('yzx', degrees=True)[0]
+
+            r_hip_angle_rot = R.from_matrix(r_hip_realative_rotation)
+            l_hip_angle_rot = R.from_matrix(l_hip_realative_rotation)
+            r_knee_angle_rot = R.from_matrix(r_knee_realative_rotation)
+            l_knee_angle_rot = R.from_matrix(l_knee_realative_rotation)
+            r_ankle_angle_rot = R.from_matrix(r_ankle_realative_rotation)
+            l_ankle_angle_rot = R.from_matrix(l_ankle_realative_rotation)
+
+            r_hip_angle = r_hip_angle_rot.as_euler('yzx', degrees=True)[0]
+            l_hip_angle = l_hip_angle_rot.as_euler('yzx', degrees=True)[0]
+            r_knee_angle = r_knee_angle_rot.as_euler('yzx', degrees=True)[0]
+            l_knee_angle = l_knee_angle_rot.as_euler('yzx', degrees=True)[0]
+            r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
+            l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
 
             r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
             l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
@@ -313,12 +319,12 @@ def main():
             dist_list.append(np.linalg.norm(bector))
 
         angle_array = np.array(angle_list)
-        df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
-        df.index = valid_index
+        angle_df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
+        angle_df.index = valid_index
         if down_hz:
-            df.to_csv(csv_path.with_name(f"angle_30Hz_{csv_path.stem}.csv"))
+            angle_df.to_csv(csv_path.with_name(f"angle_30Hz_{csv_path.stem}.csv"))
         else:
-            df.to_csv(csv_path.with_name(f"angle_120Hz_{csv_path.stem}.csv"))
+            angle_df.to_csv(csv_path.with_name(f"angle_120Hz_{csv_path.stem}.csv"))
 
         bector_array = np.array(bector_list)
         lhee_pel_z = bector_array[:, 0]
@@ -355,7 +361,6 @@ def main():
             np.save(csv_path.with_name(f"ic_frame_30Hz_{csv_path.stem}.npy"), filtered_list)
         else:
             np.save(csv_path.with_name(f"ic_frame_120Hz_{csv_path.stem}.npy"), filtered_list)
-
 
 if __name__ == "__main__":
     main()
