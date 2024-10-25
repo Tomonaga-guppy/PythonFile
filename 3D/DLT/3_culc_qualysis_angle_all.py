@@ -201,28 +201,71 @@ def main():
             r_ankle_angle_rot = R.from_matrix(r_ankle_realative_rotation)
             l_ankle_angle_rot = R.from_matrix(l_ankle_realative_rotation)
 
-            r_hip_angle = r_hip_angle_rot.as_euler('yzx', degrees=True)[0]
-            l_hip_angle = l_hip_angle_rot.as_euler('yzx', degrees=True)[0]
-            r_knee_angle = r_knee_angle_rot.as_euler('yzx', degrees=True)[0]
-            l_knee_angle = l_knee_angle_rot.as_euler('yzx', degrees=True)[0]
-            r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
-            l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
+            # r_hip_angle = r_hip_angle_rot.as_euler('yzx', degrees=True)[0]
+            # l_hip_angle = l_hip_angle_rot.as_euler('yzx', degrees=True)[0]
+            # r_knee_angle = r_knee_angle_rot.as_euler('yzx', degrees=True)[0]
+            # l_knee_angle = l_knee_angle_rot.as_euler('yzx', degrees=True)[0]
+            # r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
+            # l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
 
-            r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
-            l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
-            r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
-            l_knee_angle = 360 + l_knee_angle if l_knee_angle < 0 else l_knee_angle
-            r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
-            l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
+            # r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
+            # l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
+            # r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
+            # l_knee_angle = 360 + l_knee_angle if l_knee_angle < 0 else l_knee_angle
+            # r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
+            # l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
 
-            r_hip_angle = 180 - r_hip_angle
-            l_hip_angle = 180 - l_hip_angle
-            r_knee_angle = 180 - r_knee_angle
-            l_knee_angle = 180 - l_knee_angle
-            r_ankle_angle = 90 - r_ankle_angle
-            l_ankle_angle = 90 - l_ankle_angle
+            # r_hip_angle = 180 - r_hip_angle
+            # l_hip_angle = 180 - l_hip_angle
+            # r_knee_angle = 180 - r_knee_angle
+            # l_knee_angle = 180 - l_knee_angle
+            # r_ankle_angle = 90 - r_ankle_angle
+            # l_ankle_angle = 90 - l_ankle_angle
 
-            angles = [r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle]
+            # 屈曲（flexion）・伸展（extension）の角度を計算
+            r_hip_angle_flex_ext = r_hip_angle_rot.as_euler('yzx', degrees=True)[0]
+            l_hip_angle_flex_ext = l_hip_angle_rot.as_euler('yzx', degrees=True)[0]
+            r_knee_angle_flex_ext = r_knee_angle_rot.as_euler('yzx', degrees=True)[0]
+            l_knee_angle_flex_ext = l_knee_angle_rot.as_euler('yzx', degrees=True)[0]
+            r_ankle_angle_flex_ext = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
+            l_ankle_angle_flex_ext = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
+
+            r_hip_angle_flex_ext = 360 + r_hip_angle_flex_ext if r_hip_angle_flex_ext < 0 else r_hip_angle_flex_ext
+            l_hip_angle_flex_ext = 360 + l_hip_angle_flex_ext if l_hip_angle_flex_ext < 0 else l_hip_angle_flex_ext
+            r_knee_angle_flex_ext = 360 + r_knee_angle_flex_ext if r_knee_angle_flex_ext < 0 else r_knee_angle_flex_ext
+            l_knee_angle_flex_ext = 360 + l_knee_angle_flex_ext if l_knee_angle_flex_ext < 0 else l_knee_angle_flex_ext
+            r_ankle_angle_flex_ext = 360 + r_ankle_angle_flex_ext if r_ankle_angle_flex_ext < 0 else r_ankle_angle_flex_ext
+            l_ankle_angle_flex_ext = 360 + l_ankle_angle_flex_ext if l_ankle_angle_flex_ext < 0 else l_ankle_angle_flex_ext
+
+            r_hip_angle_flex_ext = 180 - r_hip_angle_flex_ext
+            l_hip_angle_flex_ext = 180 - l_hip_angle_flex_ext
+            r_knee_angle_flex_ext = 180 - r_knee_angle_flex_ext
+            l_knee_angle_flex_ext = 180 - l_knee_angle_flex_ext
+            r_ankle_angle_flex_ext = 90 - r_ankle_angle_flex_ext
+            l_ankle_angle_flex_ext = 90 - l_ankle_angle_flex_ext
+
+            # 外転（abduction）・内転（adduction）の角度を計算
+            r_hip_angle_abd_add = r_hip_angle_rot.as_euler('yzx', degrees=True)[1]
+            l_hip_angle_abd_add = l_hip_angle_rot.as_euler('yzx', degrees=True)[1]
+            r_knee_angle_abd_add = r_knee_angle_rot.as_euler('yzx', degrees=True)[1]
+            l_knee_angle_abd_add = l_knee_angle_rot.as_euler('yzx', degrees=True)[1]
+            r_ankle_angle_abd_add = r_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
+            l_ankle_angle_abd_add = l_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
+
+
+            # 外旋（external rotation）・内旋（internal rotation）の角度を計算
+            r_hip_angle_ext_int = r_hip_angle_rot.as_euler('yzx', degrees=True)[2]
+            l_hip_angle_ext_int = l_hip_angle_rot.as_euler('yzx', degrees=True)[2]
+            r_knee_angle_ext_int = r_knee_angle_rot.as_euler('yzx', degrees=True)[2]
+            l_knee_angle_ext_int = l_knee_angle_rot.as_euler('yzx', degrees=True)[2]
+            r_ankle_angle_ext_int = r_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
+            l_ankle_angle_ext_int = l_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
+
+            # angles = [r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle]
+            angles = [r_hip_angle_flex_ext, l_hip_angle_flex_ext, r_knee_angle_flex_ext, l_knee_angle_flex_ext, r_ankle_angle_flex_ext, l_ankle_angle_flex_ext,
+                      r_hip_angle_abd_add, l_hip_angle_abd_add, r_knee_angle_abd_add, l_knee_angle_abd_add, r_ankle_angle_abd_add, l_ankle_angle_abd_add,
+                      r_hip_angle_ext_int, l_hip_angle_ext_int, r_knee_angle_ext_int, l_knee_angle_ext_int, r_ankle_angle_ext_int, l_ankle_angle_ext_int]
+
             angle_list.append(angles)
 
             plot_flag = False
@@ -319,7 +362,15 @@ def main():
             dist_list.append(np.linalg.norm(bector))
 
         angle_array = np.array(angle_list)
-        angle_df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
+        # angle_df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
+
+        angle_df = pd.DataFrame({"r_hip_angle_flex_ext": angle_array[:, 0], "l_hip_angle_flex_ext": angle_array[:, 1], "r_knee_angle_flex_ext": angle_array[:, 2],
+                                 "l_knee_angle_flex_ext": angle_array[:, 3], "r_ankle_angle_flex_ext": angle_array[:, 4], "l_ankle_angle_flex_ext": angle_array[:, 5],
+                                 "r_hip_angle_abd_add": angle_array[:, 6], "l_hip_angle_abd_add": angle_array[:, 7], "r_knee_angle_abd_add": angle_array[:, 8],
+                                 "l_knee_angle_abd_add": angle_array[:, 9], "r_ankle_angle_abd_add": angle_array[:, 10], "l_ankle_angle_abd_add": angle_array[:, 11],
+                                 "r_hip_angle_ext_int": angle_array[:, 12], "l_hip_angle_ext_int": angle_array[:, 13], "r_knee_angle_ext_int": angle_array[:, 14],
+                                 "l_knee_angle_ext_int": angle_array[:, 15], "r_ankle_angle_ext_int": angle_array[:, 16], "l_ankle_angle_ext_int": angle_array[:, 17]})
+
         angle_df.index = valid_index
         if down_hz:
             angle_df.to_csv(csv_path.with_name(f"angle_30Hz_{csv_path.stem}.csv"))

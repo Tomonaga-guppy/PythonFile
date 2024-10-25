@@ -12,7 +12,7 @@ from scipy.interpolate import CubicSpline
 from sklearn.metrics import mean_absolute_error
 
 root_dir = r"F:\Tomson\gait_pattern\20240912"
-condition = "sub3_normalgait_f_1"
+condition = "sub3_normal"
 mkv_files = glob.glob(os.path.join(root_dir, f"*{condition}*.mkv"))
 
 
