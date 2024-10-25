@@ -7,7 +7,7 @@ from scipy.signal import butter, filtfilt
 
 down_hz = False
 csv_path_dir = Path(r"F:\Tomson\gait_pattern\20240912\qualisys")
-csv_paths = list(csv_path_dir.glob("sub3*large*.tsv"))
+csv_paths = list(csv_path_dir.glob("sub3*normal*.tsv"))
 
 def read_3DMC(csv_path, down_hz):
     col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
