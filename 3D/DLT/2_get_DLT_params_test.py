@@ -166,6 +166,7 @@ def main():
         # print(f"P2 = {P2}")
         # print(f"point_2d_1 = {point_2d_1}")
         # print(f"point_2d_2 = {point_2d_2}")
+
         # """ 疑似逆行列を使った方法 """
         # A = np.array([[P1[2,0]*point_2d_1[0] - P1[0,0], P1[2,1]*point_2d_1[0] - P1[0,1], P1[2,2]*point_2d_1[0] - P1[0,2]],
         #               [P1[2,0]*point_2d_1[1] - P1[1,0], P1[2,1]*point_2d_1[1] - P1[1,1], P1[2,2]*point_2d_1[1] - P1[1,2]],
@@ -179,8 +180,6 @@ def main():
         # """ ここまで """
 
         """ SVDを使った方法 """
-        # print(f"P1 = {P1}")
-        # print(f"point_2d_1 = {point_2d_1}")
         A = np.array([point_2d_1[0]*P1[2] - P1[0],
                       point_2d_1[1]*P1[2] - P1[1],
                       point_2d_2[0]*P2[2] - P2[0],
@@ -188,10 +187,9 @@ def main():
 
         Q = A.T.dot(A)
         u, s, vh = np.linalg.svd(Q)
-        print(f"u = {u}")
         X = u[:, -1]
-        X = X / X[-1]  #
-        X = X[:3]
+        X = X / X[-1]  #実際の3D座標に変換
+        X = X[:3]  #最後の要素は不要
         """ ここまで """
 
         return X
