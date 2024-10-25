@@ -1,33 +1,25 @@
 import pandas as pd
-import os
-import glob
 import numpy as np
+from pathlib import Path
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
-import json
+
+down_hz = False
+csv_path_dir = Path(r"F:\Tomson\gait_pattern\20240912\qualisys")
+csv_paths = list(csv_path_dir.glob("sub3*normal*.tsv"))
 
 def read_3DMC(csv_path, down_hz):
     col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
     df = pd.read_csv(csv_path, names=col_names, sep='\t', skiprows=[0,1,2,3,4,5,6,7,8,10])  #Qualisis
     df.columns = df.iloc[0]  # 最初の行をヘッダーに
     df = df.drop(0).reset_index(drop=True)  # ヘッダーにした行をデータから削除し、インデックスをリセット
-    # print(f"df = {df}")
-
-    # # dfの両端2.5%を削除 補間時の乱れを防ぐため
-    df_index = df.index
-    df = df.iloc[int(len(df)*0.025):int(len(df)*0.975)]
 
     if down_hz:
         df_down = df[::4].reset_index()
-        df_down.index = df_down.index + df_down['index'].iloc[0]//4
-        df_down = df_down.drop("index", axis=1)
-        df95_index = df_down.index
         sampling_freq = 30
     else:
         df_down = df
-        df95_index = df_index[df.index]
-        df.index = df95_index
         sampling_freq = 120
 
     marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
@@ -43,37 +35,39 @@ def read_3DMC(csv_path, down_hz):
     marker_set_df = pd.DataFrame(columns=marker_dict.keys())
     for column in marker_set_df.columns:
         marker_set_df[column] = df_down.iloc[:, marker_dict[column]].values
-    marker_set_df.index = df95_index
 
     marker_set_df = marker_set_df.apply(pd.to_numeric, errors='coerce')  #文字列として読み込まれたデータを数値に変換
+    marker_set_df.replace(0, np.nan, inplace=True)  #0をnanに変換
+
+    df_copy = marker_set_df.copy()
+    valid_index_mask = df_copy.notna().all(axis=1)
+    valid_index = df_copy[valid_index_mask].index
+    valid_index = pd.Index(range(valid_index.min(), valid_index.max() + 1))  #欠損値がない行のインデックスを範囲で取得、この範囲の値を解析に使用する
+    marker_set_df = marker_set_df.loc[valid_index, :]  #欠損値のない行のみを抽出
     interpolated_df = marker_set_df.interpolate(method='spline', order=3)  #3次スプライン補間
-    marker_set_df = interpolated_df.apply(butter_lowpass_fillter, args=(4, 6, sampling_freq, df95_index))
+    marker_set_fin_df = interpolated_df.apply(butter_lowpass_fillter, args=(4, 6, sampling_freq))  #4次のバターワースローパスフィルタ
 
-    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path).split('.')[0]}.csv"))
+    output_csv_path = csv_path.with_name(f"marker_set_{csv_path.stem}.csv")
+    marker_set_fin_df.to_csv(output_csv_path)
 
-    return marker_set_df, df95_index
+    return marker_set_fin_df, valid_index
 
-def butter_lowpass_fillter(column_data, order, cutoff_freq, sampling_freq, frame_list):  #4次のバターワースローパスフィルタ
+def butter_lowpass_fillter(column_data, order, cutoff_freq, sampling_freq):  #4次のバターワースローパスフィルタ
     nyquist_freq = sampling_freq / 2
     normal_cutoff = cutoff_freq / nyquist_freq
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    data_to_filter = column_data[frame_list]
+    data_to_filter = column_data
     filtered_data = filtfilt(b, a, data_to_filter)
-    column_data[frame_list] = filtered_data
+    column_data = filtered_data
     return column_data
 
 def main():
-    down_hz = False
-    csv_path_dir = r"F:\Tomson\gait_pattern\20240912\qualisys"
-    csv_paths = glob.glob(os.path.join(csv_path_dir, "sub3*normal*f0001*.tsv"))
 
     for i, csv_path in enumerate(csv_paths):
-        marker_set_df, df_index = read_3DMC(csv_path, down_hz)
-        # keypoints = marker_set_df.values
-        # keypoints_mocap = keypoints.reshape(-1, len(marker_set), 3)  #xyzで組になるように変形
-        # print(keypoints_mocap.shape)
-        # print(f"marker_set_df = {marker_set_df}")
+        marker_set_df, valid_index = read_3DMC(csv_path, down_hz)
+
         print(f"csv_path = {csv_path}")
+        print(f"valid_index = {valid_index}")
 
         angle_list = []
         bector_list = []
@@ -96,10 +90,9 @@ def main():
         rank2 = marker_set_df[['RANK2_X', 'RANK2_Y', 'RANK2_Z']].to_numpy()
         lank2 = marker_set_df[['LANK2_X', 'LANK2_Y', 'LANK2_Z']].to_numpy()
 
-        # for frame_num in full_range:
-        for frame_num in df_index:
-            frame_num = frame_num - df_index[0]
-            #メモ
+
+        for frame_num in valid_index:
+            frame_num = frame_num - valid_index.min()
             d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
             d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:]) / 2)
             r = 0.012 #9/12
@@ -201,48 +194,39 @@ def main():
             r_ankle_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rfoot)
             l_ankle_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lfoot)
 
-            r_hip_angle_flex_ext_flec_ext = R.from_matrix(r_hip_realative_rotation).as_euler('yzx', degrees=True)[0]
-            l_hip_angle_flex_ext = R.from_matrix(l_hip_realative_rotation).as_euler('yzx', degrees=True)[0]
-            r_knee_angle_flex_ext =  R.from_matrix(r_knee_realative_rotation).as_euler('yzx', degrees=True)[0]
-            l_knee_angle_flex_ext = R.from_matrix(l_knee_realative_rotation).as_euler('yzx', degrees=True)[0]
-            r_ankle_angle_flex_ext = R.from_matrix(r_ankle_realative_rotation).as_euler('yzx', degrees=True)[0]
-            l_ankle_angle_flex_ext = R.from_matrix(l_ankle_realative_rotation).as_euler('yzx', degrees=True)[0]
+            r_hip_angle_rot = R.from_matrix(r_hip_realative_rotation)
+            l_hip_angle_rot = R.from_matrix(l_hip_realative_rotation)
+            r_knee_angle_rot = R.from_matrix(r_knee_realative_rotation)
+            l_knee_angle_rot = R.from_matrix(l_knee_realative_rotation)
+            r_ankle_angle_rot = R.from_matrix(r_ankle_realative_rotation)
+            l_ankle_angle_rot = R.from_matrix(l_ankle_realative_rotation)
 
-            r_hip_angle_abd_add = R.from_matrix(r_hip_realative_rotation).as_euler('yzx', degrees=True)[1]
-            l_hip_angle_abd_add = R.from_matrix(l_hip_realative_rotation).as_euler('yzx', degrees=True)[1]
-            r_knee_angle_abd_add =  R.from_matrix(r_knee_realative_rotation).as_euler('yzx', degrees=True)[1]
-            l_knee_angle_abd_add = R.from_matrix(l_knee_realative_rotation).as_euler('yzx', degrees=True)[1]
-            r_ankle_angle_abd_add = R.from_matrix(r_ankle_realative_rotation).as_euler('yzx', degrees=True)[1]
-            l_ankle_angle_abd_add = R.from_matrix(l_ankle_realative_rotation).as_euler('yzx', degrees=True)[1]
+            r_hip_angle = r_hip_angle_rot.as_euler('yzx', degrees=True)[0]
+            l_hip_angle = l_hip_angle_rot.as_euler('yzx', degrees=True)[0]
+            r_knee_angle = r_knee_angle_rot.as_euler('yzx', degrees=True)[0]
+            l_knee_angle = l_knee_angle_rot.as_euler('yzx', degrees=True)[0]
+            r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
+            l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
 
-            r_hip_angle_int_ext = R.from_matrix(r_hip_realative_rotation).as_euler('yzx', degrees=True)[2]
-            l_hip_angle_int_ext = R.from_matrix(l_hip_realative_rotation).as_euler('yzx', degrees=True)[2]
-            r_knee_angle_int_ext =  R.from_matrix(r_knee_realative_rotation).as_euler('yzx', degrees=True)[2]
-            l_knee_angle_int_ext = R.from_matrix(l_knee_realative_rotation).as_euler('yzx', degrees=True)[2]
-            r_ankle_angle_int_ext = R.from_matrix(r_ankle_realative_rotation).as_euler('yzx', degrees=True)[2]
-            l_ankle_angle_int_ext = R.from_matrix(l_ankle_realative_rotation).as_euler('yzx', degrees=True)[2]
+            r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
+            l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
+            r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
+            l_knee_angle = 360 + l_knee_angle if l_knee_angle < 0 else l_knee_angle
+            r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
+            l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
 
-            r_hip_angle_flex_ext_flec_ext = 360 + r_hip_angle_flex_ext_flec_ext if r_hip_angle_flex_ext_flec_ext < 0 else r_hip_angle_flex_ext_flec_ext
-            l_hip_angle_flex_ext = 360 + l_hip_angle_flex_ext if l_hip_angle_flex_ext < 0 else l_hip_angle_flex_ext
-            r_knee_angle_flex_ext = 360 + r_knee_angle_flex_ext if r_knee_angle_flex_ext < 0 else r_knee_angle_flex_ext
-            l_knee_angle_flex_ext = 360 + l_knee_angle_flex_ext if l_knee_angle_flex_ext < 0 else l_knee_angle_flex_ext
-            r_ankle_angle_flex_ext = 360 + r_ankle_angle_flex_ext if r_ankle_angle_flex_ext < 0 else r_ankle_angle_flex_ext
-            l_ankle_angle_flex_ext = 360 + l_ankle_angle_flex_ext if l_ankle_angle_flex_ext < 0 else l_ankle_angle_flex_ext
+            r_hip_angle = 180 - r_hip_angle
+            l_hip_angle = 180 - l_hip_angle
+            r_knee_angle = 180 - r_knee_angle
+            l_knee_angle = 180 - l_knee_angle
+            r_ankle_angle = 90 - r_ankle_angle
+            l_ankle_angle = 90 - l_ankle_angle
 
-            r_hip_angle_flex_ext_flec_ext = 180 - r_hip_angle_flex_ext_flec_ext
-            l_hip_angle_flex_ext = 180 - l_hip_angle_flex_ext
-            r_knee_angle_flex_ext = 180 - r_knee_angle_flex_ext
-            l_knee_angle_flex_ext = 180 - l_knee_angle_flex_ext
-            r_ankle_angle_flex_ext = 90 - r_ankle_angle_flex_ext
-            l_ankle_angle_flex_ext = 90 - l_ankle_angle_flex_ext
-
-            angles = [r_hip_angle_flex_ext_flec_ext, l_hip_angle_flex_ext, r_knee_angle_flex_ext, l_knee_angle_flex_ext, r_ankle_angle_flex_ext, l_ankle_angle_flex_ext,
-                      r_hip_angle_abd_add, l_hip_angle_abd_add, r_knee_angle_abd_add, l_knee_angle_abd_add, r_ankle_angle_abd_add, l_ankle_angle_abd_add,
-                      r_hip_angle_int_ext, l_hip_angle_int_ext, r_knee_angle_int_ext, l_knee_angle_int_ext, r_ankle_angle_int_ext, l_ankle_angle_int_ext]
+            angles = [r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle]
             angle_list.append(angles)
 
             plot_flag = False
-            if plot_flag:
+            if plot_flag:  #各キーポイントの位置をプロット
                 fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
                 ax.set_xlabel("x")
                 ax.set_ylabel("y")
@@ -323,6 +307,8 @@ def main():
                 ax.plot([lfoot[0], lfoot[0] + e_y_lfoot[0]], [lfoot[1], lfoot[1] + e_y_lfoot[1]], [lfoot[2], lfoot[2] + e_y_lfoot[2]], color='green')
                 ax.plot([lfoot[0], lfoot[0] + e_z_lfoot[0]], [lfoot[1], lfoot[1] + e_z_lfoot[1]], [lfoot[2], lfoot[2] + e_z_lfoot[2]], color='blue')
 
+
+
                 plt.legend()
                 plt.show()
 
@@ -330,36 +316,33 @@ def main():
             heel = lhee[frame_num, :]
             bector = heel - hip[:]
             bector_list.append(bector)
+            dist_list.append(np.linalg.norm(bector))
 
         angle_array = np.array(angle_list)
-        # print(f"angle_array = {angle_array}")
-        # print(f"angle_array.shape = {angle_array.shape}")
-        df = pd.DataFrame({"r_hip_angle_flex_ext_flec_ext": angle_array[:, 0], "r_knee_angle_flex_ext": angle_array[:, 2], "r_ankle_angle_flex_ext": angle_array[:, 4],
-                           "l_hip_angle_flex_ext": angle_array[:, 1], "l_knee_angle_flex_ext": angle_array[:, 3], "l_ankle_angle_flex_ext": angle_array[:, 5],
-                           "r_hip_angle_abd_add": angle_array[:, 6], "r_knee_angle_abd_add": angle_array[:, 8], "r_ankle_angle_abd_add": angle_array[:, 10],
-                           "l_hip_angle_abd_add": angle_array[:, 7], "l_knee_angle_abd_add": angle_array[:, 9], "l_ankle_angle_abd_add": angle_array[:, 11],
-                           "r_hip_angle_int_ext": angle_array[:, 12], "r_knee_angle_int_ext": angle_array[:, 14], "r_ankle_angle_int_ext": angle_array[:, 16],
-                           "l_hip_angle_int_ext": angle_array[:, 13], "l_knee_angle_int_ext": angle_array[:, 15], "l_ankle_angle_int_ext": angle_array[:, 17]})
-        # df.index = df.index + full_range.start
-        df.index = df_index
+        angle_df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
+        angle_df.index = valid_index
         if down_hz:
-            df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_30Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
-            print(f"angle_df saved in angle_30Hz_{os.path.basename(csv_path).split('.')[0]}.csv")
+            angle_df.to_csv(csv_path.with_name(f"angle_30Hz_{csv_path.stem}.csv"))
         else:
-            df.to_csv(os.path.join(os.path.dirname(csv_path), f"angle_120Hz_{os.path.basename(csv_path).split('.')[0]}.csv"))
-            print(f"aangle_df saved in angle_120Hz_{os.path.basename(csv_path).split('.')[0]}.csv")
-
+            angle_df.to_csv(csv_path.with_name(f"angle_120Hz_{csv_path.stem}.csv"))
 
         bector_array = np.array(bector_list)
         lhee_pel_z = bector_array[:, 0]
         # lhee_pel_z = bector_array[:, 2]  #motiveの場合
         df = pd.DataFrame({"lhee_pel_z":lhee_pel_z})
-        df.index = df_index
+        df.index = valid_index
         df = df.sort_values(by="lhee_pel_z", ascending=True)
         # df = df.sort_values(by="lhee_pel_z", ascending=False)  #motiveの場合
-        # print(f"df2 = {df}")
         ic_list = df.index[:120].values
-        # print(f"ic_list = {ic_list}")
+
+
+        dist_array = np.array(dist_list)
+        df = pd.DataFrame({"dist": dist_array})
+        df.index = valid_index
+
+        # plt.figure()
+        # plt.plot(df.index, df["dist"])
+        # plt.show()
 
         filtered_list = []
         skip_values = set()
@@ -372,14 +355,24 @@ def main():
             # 10個以内の数値をスキップリストに追加
             skip_values.update(range(value - 10, value + 11))
         filtered_list = sorted(filtered_list)
-        print(f"フィルタリング後のリスト:{filtered_list}")
+        print(f"フィルタリング後のリスト:{filtered_list}\n")
 
         if down_hz:
-            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_30Hz_{os.path.basename(csv_path).split('.')[0]}.npy"), filtered_list)
+            np.save(csv_path.with_name(f"ic_frame_30Hz_{csv_path.stem}.npy"), filtered_list)
         else:
-            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_120Hz_{os.path.basename(csv_path).split('.')[0]}.npy"), filtered_list)
+            np.save(csv_path.with_name(f"ic_frame_120Hz_{csv_path.stem}.npy"), filtered_list)
 
+        # fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6))
+        # ax1.plot(angle_df.index, angle_df["r_hip_angle"], label="r_hip_angle")
+        # ax1.plot(angle_df.index, angle_df["l_hip_angle"], label="l_hip_angle")
+        # ax1.set_ylim(-40, 70)
+        # ax2.plot(angle_df.index, angle_df["r_knee_angle"], label="r_knee_angle")
+        # ax2.plot(angle_df.index, angle_df["l_knee_angle"], label="l_knee_angle")
+        # ax2.set_ylim(-40, 70)
+        # ax3.plot(angle_df.index, angle_df["r_ankle_angle"], label="r_ankle_angle")
+        # ax3.plot(angle_df.index, angle_df["l_ankle_angle"], label="l_ankle_angle")
+        # ax3.set_ylim(-40, 70)
+        # plt.show()
 
 if __name__ == "__main__":
     main()
-

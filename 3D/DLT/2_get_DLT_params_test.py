@@ -97,8 +97,8 @@ def main():
         ###   前額面カメラのDLT法実行   ############################################################################################################
 
         df_calib = pd.read_csv(root_dir + f"/較正点記録.csv", skiprows=1)
-        check_point_list = ['4', '5', '6', '10', '11', '12', '16', '17', '18', '22', '23', '24', '28', '29', '30', '34', '35', '36', "1'", "2'", "3'", "7'", "8'", "9'"]
-        # check_point_list = ['4', '5', '6', '10', '11', '12', '16', '17', '18', '22', '23', '24', '28', '29', '30', '34', '35', '36']
+        # check_point_list = ['4', '5', '6', '10', '11', '12', '16', '17', '18', '22', '23', '24', '28', '29', '30', '34', '35', '36', "1'", "2'", "3'", "7'", "8'", "9'"]
+        check_point_list = ['4', '5', '6', '10', '11', '12', '16', '17', '18', '22', '23', '24', '28', '29', '30', '34', '35', '36']
         df_calib = df_calib[df_calib["較正点"].isin(check_point_list)]
 
         if base_name == "f_dev0" or base_name == "f_dev1":
@@ -126,17 +126,18 @@ def main():
                 A = np.array(A)
                 A_svd = np.array(A_svd)
 
-                """ 疑似逆行列を使った方法"""
-                b = cal_points_2d.reshape(-1, 1)
-                p  = np.linalg.pinv(A).dot(b)  #疑似逆行列を求めてbと掛け合わせる
-                P = np.append(p, 1).reshape(3,4)
-                print(f"P_疑似逆行列 = {P}")
+                # """ 疑似逆行列を使った方法"""
+                # b = cal_points_2d.reshape(-1, 1)
+                # p  = np.linalg.pinv(A).dot(b)  #疑似逆行列を求めてbと掛け合わせる
+                # P = np.append(p, 1).reshape(3,4)
+                # print(f"P_疑似逆行列 = {P}")
 
-                # """ SVDを使った方法 """
-                # U, S, Vt = np.linalg.svd(A_svd)
-                # P_svd = Vt[-1,:].reshape(3,4)
-                # P_svd = P_svd / P_svd[-1, -1]
-                # print(f"P_SVD = {P_svd}")
+                """ SVDを使った方法 """
+                U, S, Vt = np.linalg.svd(A_svd)
+                P_svd = Vt[-1,:].reshape(3,4)
+                P_svd = P_svd / P_svd[-1, -1]
+                print(f"P_SVD = {P_svd}")
+                P = P_svd
 
                 return P
 
@@ -165,34 +166,32 @@ def main():
         # print(f"P2 = {P2}")
         # print(f"point_2d_1 = {point_2d_1}")
         # print(f"point_2d_2 = {point_2d_2}")
-        """ 疑似逆行列を使った方法 """
-        A = np.array([[P1[2,0]*point_2d_1[0] - P1[0,0], P1[2,1]*point_2d_1[0] - P1[0,1], P1[2,2]*point_2d_1[0] - P1[0,2]],
-                      [P1[2,0]*point_2d_1[1] - P1[1,0], P1[2,1]*point_2d_1[1] - P1[1,1], P1[2,2]*point_2d_1[1] - P1[1,2]],
-                      [P2[2,0]*point_2d_2[0] - P2[0,0], P2[2,1]*point_2d_2[0] - P2[0,1], P2[2,2]*point_2d_2[0] - P2[0,2]],
-                      [P2[2,0]*point_2d_2[1] - P2[1,0], P2[2,1]*point_2d_2[1] - P2[1,1], P2[2,2]*point_2d_2[1] - P2[1,2]]])
-        b  = np.array([P1[0,3] - point_2d_1[0],
-                       P1[1,3] - point_2d_1[1],
-                       P2[0,3] - point_2d_2[0],
-                       P2[1,3] - point_2d_2[1]])
-        X = np.linalg.pinv(A).dot(b)
-        """ ここまで """
+        # """ 疑似逆行列を使った方法 """
+        # A = np.array([[P1[2,0]*point_2d_1[0] - P1[0,0], P1[2,1]*point_2d_1[0] - P1[0,1], P1[2,2]*point_2d_1[0] - P1[0,2]],
+        #               [P1[2,0]*point_2d_1[1] - P1[1,0], P1[2,1]*point_2d_1[1] - P1[1,1], P1[2,2]*point_2d_1[1] - P1[1,2]],
+        #               [P2[2,0]*point_2d_2[0] - P2[0,0], P2[2,1]*point_2d_2[0] - P2[0,1], P2[2,2]*point_2d_2[0] - P2[0,2]],
+        #               [P2[2,0]*point_2d_2[1] - P2[1,0], P2[2,1]*point_2d_2[1] - P2[1,1], P2[2,2]*point_2d_2[1] - P2[1,2]]])
+        # b  = np.array([P1[0,3] - point_2d_1[0],
+        #                P1[1,3] - point_2d_1[1],
+        #                P2[0,3] - point_2d_2[0],
+        #                P2[1,3] - point_2d_2[1]])
+        # X = np.linalg.pinv(A).dot(b)
+        # """ ここまで """
 
-        """ SVDを使った方法 意味わからん"""
+        """ SVDを使った方法 """
         # print(f"P1 = {P1}")
         # print(f"point_2d_1 = {point_2d_1}")
-        # A = np.array([P1[0] - point_2d_1[0]*P1[2],
-        #                P1[1] - point_2d_1[1]*P1[2],
-        #                P2[0] - point_2d_2[0]*P2[2],
-        #                P2[1] - point_2d_2[1]*P2[2]])
+        A = np.array([point_2d_1[0]*P1[2] - P1[0],
+                      point_2d_1[1]*P1[2] - P1[1],
+                      point_2d_2[0]*P2[2] - P2[0],
+                      point_2d_2[1]*P2[2] - P2[1]])
 
-        # # print(f"A0 = {A0}")
-        # print(f"A = {A}")
-        # U, S, Vt = np.linalg.svd(A)
-        # print(f"U = {U}, S = {S}, Vt = {Vt}")
-        # V = Vt[:, -1]
-        # X = V[:3] / V[-1]
-        # print(f"V = {V}")
-        # print(f"X = {X}")
+        Q = A.T.dot(A)
+        u, s, vh = np.linalg.svd(Q)
+        print(f"u = {u}")
+        X = u[:, -1]
+        X = X / X[-1]  #
+        X = X[:3]
         """ ここまで """
 
         return X
@@ -203,24 +202,18 @@ def main():
         point3d = reconstruction_3d(P_dev1, P_dev2, cal_points_2d_dev1[i], cal_points_2d_dev2[i])
         test_3d = np.append(test_3d, point3d)
     test_3d = test_3d.reshape(-1, 3)
-    print(f"test_3d = {test_3d}")
-    # test_3d = ", ".join([f"{val:.2f}" for val in test_3d])
-    # print(f"test_3d = {test_3d}")
-    # # 元の配列の形状を保持しつつフォーマットする場合
-    # for row in test_3d:
-    #     formatted_row = ", ".join([f"{val:.2f}" for val in row])
-    #     print(f"[{formatted_row}]")
+
+    for test_3d_point, cal_3d_point in zip(test_3d, cal_points_3d):
+        error = test_3d_point - cal_3d_point
+        print(f"元座標：{cal_3d_point}, 推定座標：{test_3d_point}, 誤差：{error}")
 
     # 較正点の3d座標と比較してX,Y,ZごとにMAEを求める
     error = test_3d - cal_points_3d
-    print(f"error = {error}")
     error_mae = np.mean(np.abs(error), axis=0)
-    # print(f"error_mae = {error_mae}")
     formatted_errors = ", ".join([f"{val:.2f}" for val in error_mae])
     print(f"error_mae = [{formatted_errors}]")
 
-    for i in range(len(cal_points_3d)):
-        print(f"座標：{cal_points_3d[i]}, 誤差：{error[i]}")
+
 
 
 
