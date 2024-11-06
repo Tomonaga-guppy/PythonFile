@@ -4,12 +4,9 @@ import os
 import glob
 from pyk4a import PyK4A, PyK4APlayback, CalibrationType
 import json
-import math
-import cv2
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 from scipy.interpolate import CubicSpline
-from sklearn.metrics import mean_absolute_error
 
 root_dir = r"F:\Tomson\gait_pattern\20240912"
 condition = "sub3_normal"
@@ -105,6 +102,7 @@ def main():
     number_part = f"{int(condition.split('_')[-1]):04d}"
     print(f"number_part = {number_part}")
     condition_mocap = f"{condition_parts}{number_part}"
+    print(f"condition_mocap = {condition_mocap}")
 
     angle_csv_files = glob.glob(os.path.join(root_dir, "qualisys", f"angle_30Hz_{condition_mocap}*.csv"))[0]
     df_mocap_angle = pd.read_csv(angle_csv_files, index_col=0)

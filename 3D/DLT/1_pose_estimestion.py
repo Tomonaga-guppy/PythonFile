@@ -2,10 +2,11 @@ import os
 import subprocess
 import glob
 
-# root_dir = r"F:\Tomson\gait_pattern\20240712"
-root_dir = r"F:\Tomson\gait_pattern\20240822"
+# root_dir = r"G:\gait_pattern\20240912"
+root_dir = r"G:\gait_pattern\20241102"
 
-keyward = "*"
+# keyward = "sub3_normalgait_f_1_405_dev0"
+keyward = "front_30m"
 ori_mov_paths = glob.glob(os.path.join(root_dir, (keyward), '*original.mp4'))
 print(os.path.join(root_dir, ("*" + keyward + "*"), '*original.mp4'))
 
