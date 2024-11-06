@@ -5,8 +5,8 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 
-down_hz = False
-csv_path_dir = Path(r"F:\Tomson\gait_pattern\20240912\qualisys")
+down_hz = True
+csv_path_dir = Path(r"G:\gait_pattern\20240912\qualisys")
 csv_paths = list(csv_path_dir.glob("sub3*normal*.tsv"))
 
 def read_3DMC(csv_path, down_hz):
@@ -16,11 +16,14 @@ def read_3DMC(csv_path, down_hz):
     df = df.drop(0).reset_index(drop=True)  # ヘッダーにした行をデータから削除し、インデックスをリセット
 
     if down_hz:
-        df_down = df[::4].reset_index()
+        df_down = df[::4].reset_index(drop=True)  #30Hzにダウンサンプリング
         sampling_freq = 30
     else:
         df_down = df
         sampling_freq = 120
+
+    print(f"df: {df}")
+    print(f"df_down: {df_down}")
 
     marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
     marker_dict = dict()
@@ -70,8 +73,8 @@ def main():
         print(f"valid_index = {valid_index}")
 
         angle_list = []
-        bector_list = []
-        dist_list = []
+        bector_list_r = []
+        bector_list_l = []
 
         rasi = marker_set_df[['RASI_X', 'RASI_Y', 'RASI_Z']].to_numpy()
         lasi = marker_set_df[['LASI_X', 'LASI_Y', 'LASI_Z']].to_numpy()
@@ -244,22 +247,74 @@ def main():
             r_ankle_angle_flex_ext = 90 - r_ankle_angle_flex_ext
             l_ankle_angle_flex_ext = 90 - l_ankle_angle_flex_ext
 
+            # # 外転・内転/ 外旋・内旋の角度を計算
+            # taikan = e_z_pelvis.copy()
+            # r_thigh = e_z_rthigh.copy()
+            # l_thigh = e_z_lthigh.copy()
+            # r_shank = e_z_rshank.copy()
+            # l_shank = e_z_lshank.copy()
+            # r_foot = e_z_rfoot.copy()
+            # l_foot = e_z_lfoot.copy()
+
+            # def calculate_angle(vector1, vector2):  #(frame, xyz)または(frame, xy)の配列を入力)
+            #     if len(vector1) == 3:  #3Dベクトル
+            #         dot_product = np.dot(vector1, vector2)
+            #         cross_product = np.cross(vector1, vector2)
+            #         angle = np.rad2deg(np.arctan2(cross_product, dot_product))  # atan2(y, x : y/x)を使って角度を計算
+            #     return angle
+
+            # r_hip_angle = calculate_angle(r_thigh, taikan)
+            # l_hip_angle = calculate_angle(l_thigh, taikan)
+            # r_knee_angle = calculate_angle(r_thigh, r_shank)
+            # l_knee_angle = calculate_angle(l_thigh, l_shank)
+            # r_ankle_angle = calculate_angle(r_foot, r_shank)
+            # l_ankle_angle = calculate_angle(l_foot, l_shank)
+
+            # r_hip_angle_abd_add = r_hip_angle[0]
+            # l_hip_angle_abd_add = l_hip_angle[0]
+            # r_knee_angle_abd_add = r_knee_angle[0]
+            # l_knee_angle_abd_add = l_knee_angle[0]
+            # r_ankle_angle_abd_add = r_ankle_angle[0]
+            # l_ankle_angle_abd_add = l_ankle_angle[0]
+
+            # r_hip_angle_ext_int = r_hip_angle[1]
+            # l_hip_angle_ext_int = l_hip_angle[1]
+            # r_knee_angle_ext_int = r_knee_angle[1]
+            # l_knee_angle_ext_int = l_knee_angle[1]
+            # r_ankle_angle_ext_int = r_ankle_angle[1]
+            # l_ankle_angle_ext_int = l_ankle_angle[1]
+
+
             # 外転（abduction）・内転（adduction）の角度を計算
-            r_hip_angle_abd_add = r_hip_angle_rot.as_euler('yzx', degrees=True)[1]
-            l_hip_angle_abd_add = l_hip_angle_rot.as_euler('yzx', degrees=True)[1]
-            r_knee_angle_abd_add = r_knee_angle_rot.as_euler('yzx', degrees=True)[1]
-            l_knee_angle_abd_add = l_knee_angle_rot.as_euler('yzx', degrees=True)[1]
-            r_ankle_angle_abd_add = r_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
-            l_ankle_angle_abd_add = l_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
+            r_hip_angle_abd_add = - r_hip_angle_rot.as_euler('xyz', degrees=True)[0]
+            l_hip_angle_abd_add = l_hip_angle_rot.as_euler('xyz', degrees=True)[0]
+            r_knee_angle_abd_add = - r_knee_angle_rot.as_euler('xyz', degrees=True)[0]
+            l_knee_angle_abd_add = l_knee_angle_rot.as_euler('xyz', degrees=True)[0]
+            r_ankle_angle_abd_add = - r_ankle_angle_rot.as_euler('xyz', degrees=True)[0]
+            l_ankle_angle_abd_add = l_ankle_angle_rot.as_euler('xyz', degrees=True)[0]
+
+            r_hip_angle_abd_add = 180- r_hip_angle_abd_add
+            l_hip_angle_abd_add = 180- l_hip_angle_abd_add
+
+            r_hip_angle_abd_add = r_hip_angle_abd_add - 360 if r_hip_angle_abd_add > 180 else r_hip_angle_abd_add
+            l_hip_angle_abd_add = l_hip_angle_abd_add - 360 if l_hip_angle_abd_add > 180 else l_hip_angle_abd_add
+
+
+            # r_hip_angle_abd_add = - r_hip_angle_rot.as_euler('yzx', degrees=True)[2]
+            # l_hip_angle_abd_add = l_hip_angle_rot.as_euler('yzx', degrees=True)[2]
+            # r_knee_angle_abd_add = - r_knee_angle_rot.as_euler('yzx', degrees=True)[2]
+            # l_knee_angle_abd_add = l_knee_angle_rot.as_euler('yzx', degrees=True)[2]
+            # r_ankle_angle_abd_add = - r_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
+            # l_ankle_angle_abd_add = l_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
 
 
             # 外旋（external rotation）・内旋（internal rotation）の角度を計算
-            r_hip_angle_ext_int = r_hip_angle_rot.as_euler('yzx', degrees=True)[2]
-            l_hip_angle_ext_int = l_hip_angle_rot.as_euler('yzx', degrees=True)[2]
-            r_knee_angle_ext_int = r_knee_angle_rot.as_euler('yzx', degrees=True)[2]
-            l_knee_angle_ext_int = l_knee_angle_rot.as_euler('yzx', degrees=True)[2]
-            r_ankle_angle_ext_int = r_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
-            l_ankle_angle_ext_int = l_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
+            r_hip_angle_ext_int = r_hip_angle_rot.as_euler('yzx', degrees=True)[1]
+            l_hip_angle_ext_int = l_hip_angle_rot.as_euler('yzx', degrees=True)[1]
+            r_knee_angle_ext_int = r_knee_angle_rot.as_euler('yzx', degrees=True)[1]
+            l_knee_angle_ext_int = l_knee_angle_rot.as_euler('yzx', degrees=True)[1]
+            r_ankle_angle_ext_int = r_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
+            l_ankle_angle_ext_int = l_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
 
             # angles = [r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle]
             angles = [r_hip_angle_flex_ext, l_hip_angle_flex_ext, r_knee_angle_flex_ext, l_knee_angle_flex_ext, r_ankle_angle_flex_ext, l_ankle_angle_flex_ext,
@@ -356,10 +411,13 @@ def main():
                 plt.show()
 
             #骨盤とかかとの距離計算
-            heel = lhee[frame_num, :]
-            bector = heel - hip[:]
-            bector_list.append(bector)
-            dist_list.append(np.linalg.norm(bector))
+            heel_r = rhee[frame_num, :]
+            bector_r = heel_r - hip
+            bector_list_r.append(bector_r)
+
+            heel_l = lhee[frame_num, :]
+            bector_l = heel_l - hip[:]
+            bector_list_l.append(bector_l)
 
         angle_array = np.array(angle_list)
         # angle_df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
@@ -377,53 +435,129 @@ def main():
         else:
             angle_df.to_csv(csv_path.with_name(f"angle_120Hz_{csv_path.stem}.csv"))
 
-        bector_array = np.array(bector_list)
-        lhee_pel_z = bector_array[:, 0]
+        bector_r_array = np.array(bector_list_r)
+        rhee_pel_z = bector_r_array[:, 0]
+        # rhee_pel_z = bector_array[:, 2]  #motiveの場合
+        df_r = pd.DataFrame({"rhee_pel_z":rhee_pel_z})
+        df_r.index = valid_index
+        df_r = df_r.sort_values(by="rhee_pel_z", ascending=True)
+        # df = df.sort_values(by="rhee_pel_z", ascending=False)  #motiveの場合
+        ic_list_r = df_r.index[:120].values
+
+        bector_l_array = np.array(bector_list_l)
+        lhee_pel_z = bector_l_array[:, 0]
         # lhee_pel_z = bector_array[:, 2]  #motiveの場合
-        df = pd.DataFrame({"lhee_pel_z":lhee_pel_z})
-        df.index = valid_index
-        df = df.sort_values(by="lhee_pel_z", ascending=True)
+        df_l = pd.DataFrame({"lhee_pel_z":lhee_pel_z})
+        df_l.index = valid_index
+        df_l = df_l.sort_values(by="lhee_pel_z", ascending=True)
         # df = df.sort_values(by="lhee_pel_z", ascending=False)  #motiveの場合
-        ic_list = df.index[:120].values
+        ic_list_l = df_l.index[:120].values
 
-
-        dist_array = np.array(dist_list)
-        df = pd.DataFrame({"dist": dist_array})
-        df.index = valid_index
 
         # plt.figure()
         # plt.plot(df.index, df["dist"])
         # plt.show()
 
-        filtered_list = []
-        skip_values = set()
-        for value in ic_list:
+        filtered_list_r = []
+        skip_values_r = set()
+        for value in ic_list_r:
             # すでにスキップリストにある場合はスキップ
-            if value in skip_values:
+            if value in skip_values_r:
                 continue
             # 現在の値を結果リストに追加
-            filtered_list.append(value)
+            filtered_list_r.append(value)
             # 10個以内の数値をスキップリストに追加
-            skip_values.update(range(value - 10, value + 11))
-        filtered_list = sorted(filtered_list)
-        print(f"フィルタリング後のリスト:{filtered_list}\n")
+            skip_values_r.update(range(value - 10, value + 11))
+        filtered_list_r = sorted(filtered_list_r)
+        print(f"フィルタリング後のリスト(右):{filtered_list_r}\n")
+
+        filtered_list_l = []
+        skip_values_l = set()
+        for value in ic_list_l:
+            # すでにスキップリストにある場合はスキップ
+            if value in skip_values_l:
+                continue
+            # 現在の値を結果リストに追加
+            filtered_list_l.append(value)
+            # 10個以内の数値をスキップリストに追加
+            skip_values_l.update(range(value - 10, value + 11))
+        filtered_list_l = sorted(filtered_list_l)
+        print(f"フィルタリング後のリスト(左):{filtered_list_l}\n")
 
         if down_hz:
-            np.save(csv_path.with_name(f"ic_frame_30Hz_{csv_path.stem}.npy"), filtered_list)
+            np.save(csv_path.with_name(f"ic_frame_30Hz_{csv_path.stem}_r.npy"), filtered_list_r)
+            np.save(csv_path.with_name(f"ic_frame_30Hz_{csv_path.stem}_l.npy"), filtered_list_l)
         else:
-            np.save(csv_path.with_name(f"ic_frame_120Hz_{csv_path.stem}.npy"), filtered_list)
+            np.save(csv_path.with_name(f"ic_frame_120Hz_{csv_path.stem}_r.npy"), filtered_list_r)
+            np.save(csv_path.with_name(f"ic_frame_120Hz_{csv_path.stem}_l.npy"), filtered_list_l)
 
-        # fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6))
-        # ax1.plot(angle_df.index, angle_df["r_hip_angle"], label="r_hip_angle")
-        # ax1.plot(angle_df.index, angle_df["l_hip_angle"], label="l_hip_angle")
-        # ax1.set_ylim(-40, 70)
-        # ax2.plot(angle_df.index, angle_df["r_knee_angle"], label="r_knee_angle")
-        # ax2.plot(angle_df.index, angle_df["l_knee_angle"], label="l_knee_angle")
-        # ax2.set_ylim(-40, 70)
-        # ax3.plot(angle_df.index, angle_df["r_ankle_angle"], label="r_ankle_angle")
-        # ax3.plot(angle_df.index, angle_df["l_ankle_angle"], label="l_ankle_angle")
-        # ax3.set_ylim(-40, 70)
-        # plt.show()
+        # 参考可動域 https://www.sakaimed.co.jp/knowledge/jointrange-of-motion/measure-joint-range-of-motion/measure-joint-range-of-motion09/
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6))
+        ax1.plot(angle_df.index, angle_df["r_hip_angle_flex_ext"], label="r_hip_angle_flex_ext")
+        ax1.plot(angle_df.index, angle_df["l_hip_angle_flex_ext"], label="l_hip_angle_flex_ext")
+        ax1.set_ylim(-40, 70)
+        ax1.set_title("hip flexion/extension")
+        ax1.legend()
+        [ax1.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_r]
+        # [ax1.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_l]
+        ax2.plot(angle_df.index, angle_df["r_knee_angle_flex_ext"], label="r_knee_angle_flex_ext")
+        ax2.plot(angle_df.index, angle_df["l_knee_angle_flex_ext"], label="l_knee_angle_flex_ext")
+        ax2.set_ylim(-40, 70)
+        ax2.set_title("knee flexion/extension")
+        ax2.legend()
+        [ax2.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_r]
+        # [ax2.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_l]
+        ax3.plot(angle_df.index, angle_df["r_ankle_angle_flex_ext"], label="r_ankle_angle_flex_ext")
+        ax3.plot(angle_df.index, angle_df["l_ankle_angle_flex_ext"], label="l_ankle_angle_flex_ext")
+        ax3.set_ylim(-40, 70)
+        ax3.set_title("ankle flexion/extension")
+        ax3.legend()
+        [ax3.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_r]
+        # [ax3.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_l]
+
+        plt.show()
+
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6))
+        ax1.plot(angle_df.index, angle_df["r_hip_angle_abd_add"], label="r_hip_angle_abd_add")
+        ax1.plot(angle_df.index, angle_df["l_hip_angle_abd_add"], label="l_hip_angle_abd_add")
+        ax1.set_title("hip abduction/adduction")
+        ax1.legend()
+        [ax1.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_r]
+        # [ax1.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_l]
+        ax2.plot(angle_df.index, angle_df["r_knee_angle_abd_add"], label="r_knee_angle_abd_add")
+        ax2.plot(angle_df.index, angle_df["l_knee_angle_abd_add"], label="l_knee_angle_abd_add")
+        ax2.set_title("knee abduction/adduction")
+        ax2.legend()
+        [ax2.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_r]
+        # [ax2.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_l]
+        ax3.plot(angle_df.index, angle_df["r_ankle_angle_abd_add"], label="r_ankle_angle_abd_add")
+        ax3.plot(angle_df.index, angle_df["l_ankle_angle_abd_add"], label="l_ankle_angle_abd_add")
+        ax3.set_title("ankle abduction/adduction")
+        ax3.legend()
+        [ax3.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_r]
+        # [ax3.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_l]
+        plt.show()
+
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6))
+        ax1.plot(angle_df.index, angle_df["r_hip_angle_ext_int"], label="r_hip_angle_ext_int")
+        ax1.plot(angle_df.index, angle_df["l_hip_angle_ext_int"], label="l_hip_angle_ext_int")
+        ax1.set_title("hip external/internal rotation")
+        ax1.legend()
+        [ax1.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_r]
+        # [ax1.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_l]
+        ax2.plot(angle_df.index, angle_df["r_knee_angle_ext_int"], label="r_knee_angle_ext_int")
+        ax2.plot(angle_df.index, angle_df["l_knee_angle_ext_int"], label="l_knee_angle_ext_int")
+        ax2.set_title("knee external/internal rotation")
+        ax2.legend()
+        [ax2.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_r]
+        # [ax2.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_l]
+        ax3.plot(angle_df.index, angle_df["r_ankle_angle_ext_int"], label="r_ankle_angle_ext_int")
+        ax3.plot(angle_df.index, angle_df["l_ankle_angle_ext_int"], label="l_ankle_angle_ext_int")
+        ax3.set_title("ankle external/internal rotation")
+        ax3.legend()
+        [ax3.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_r]
+        # [ax3.axvline(x=x_value, color='gray', linestyle='--') for x_value in filtered_list_l]
+        plt.show()
 
 if __name__ == "__main__":
     main()
