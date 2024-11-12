@@ -15,7 +15,7 @@ for i, estimated in enumerate(estimateds):
         print("Error")
         continue
 
-    frame_count = 1
+    frame_count = 0
     while True:
         ret, frame = cap.read()
         if not ret:

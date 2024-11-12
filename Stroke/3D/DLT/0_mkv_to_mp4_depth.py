@@ -40,6 +40,7 @@ def main():
 
         fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') # ファイル形式(ここではmp4)
         fps = 30.0
+        # size = (1280, 720)
         size = (1920,1080)
         writer = cv2.VideoWriter(mp4file, fmt, fps, size) # ライター作成
 
