@@ -5,12 +5,11 @@ import os
 import re
 import pickle
 
-
 # 複数画像から内部パラメータを求める
 root_dir = r"G:\gait_pattern\20241112\gopro"
 visualize = False
 
-pre_dirs = glob.glob(os.path.join(root_dir, "*"))
+pre_dirs = glob.glob(os.path.join(root_dir, "front_l"))
 pre_dirs = [pre_dir for pre_dir in pre_dirs if os.path.isdir(pre_dir)]
 
 cali_intrinsic_dirs = [os.path.join(pre_dir, "Intrinsic_ori") for pre_dir in pre_dirs]
@@ -55,15 +54,7 @@ def main():
 
     # Load images in for calibration
     for cali_intrinsic_dir in cali_intrinsic_dirs:
-        # 前処理で検出に成功したフレームから50フレームを選択
-        imageFiles_ref = glob.glob(os.path.join(os.path.dirname(cali_intrinsic_dir)+"Intrinsic_check", "*.jpg"))
-        ref_frame_num_list = [int(os.path.basename(imageFile).split(".")[0]) for imageFile in imageFiles_ref]
-        desired_length = 50
-        indeces = np.linspace(0, len(ref_frame_num_list)-1, desired_length, dtype=int)
-        ref_frame_num_list = [ref_frame_num_list[i] for i in indeces]
-
-        # 50フレームに対応する元動画のフレームを取得
-        imageFiles = [os.path.join(cali_intrinsic_dir, f"{ref_frame_num_list}.png") for ref_frame_num_list in ref_frame_num_list]
+        imageFiles = glob.glob(os.path.join(cali_intrinsic_dir, "*.png"))
 
         # 自然順で並べ替える関数
         def natural_sort_key(file_path):
@@ -94,16 +85,6 @@ def main():
             # refine the pixel coordinates and display
             # them on the images of checker board
             if ret == True:
-
-                image_check = cv2.drawChessboardCorners(image, checker_pattern, corners, ret)
-                image_check = cv2.resize(image_check,(int(600*imageSize[1]/imageSize[0]),600))
-                cv2.imshow('if detection id failed click "s" key ', image_check)
-                key = cv2.waitKey(0)
-
-                if key == ord("s"):
-                    print("検出に失敗と判断したためスキップします")
-                    continue
-
                 # 3D points real world coordinates
                 checker_pattern = meta.shape[::-1] # reverses order so width is first
                 print(f"    Checkerboard pattern: {checker_pattern}")
@@ -130,7 +111,7 @@ def main():
                 cv2.resize(image,(int(600*ar),600))
 
                 # Save intrinsic images
-                imageSaveDir = os.path.join(cali_intrinsic_dir,'IntrinsicCheckerboards')
+                imageSaveDir = os.path.join(os.path.dirname(cali_intrinsic_dir),'IntrinsicCheckerboards')
                 if not os.path.exists(imageSaveDir):
                     os.mkdir(imageSaveDir)
                 cv2.imwrite(os.path.join(imageSaveDir, str(iImage) + '.jpg'), image)
@@ -156,7 +137,8 @@ def main():
 
         CamParams = {'distortion':distortion,'intrinsicMat':matrix,'imageSize':imageSize}
 
-        saveFileName = os.path.join(root_dir, f'Intrinsics_{os.path.basename(cali_intrinsic_dir)}.pickle')
+        id = os.path.basename(os.path.dirname(cali_intrinsic_dir))
+        saveFileName = os.path.join(root_dir, f'Intrinsics_{id}.pickle')
         saveCameraParameters(saveFileName,CamParams)
 
         print(f"Camera parameters saved to {saveFileName} !\n")
