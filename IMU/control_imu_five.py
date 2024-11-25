@@ -6,6 +6,7 @@ import csv
 import multiprocessing
 from datetime import datetime
 from pathlib import Path
+import json
 
 #各スレッドで終了をするためのイベント
 stop_event = multiprocessing.Event()
@@ -472,46 +473,64 @@ def main():
         i += 1
     new_save_dir.mkdir(parents=True, exist_ok=False)
 
-    sync_port_num = "7"
-    sub_port_num = "14"
-    thera_port_num = "17"
-    thera_rhand_port_num = "12"
-    thera_lhand_port_num = "16"
+    reuse_port_dict = input("前回のポート番号を再利用しますか？(Y/n): ")
+    if reuse_port_dict == "Y":  #前回のポート番号を読み込んで再利用
+        port_dict_file = root_dir / "port_dict.json"
+        with open(port_dict_file, "r") as file:
+            port_dict = json.load(file)
+        ports = list(port_dict.keys())
 
-    # tkzkの場合
-    # sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
-    # sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
-    # thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
-    # thera_rhand_port_num = input("療法士右手用IMU AP09182461 のポート番号を入力:COM")
-    # thera_lhand_port_num = input("療法士左手用IMU AP09182462 のポート番号を入力:COM")
+    elif reuse_port_dict == "n":  #新たにポート番号を入力
+        sync_port_num = "7"
+        sub_port_num = "14"
+        thera_port_num = "17"
+        thera_rhand_port_num = "12"
+        thera_lhand_port_num = "16"
 
-    # otの場合
-    # sync_port_num = input("同期用IMU AP09181497 のポート番号を入力:COM")
-    # sub_port_num = input("患者腰用IMU AP09181498 のポート番号を入力:COM")
-    # thera_port_num = input("療法士腰用IMU AP09181354 のポート番号を入力:COM")
-    # thera_rhand_port_num = input("療法士右手用IMU AP09181355 のポート番号を入力:COM")
-    # thera_lhand_port_num = input("療法士左手用IMU AP09181357 のポート番号を入力:COM")
+        # tkzkの場合
+        # sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
+        # sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
+        # thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
+        # thera_rhand_port_num = input("療法士右手用IMU AP09182461 のポート番号を入力:COM")
+        # thera_lhand_port_num = input("療法士左手用IMU AP09182462 のポート番号を入力:COM")
+
+        # otの場合
+        # sync_port_num = input("同期用IMU AP09181497 のポート番号を入力:COM")
+        # sub_port_num = input("患者腰用IMU AP09181498 のポート番号を入力:COM")
+        # thera_port_num = input("療法士腰用IMU AP09181354 のポート番号を入力:COM")
+        # thera_rhand_port_num = input("療法士右手用IMU AP09181355 のポート番号を入力:COM")
+        # thera_lhand_port_num = input("療法士左手用IMU AP09181357 のポート番号を入力:COM")
 
 
-    # 入力が半角英数字であるかの確認
-    def is_alphanumeric(input_str):
-        return input_str.isalnum()
+        # 入力が半角英数字であるかの確認
+        def is_alphanumeric(input_str):
+            return input_str.isalnum()
 
-    if all(is_alphanumeric(port) for port in [sync_port_num, sub_port_num, thera_port_num, thera_rhand_port_num, thera_lhand_port_num]):
-        pass
+        if all(is_alphanumeric(port) for port in [sync_port_num, sub_port_num, thera_port_num, thera_rhand_port_num, thera_lhand_port_num]):
+            pass
+        else:
+            print("ポート番号は半角英数字で入力してください")
+            exit()
+
+        sync_port = "COM" + sync_port_num
+        sub_port = "COM" + sub_port_num
+        thera_port = "COM" + thera_port_num
+        thera_rhand_port = "COM" + thera_rhand_port_num
+        thera_lhand_port = "COM" + thera_lhand_port_num
+
+        ports = [sync_port, sub_port, thera_port, thera_rhand_port, thera_lhand_port]
+        ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
+        port_dict = dict(zip(ports, ports_name))
+
     else:
-        print("ポート番号は半角英数字で入力してください")
+        print("Yまたはnを入力してください")
         exit()
 
-    sync_port = "COM" + sync_port_num
-    sub_port = "COM" + sub_port_num
-    thera_port = "COM" + thera_port_num
-    thera_rhand_port = "COM" + thera_rhand_port_num
-    thera_lhand_port = "COM" + thera_lhand_port_num
+    #ポート番号を再利用するためjsonファイルに保存
+    port_dict_file = root_dir / "port_dict.json"
+    with open(port_dict_file, "w") as file:
+        json.dump(port_dict, file, indent=4, ensure_ascii=False)  # indentはインデントの際のスペースの数、ensure_ascii=Falseで日本語をそのまま保存
 
-    ports = [sync_port, sub_port, thera_port, thera_rhand_port, thera_lhand_port]
-    ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
-    port_dict = dict(zip(ports, ports_name))
     threads = []
     threads_post = []
     barrier = multiprocessing.Barrier(len(ports))  # スレッド間の同期のためのバリアを作成
