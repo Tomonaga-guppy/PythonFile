@@ -314,8 +314,8 @@ def save_to_csv(accel_gyro_data, geomagnetic_data, filename):
         writer = csv.writer(file)
         # 列名を指定
         writer.writerow([
-            "Type", "Timestamp", "Acc_X", "Acc_Y", "Acc_Z", "Gyro_X", "Gyro_Y", "Gyro_Z",
-            "Type", "Timestamp", "Mag_X", "Mag_Y", "Mag_Z"
+            "Type", "Timestamp_Acc", "Acc_X 0.1[mG]", "Acc_Y 0.1[mG]", "Acc_Z 0.1[mG]", "Gyro_X 0.01[dps]", "Gyro_Y 0.01[dps]", "Gyro_Z 0.01[dps]",
+            "Type", "Timestamp_Mag", "Mag_X 0.1[μT]", "Mag_Y 0.1[μT]", "Mag_Z 0.1[μT]"
         ])
 
         # 加速度・角速度データと地磁気データの数が同じと仮定
@@ -372,9 +372,11 @@ def clear_measurement_data(ser):
     if len(response) == 2 and response[1] == 0x8F:
         result = ser.read(1)  # コマンド受付結果を読む
         if result == b'\x00':
-            print("計測データの記録クリアが正常に完了しました。")
+            # print("計測データの記録クリアが正常に完了しました。")
+            pass
         else:
-            print("計測データの記録クリアに失敗しました。")
+            # print("計測データの記録クリアに失敗しました。")
+            pass
     else:
         print("レスポンスが正しくありません。")
 
@@ -532,18 +534,12 @@ if __name__ == "__main__":
                 sys.exit()
 
         elif reuse_port_dict == "n":  #新たにポート番号を入力
-            sync_port_num = "7"
-            sub_port_num = "14"
-            thera_port_num = "17"
-            thera_rhand_port_num = "12"
-            thera_lhand_port_num = "16"
-
             # tkzkの場合
-            # sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
-            # sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
-            # thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
-            # thera_rhand_port_num = input("療法士右手用IMU AP09182461 のポート番号を入力:COM")
-            # thera_lhand_port_num = input("療法士左手用IMU AP09182462 のポート番号を入力:COM")
+            sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
+            sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
+            thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
+            thera_rhand_port_num = input("療法士右手用IMU AP09182461 のポート番号を入力:COM")
+            thera_lhand_port_num = input("療法士左手用IMU AP09182462 のポート番号を入力:COM")
 
             # otの場合
             # sync_port_num = input("同期用IMU AP09181497 のポート番号を入力:COM")
