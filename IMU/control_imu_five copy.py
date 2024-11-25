@@ -5,6 +5,7 @@ import ctypes
 import csv
 import multiprocessing
 from datetime import datetime
+from pathlib import Path
 
 #各スレッドで終了をするためのイベント
 stop_event = multiprocessing.Event()
@@ -161,6 +162,7 @@ def start_measurement(ser, port):
     ser.read(100)
     ser.write(command)
     response = ser.read(15)
+    start_time = ""
 
     if len(response) == 15:
         header = response[0]
@@ -173,14 +175,15 @@ def start_measurement(ser, port):
         start_minute = response[7]
         start_second = response[8]
 
-        print(f"開始時刻: {start_year}/{start_month}/{start_day} {start_hour}:{start_minute}:{start_second} {port}")
+        start_time = f"{start_year}-{start_month}-{start_day}-{start_hour}-{start_minute}-{start_second}"
+        print(f"{port}の計測が開始されました : {start_time}")
         flag = True
 
     else:
         print(f"時刻設定時のレスポンスが正しくありません。 {(response)}")
         flag = False
 
-    return flag
+    return flag, start_time
 
 
 def stop_measurement(ser, port):
@@ -375,11 +378,12 @@ def clear_measurement_data(ser):
 
 
 
-def run_imu_on_port(port, barrier, sync_port):
+def run_imu_on_port(port, barrier, start_queue):
     ser = serial.Serial()
     ser.port = port
     ser.timeout = 1.0
     ser.baudrate = 115200
+    start_time = ""
     try:
         ser.open()
     except Exception as e:
@@ -405,11 +409,9 @@ def run_imu_on_port(port, barrier, sync_port):
         barrier.wait(timeout=30)  # 他のスレッドと同期
 
         # 計測を開始する
-        flag = start_measurement(ser, port)
+        flag, start_time = start_measurement(ser, port)
         if not flag:
             raise Exception(f"計測の開始に失敗しました。 計測を終了します({port})")
-
-        print(f"計測設定が完了し、計測を開始しました。 ({port})\n")
 
         def read_sensor_data(port):  #元々は値の表示用だったけどいまは停止イベントを受け取るだけ
             try:
@@ -426,9 +428,10 @@ def run_imu_on_port(port, barrier, sync_port):
 
     except Exception:
         stop_measurement(ser, port)
+        start_queue.put((port, start_time))
         ser.close
 
-def read_save_memory(port, port_dict):
+def read_save_memory(port, port_dict, start_time_dict, save_dir):
     ser = serial.Serial()
     ser.port = port
     ser.timeout = 1.0
@@ -444,7 +447,8 @@ def read_save_memory(port, port_dict):
     if entry_count > 0:
         accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count, port)
         # CSVに保存
-        save_to_csv(accel_gyro_data, geomagnetic_data, f'sensor_data_{port_dict[port]}.csv')
+        save_path = save_dir / f'sensor_data_{port_dict[port]}_{start_time_dict[port]}.csv'
+        save_to_csv(accel_gyro_data, geomagnetic_data, save_path)
         print(f"計測データをCSVに保存しました。 ({port})")
 
     # 計測データの記録をクリア
@@ -456,12 +460,17 @@ def read_save_memory(port, port_dict):
     # print(f"計測を終了し、シリアルポートを閉じました。 ({port})")
 
 def main():
-    # root_dir = Path(r"C:\Users\zutom\OneDrive\デスクトップ\IMU\data")
-    # current_date = datetime.now().strftime('%Y%m%d')
-    # condition = input("計測条件を入力してください: ")
-    # save_dir = root_dir / current_date / condition
-    # if not save_dir.exists():
-    #     save_dir.mkdir(parents=True, exist_ok=True)
+    root_dir = Path(r"C:\Users\zutom\OneDrive\デスクトップ\IMU\data")
+    current_date = datetime.now().strftime('%Y%m%d')
+    condition = input("計測条件を入力してください: ")
+    save_dir = root_dir / current_date / condition
+
+    new_save_dir = save_dir
+    i = 1
+    while new_save_dir.exists():
+        new_save_dir = save_dir.with_name(f"{condition}_{i}")
+        i += 1
+    new_save_dir.mkdir(parents=True, exist_ok=False)
 
     sync_port_num = "7"
     sub_port_num = "14"
@@ -506,11 +515,13 @@ def main():
     threads = []
     threads_post = []
     barrier = multiprocessing.Barrier(len(ports))  # スレッド間の同期のためのバリアを作成
+    start_queue = multiprocessing.Queue()  # 開始時刻を取得するためのキューを作成
+    start_time_dict = {}
 
     ### 計測処理 ########################################################################################
     # 各シリアルポートに対してスレッドを作成し、実行
     for port in ports:
-        thread = multiprocessing.Process(target=run_imu_on_port, args=(port,barrier, sync_port,))
+        thread = multiprocessing.Process(target=run_imu_on_port, args=(port, barrier, start_queue, ))
         threads.append(thread)
 
     try:
@@ -525,12 +536,17 @@ def main():
         for thread in threads:  #全てのスレッドが終了するまで待機
             thread.join()
 
-        print("計測を終了しました")
+        # print("計測を終了しました")
+
+        while not start_queue.empty():
+            port, start_time = start_queue.get()
+            start_time_dict[port] = start_time
 
     ### 内部メモリの書き出し##############################################################################
-    print("計測を終了しました。IMUメモリの書き出しを行います")
+    # print("計測を終了しました。IMUメモリの書き出しを行います")
+
     for port in ports:
-        thread_post = multiprocessing.Process(target=read_save_memory, args=(port,port_dict,))
+        thread_post = multiprocessing.Process(target=read_save_memory, args=(port, port_dict, start_time_dict, new_save_dir, ))
         threads_post.append(thread_post)
 
     for thread_post in threads_post:
@@ -541,7 +557,7 @@ def main():
     for thread_post in threads_post:
         thread_post.join()
 
-    print("\n全てのIMUで書き出しを終了しました\n ")
+    print("\n全てのIMUで書き出しを終了しました プログラムを終了します\n ")
 
 if __name__ == '__main__':
     main()
