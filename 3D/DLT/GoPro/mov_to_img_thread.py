@@ -3,10 +3,10 @@ import cv2
 from pathlib import Path
 from multiprocessing import Pool
 
-root_dir = r"G:\gait_pattern\20241112\gopro"
+root_dir = r"G:\gait_pattern\20241112(1)\gopro"
 
 # ビデオファイルのリストを取得
-movies = list(Path(root_dir).glob('*/intrinsic.MP4'))
+movies = list(Path(root_dir).glob('*/estimated.avi'))
 print(movies)
 
 def process_video(args):
