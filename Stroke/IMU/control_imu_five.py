@@ -7,6 +7,7 @@ import multiprocessing
 from datetime import datetime
 from pathlib import Path
 import json
+import sys
 
 #各スレッドで終了をするためのイベント
 stop_event = multiprocessing.Event()
@@ -460,25 +461,72 @@ def read_save_memory(port, port_dict, start_time_dict, save_dir):
     ser.close()
     # print(f"計測を終了し、シリアルポートを閉じました。 ({port})")
 
-def main():
-    root_dir = Path(r"C:\Users\zutom\OneDrive\デスクトップ\IMU\data")
-    current_date = datetime.now().strftime('%Y%m%d')
-    condition = input("計測条件を入力してください: ")
-    save_dir = root_dir / current_date / condition
+def main(ports, port_dict, save_dir):
 
-    new_save_dir = save_dir
-    i = 1
-    while new_save_dir.exists():
-        new_save_dir = save_dir.with_name(f"{condition}_{i}")
-        i += 1
-    new_save_dir.mkdir(parents=True, exist_ok=False)
+
+    #計測用の変数を初期化
+    threads = []
+    threads_post = []
+    barrier = multiprocessing.Barrier(len(ports))  # スレッド間の同期のためのバリアを作成
+    start_queue = multiprocessing.Queue()  # 開始時刻を取得するためのキューを作成
+    start_time_dict = {}
+
+    ### 計測処理 ########################################################################################
+    # 各シリアルポートに対してスレッドを作成し、実行
+    for port in ports:
+        thread = multiprocessing.Process(target=run_imu_on_port, args=(port, barrier, start_queue, ))
+        threads.append(thread)
+
+    try:
+        for thread in threads:
+            thread.start()
+       # スレッドが実行中はメインスレッドはそのまま継続する
+        while any(thread.is_alive() for thread in threads):
+            time.sleep(0.00001)  # 少し待機しながらスレッドの終了を待つ
+    except KeyboardInterrupt:
+        stop_event.set()  # 終了のイベントをセット
+
+        for thread in threads:  #全てのスレッドが終了するまで待機
+            thread.join()
+
+        # print("計測を終了しました")
+
+        while not start_queue.empty():
+            port, start_time = start_queue.get()
+            start_time_dict[port] = start_time
+
+    ### 内部メモリの書き出し##############################################################################
+    # print("計測を終了しました。IMUメモリの書き出しを行います")
+
+    for port in ports:
+        thread_post = multiprocessing.Process(target=read_save_memory, args=(port, port_dict, start_time_dict, save_dir, ))
+        threads_post.append(thread_post)
+
+    for thread_post in threads_post:
+        thread_post.start()
+
+    print("メモリの書き出しを行っています 少々お待ちください")
+
+    for thread_post in threads_post:
+        thread_post.join()
+
+    print("\n全てのIMUで書き出しを終了しました プログラムを終了します\n ")
+
+
+if __name__ == "__main__":
+
+    root_dir = Path(r"C:\Users\zutom\OneDrive\デスクトップ\IMU\data")
 
     reuse_port_dict = input("前回のポート番号を再利用しますか？(Y/n): ")
     if reuse_port_dict == "Y":  #前回のポート番号を読み込んで再利用
         port_dict_file = root_dir / "port_dict.json"
-        with open(port_dict_file, "r") as file:
-            port_dict = json.load(file)
-        ports = list(port_dict.keys())
+        try:
+            with open(port_dict_file, "r") as file:
+                port_dict = json.load(file)
+            ports = list(port_dict.keys())
+        except json.decoder.JSONDecodeError:
+            print("前回のポート番号が正常に読み込めませんでした。nを選択してポート番号を入力してください")
+            sys.exit()
 
     elif reuse_port_dict == "n":  #新たにポート番号を入力
         sync_port_num = "7"
@@ -524,59 +572,24 @@ def main():
 
     else:
         print("Yまたはnを入力してください")
-        exit()
 
     #ポート番号を再利用するためjsonファイルに保存
     port_dict_file = root_dir / "port_dict.json"
     with open(port_dict_file, "w") as file:
         json.dump(port_dict, file, indent=4, ensure_ascii=False)  # indentはインデントの際のスペースの数、ensure_ascii=Falseで日本語をそのまま保存
 
-    threads = []
-    threads_post = []
-    barrier = multiprocessing.Barrier(len(ports))  # スレッド間の同期のためのバリアを作成
-    start_queue = multiprocessing.Queue()  # 開始時刻を取得するためのキューを作成
-    start_time_dict = {}
+    # 計測条件の入力、保存先のディレクトリを作成
+    current_date = datetime.now().strftime('%Y%m%d')
+    condition = input("計測条件を入力してください: ")
+    save_dir = root_dir / current_date / condition
 
-    ### 計測処理 ########################################################################################
-    # 各シリアルポートに対してスレッドを作成し、実行
-    for port in ports:
-        thread = multiprocessing.Process(target=run_imu_on_port, args=(port, barrier, start_queue, ))
-        threads.append(thread)
+    new_save_dir = save_dir
+    i = 1
+    while new_save_dir.exists():
+        new_save_dir = save_dir.with_name(f"{condition}_{i}")
+        i += 1
+    new_save_dir.mkdir(parents=True, exist_ok=False)
 
-    try:
-        for thread in threads:
-            thread.start()
-       # スレッドが実行中はメインスレッドはそのまま継続する
-        while any(thread.is_alive() for thread in threads):
-            time.sleep(0.00001)  # 少し待機しながらスレッドの終了を待つ
-    except KeyboardInterrupt:
-        stop_event.set()  # 終了のイベントをセット
 
-        for thread in threads:  #全てのスレッドが終了するまで待機
-            thread.join()
 
-        # print("計測を終了しました")
-
-        while not start_queue.empty():
-            port, start_time = start_queue.get()
-            start_time_dict[port] = start_time
-
-    ### 内部メモリの書き出し##############################################################################
-    # print("計測を終了しました。IMUメモリの書き出しを行います")
-
-    for port in ports:
-        thread_post = multiprocessing.Process(target=read_save_memory, args=(port, port_dict, start_time_dict, new_save_dir, ))
-        threads_post.append(thread_post)
-
-    for thread_post in threads_post:
-        thread_post.start()
-
-    print("メモリの書き出しを行っています 少々お待ちください")
-
-    for thread_post in threads_post:
-        thread_post.join()
-
-    print("\n全てのIMUで書き出しを終了しました プログラムを終了します\n ")
-
-if __name__ == '__main__':
-    main()
+    main(ports, port_dict, new_save_dir)
