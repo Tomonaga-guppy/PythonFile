@@ -17,7 +17,7 @@ if __name__ == '__main__':
 
         # Serial port 設定
         ser = serial.Serial()
-        ser.port = "COM7"  # 使用するシリアルポート（デバイスに応じて変更）
+        ser.port = "COM6"  # 使用するシリアルポート（デバイスに応じて変更）
         ser.timeout = 1.0  # タイムアウト設定（1秒）
         ser.baudrate = 115200  # 通信速度（ボーレート）
 
