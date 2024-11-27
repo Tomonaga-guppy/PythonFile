@@ -266,10 +266,16 @@ def read_entry(ser, entry_number, port):
 
     response = b''  # レスポンスデータを格納する変数
 
-    time.sleep(5)  # データの受信を待つ
+    time.sleep(1)  # データの受信を待つ
+
+    print(f"受信バッファのデータ数: {port}, {ser.in_waiting}")
     while ser.in_waiting > 0:
         response += ser.read(100)
         time.sleep(0.01)
+    # time.sleep(3)  # データの受信を待つ
+    # while ser.in_waiting > 0:
+    #     response += ser.read(100)
+    #     time.sleep(0.02)
 
     # # レスポンスの内容を表示
     # print(f"レスポンス: {response}")
@@ -342,6 +348,7 @@ def save_to_csv(accel_gyro_data, geomagnetic_data, filename):
 def parse_3byte_signed(data):
     """3バイトの符号付きデータを整数として解釈する"""
     if len(data) != 3:
+        print(f"データ長: {data}")
         raise ValueError("データ長が3バイトでありません")
 
     # 3バイトのデータを4バイトに変換（符号拡張）
@@ -524,64 +531,100 @@ if __name__ == "__main__":
     if multiprocessing.current_process().name == "MainProcess":
         root_dir = Path(r"C:\Users\zutom\OneDrive\デスクトップ\IMU\data")
 
-        reuse_port_dict = input("前回のポート番号を再利用しますか？(Y/n): ")
-        if reuse_port_dict == "Y":  #前回のポート番号を読み込んで再利用
-            port_dict_file = root_dir / "port_dict.json"
-            try:
-                with open(port_dict_file, "r") as file:
-                    port_dict = json.load(file)
-                ports = list(port_dict.keys())
-            except json.decoder.JSONDecodeError:
-                print("前回のポート番号が正常に読み込めませんでした。nを選択してポート番号を入力してください")
-                sys.exit()
+        reuse_port_flag = "a"
+        while reuse_port_flag != "Y" and reuse_port_flag != "n":
+            reuse_port_flag = input("前回のポート番号を再利用しますか？(Y/n): ")
+            if reuse_port_flag == "Y":  #前回のポート番号を読み込んで再利用
+                port_dict_file = root_dir / "port_dict.json"
+                try:
+                    with open(port_dict_file, "r") as file:
+                        port_dict = json.load(file)
+                    ports = list(port_dict.keys())
+                    sync_port = ports[0]
+                    sub_port = ports[1]
+                    thera_port = ports[2]
+                    thera_rhand_port = ports[3]
+                    thera_lhand_port = ports[4]
+                except json.decoder.JSONDecodeError:
+                    print("前回のポート番号が正常に読み込めませんでした。nを選択してポート番号を入力してください")
+                    pass
 
-        elif reuse_port_dict == "n":  #新たにポート番号を入力
-            # tkzkの場合
-            sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
-            sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
-            thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
-            thera_rhand_port_num = input("療法士右手用IMU AP09182461 のポート番号を入力:COM")
-            thera_lhand_port_num = input("療法士左手用IMU AP09182462 のポート番号を入力:COM")
+            elif reuse_port_flag == "n":  #新たにポート番号を入力
+                # tkzkの場合
+                sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
+                sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
+                thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
+                thera_rhand_port_num = input("療法士右手用IMU AP09182461 のポート番号を入力:COM")
+                thera_lhand_port_num = input("療法士左手用IMU AP09182462 のポート番号を入力:COM")
 
-            # otの場合
-            # sync_port_num = input("同期用IMU AP09181497 のポート番号を入力:COM")
-            # sub_port_num = input("患者腰用IMU AP09181498 のポート番号を入力:COM")
-            # thera_port_num = input("療法士腰用IMU AP09181354 のポート番号を入力:COM")
-            # thera_rhand_port_num = input("療法士右手用IMU AP09181355 のポート番号を入力:COM")
-            # thera_lhand_port_num = input("療法士左手用IMU AP09181357 のポート番号を入力:COM")
+                # otの場合
+                # sync_port_num = input("同期用IMU AP09181497 のポート番号を入力:COM")
+                # sub_port_num = input("患者腰用IMU AP09181498 のポート番号を入力:COM")
+                # thera_port_num = input("療法士腰用IMU AP09181354 のポート番号を入力:COM")
+                # thera_rhand_port_num = input("療法士右手用IMU AP09181355 のポート番号を入力:COM")
+                # thera_lhand_port_num = input("療法士左手用IMU AP09181357 のポート番号を入力:COM")
 
+                sync_port = "COM" + sync_port_num
+                sub_port = "COM" + sub_port_num
+                thera_port = "COM" + thera_port_num
+                thera_rhand_port = "COM" + thera_rhand_port_num
+                thera_lhand_port = "COM" + thera_lhand_port_num
 
-            # 入力が半角英数字であるかの確認
-            def is_alphanumeric(input_str):
-                return input_str.isalnum()
+                ports = [sync_port, sub_port, thera_port, thera_rhand_port, thera_lhand_port]
+                ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
+                port_dict = dict(zip(ports, ports_name))
 
-            if all(is_alphanumeric(port) for port in [sync_port_num, sub_port_num, thera_port_num, thera_rhand_port_num, thera_lhand_port_num]):
-                pass
             else:
-                print("ポート番号は半角英数字で入力してください")
-                sys.exit()
+                print("Yまたはnを入力してください")
+                pass
 
-            sync_port = "COM" + sync_port_num
-            sub_port = "COM" + sub_port_num
-            thera_port = "COM" + thera_port_num
-            thera_rhand_port = "COM" + thera_rhand_port_num
-            thera_lhand_port = "COM" + thera_lhand_port_num
 
-            ports = [sync_port, sub_port, thera_port, thera_rhand_port, thera_lhand_port]
-            ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
-            port_dict = dict(zip(ports, ports_name))
+        check_port = "a"
+        while check_port != "Y":
+            check_port = input(f"""ポート番号の確認
+    同期用IMU AP09181356 : {sync_port}
+    患者腰用IMU AP09182459 : {sub_port}
+    療法士腰用IMU AP09182460 : {thera_port}
+    療法士右手用IMU AP09182461 : {thera_rhand_port}
+    療法士左手用IMU AP09182462 : {thera_lhand_port}
+上記のポート番号で正しいですか？(Y:/n): """)
 
-        else:
-            print("Yまたはnを入力してください")
+            # print(f"以下のポート番号が正しいか確認してください")
+            # print(f"同期用IMU AP09181356 : {sync_port}")
+            # print(f"患者腰用IMU AP09182459 : {sub_port}")
+            # print(f"療法士腰用IMU AP09182460 : {thera_port}")
+            # print(f"療法士右手用IMU AP09182461 : {thera_rhand_port}")
+            # print(f"療法士左手用IMU AP09182462 : {thera_lhand_port}")
+            # check_port = input(f"以上の接続で良いですか？(Y:計測条件の入力/n:ポート番号の再設定): ")
 
-        print(f"ポート番号の接続を確認してください")
-        check_port = (f"以上の接続でよいですか？(Y/n): ")
+            if check_port == "Y":
+                pass
+            elif check_port == "n":
+                # tkzkの場合
+                sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
+                sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
+                thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
+                thera_rhand_port_num = input("療法士右手用IMU AP09182461 のポート番号を入力:COM")
+                thera_lhand_port_num = input("療法士左手用IMU AP09182462 のポート番号を入力:COM")
 
-        if check_port == "Y":
-            pass
-        elif check_port == "n":
-            print("プログラムを終了します")
-            sys.exit()
+                # otの場合
+                # sync_port_num = input("同期用IMU AP09181497 のポート番号を入力:COM")
+                # sub_port_num = input("患者腰用IMU AP09181498 のポート番号を入力:COM")
+                # thera_port_num = input("療法士腰用IMU AP09181354 のポート番号を入力:COM")
+                # thera_rhand_port_num = input("療法士右手用IMU AP09181355 のポート番号を入力:COM")
+                # thera_lhand_port_num = input("療法士左手用IMU AP09181357 のポート番号を入力:COM")
+
+                sync_port = "COM" + sync_port_num
+                sub_port = "COM" + sub_port_num
+                thera_port = "COM" + thera_port_num
+                thera_rhand_port = "COM" + thera_rhand_port_num
+                thera_lhand_port = "COM" + thera_lhand_port_num
+
+                ports = [sync_port, sub_port, thera_port, thera_rhand_port, thera_lhand_port]
+                ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
+                port_dict = dict(zip(ports, ports_name))
+            else:
+                print("Yまたはnを入力してください")
 
         #ポート番号を再利用するためjsonファイルに保存
         port_dict_file = root_dir / "port_dict.json"
