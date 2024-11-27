@@ -98,7 +98,7 @@ def main():
                 # corners2 = cv2.cornerSubPix(
                 #     grayColor, corners, (11, 11), (-1, -1), criteria)
 
-                corners2 = corners/imageScaleFactor # Don't need subpixel refinement with findChessboardCornersSBWithMeta（戻り値がサブピクセル精度）
+                corners2 = corners/imageScaleFactor # Don't need subpixel refinement with findChessboardCornersSBWithMeta
                 twodpoints.append(corners2)
 
                 # Draw and display the corners
@@ -133,8 +133,14 @@ def main():
 
         print(f"\nCalculating camera parameters for {cali_intrinsic_dir}")
 
-        ret, matrix, distortion, r_vecs, t_vecs = cv2.calibrateCamera(
+        # ret, matrix, distortion, r_vecs, t_vecs = cv2.calibrateCamera(
+        #     threedpoints, twodpoints, grayColor.shape[::-1], None, None)
+
+
+        ret, matrix, distortion, r_vecs, t_vecs = cv2.fisheye.calibrate(
             threedpoints, twodpoints, grayColor.shape[::-1], None, None)
+
+
 
         CamParams = {'distortion':distortion,'intrinsicMat':matrix,'imageSize':imageSize}
         print(f"Camera parameters: {CamParams}")
