@@ -266,7 +266,7 @@ def read_entry(ser, entry_number, port):
 
     response = b''  # レスポンスデータを格納する変数
 
-    time.sleep(1)  # データの受信を待つ
+    time.sleep(5)  # データの受信を待つ
     while ser.in_waiting > 0:
         response += ser.read(100)
         time.sleep(0.01)
@@ -277,6 +277,8 @@ def read_entry(ser, entry_number, port):
 
     accel_gyro_data = []
     geomagnetic_data = []
+
+    print(f"{port}のデータ数: {len(response)}")
 
     i = 0
     while i < len(response):
@@ -557,7 +559,7 @@ if __name__ == "__main__":
                 pass
             else:
                 print("ポート番号は半角英数字で入力してください")
-                exit()
+                sys.exit()
 
             sync_port = "COM" + sync_port_num
             sub_port = "COM" + sub_port_num
@@ -571,6 +573,15 @@ if __name__ == "__main__":
 
         else:
             print("Yまたはnを入力してください")
+
+        print(f"ポート番号の接続を確認してください")
+        check_port = (f"以上の接続でよいですか？(Y/n): ")
+
+        if check_port == "Y":
+            pass
+        elif check_port == "n":
+            print("プログラムを終了します")
+            sys.exit()
 
         #ポート番号を再利用するためjsonファイルに保存
         port_dict_file = root_dir / "port_dict.json"
@@ -588,7 +599,5 @@ if __name__ == "__main__":
             new_save_dir = save_dir.with_name(f"{condition}_{i}")
             i += 1
         new_save_dir.mkdir(parents=True, exist_ok=False)
-
-
 
     main(ports, port_dict, new_save_dir)
