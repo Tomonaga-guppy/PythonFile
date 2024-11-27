@@ -6,11 +6,11 @@ import re
 import pickle
 import copy
 
-root_dir = r"G:\gait_pattern\20241106"
-cali_extrinsic_dirs = glob.glob(os.path.join(root_dir, "*cali_1080*"))
-cali_extrinsic_dirs = [cali_extrinsic_dir for cali_extrinsic_dir in cali_extrinsic_dirs if os.path.isdir(cali_extrinsic_dir)]
-print(cali_extrinsic_dirs)
-visualize = True
+root_dir = r"G:\gait_pattern\20241114_ota_test\gopro"
+
+cali_extrinsic_movs = glob.glob(os.path.join(root_dir, "fl", "ext_cali.MP4"))
+print(cali_extrinsic_movs)
+visualize = False
 
 def generate3Dgrid(checker_pattern, squareSize):
     #  3D points real world coordinates. Assuming z=0
@@ -51,10 +51,16 @@ def main():
 
     useSecondExtrinsicsSolution = False
 
-    for cali_extrinsic_dir in cali_extrinsic_dirs:
+    for cali_extrinsic_mov in cali_extrinsic_movs:
+        print(f"cali_extrinsic_mov: {cali_extrinsic_mov}")
         # Load and resize image - remember calibration image res needs to be same as all processing
-        imageFileName = os.path.join(cali_extrinsic_dir, "original", "120.png")
-        image = cv2.imread(imageFileName)
+        cap = cv2.VideoCapture(cali_extrinsic_mov)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 120)  #120フレーム目（適当）をキャリブレーション用画像として使用
+        ret, image = cap.read()
+        cap.release()
+
+        # imageFileName = os.path.join(cali_extrinsic_mov, "original", "120.png")
+        # image = cv2.imread(imageFileName)
 
         # Find the chess board corners
         # If desired number of corners are
@@ -105,10 +111,18 @@ def main():
         # choose the correct solution. It is the nature of the solvePnP problem
         # with a bit of 2D point noise.
 
-        id = os.path.basename(cali_extrinsic_dir).split("cali_")[-1]
-        CameraParams_path = os.path.join(root_dir, f"Intrinsics_{id}.pickle")
-        with open(CameraParams_path, "rb") as f:
-            CameraParams = pickle.load(f)
+        target = os.path.basename(os.path.dirname(cali_extrinsic_mov))
+        targer2 = input("対象の病院を入力 ota, tkzk : ")
+        CameraParams_path = os.path.join(os.path.dirname(os.path.dirname(root_dir)), "int_cali", targer2, f"Intrinsic_{target}.pickle")
+        try:
+            with open(CameraParams_path, "rb") as f:
+                CameraParams = pickle.load(f)
+        except:
+            print(f"CameraParams_path: {CameraParams_path} is not found.")
+            continue
+
+        # print(f"objectp3d: {objectp3d}")
+        # print(f"corners2: {corners2}")
 
         rets, rvecs, tvecs, reprojError = cv2.solvePnPGeneric(
             objectp3d, corners2, CameraParams['intrinsicMat'],
@@ -137,10 +151,6 @@ def main():
         extrinsicsSolutionToUse = 0
         if useSecondExtrinsicsSolution:
             extrinsicsSolutionToUse = 1
-
-        topLevelExtrinsicImageFolder = os.path.join(cali_extrinsic_dir, 'extrinsicCalib')
-        if not os.path.exists(topLevelExtrinsicImageFolder):
-            os.makedirs(topLevelExtrinsicImageFolder,exist_ok=True)
 
         for iRet,rvec,tvec in zip(range(rets),rvecs,tvecs):
             theseCameraParams = copy.deepcopy(CameraParams)
@@ -171,7 +181,6 @@ def main():
             # imageCopy2 = copy.deepcopy(imageWithFrame)
             imageCropped = imageCopy[topEdge:bottomEdge,leftEdge:rightEdge,:]
 
-
             # Save extrinsics picture with axis
             imageSize = np.shape(image)[0:2]
             #findAspectRatio
@@ -179,8 +188,11 @@ def main():
             # cv2.namedWindow("axis", cv2.WINDOW_NORMAL)
             cv2.resize(imageWithFrame,(600,int(np.round(600*ar))))
 
+            extrinsicImageFolder = os.path.join(os.path.dirname(cali_extrinsic_mov), 'extrinsicCalib')
+            if not os.path.exists(extrinsicImageFolder):
+                os.mkdir(extrinsicImageFolder)
             # save crop image to local camera file
-            savePath2 = os.path.join(os.path.dirname(imageFileName),
+            savePath2 = os.path.join(os.path.dirname(cali_extrinsic_mov),
                                     'extrinsicCalib_soln{}.jpg'.format(iRet))
             cv2.imwrite(savePath2,imageCropped)
 
@@ -188,35 +200,30 @@ def main():
                 print('Close image window to continue')
                 cv2.imshow('axis', image)
                 cv2.waitKey()
-
                 cv2.destroyAllWindows()
 
             R_worldFromCamera = cv2.Rodrigues(rvec)[0]
 
-            theseCameraParams['rotation'] = R_worldFromCamera
+            theseCameraParams['rotation'] = R_worldFromCamera #PnP法で解を2種類求めているが1つめの解を使用する
             theseCameraParams['translation'] = tvec
             theseCameraParams['rotation_EulerAngles'] = rvec
 
             # save extrinsics parameters to video folder
             # will save the selected parameters in Camera folder in main
             saveExtPath = os.path.join(
-                os.path.dirname(imageFileName),
+                os.path.dirname(cali_extrinsic_mov),
                 'cameraIntrinsicsExtrinsics_soln{}.pickle'.format(iRet))
             saveCameraParameters(saveExtPath,theseCameraParams)
 
             # save images to top level folder and return correct extrinsics
             camName = os.path.split(os.path.abspath(
-                    os.path.join(os.path.dirname(imageFileName), '../../')))[1]
+                    os.path.join(os.path.dirname(cali_extrinsic_mov), '../../')))[1]
 
-            if iRet == extrinsicsSolutionToUse:
-                fullCamName = camName
-                CameraParamsToUse = copy.deepcopy(theseCameraParams)
-            else:
-                fullCamName = 'altSoln_{}'.format(camName)
-            savePath = os.path.join(topLevelExtrinsicImageFolder, 'extrinsicCalib_'
-                                    + fullCamName + '.jpg')
-            cv2.imwrite(savePath,imageCropped)
-
+            pointsSavePath = os.path.join(os.path.dirname(cali_extrinsic_mov),'object3d_twodpoints.csv')
+            with open(pointsSavePath, 'w') as f:
+                f.write("3d_x,3d_y,3d_z,2d_x, 2d_y\n")
+                for obj_pt, img_pt in zip(objectp3d[0], corners2):
+                    f.write(f"{obj_pt[0]},{obj_pt[1]},{obj_pt[2]},{img_pt[0][0]},{img_pt[0][1]}\n")
 
 if __name__ == '__main__':
     main()
