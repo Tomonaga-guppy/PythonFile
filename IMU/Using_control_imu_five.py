@@ -275,7 +275,7 @@ def read_entry(ser, entry_number, port):
     # print(f"受信バッファの初期データ数: {port}, {ser.in_waiting}")
     # ser.in_waitingは受信データのバイト数を返す
     while ser.in_waiting > 0:
-        read_data = ser.read(min(ser.in_waiting, 100))
+        read_data = ser.read(min(ser.in_waiting, 128))
         response += read_data
         time.sleep(0.01)
 
@@ -500,7 +500,7 @@ def main(ports, port_dict, save_dir):
         for thread in threads:
             thread.start()
 
-        start = time.time()
+        # start = time.time()
 
        # スレッドが実行中はメインスレッドはそのまま継続する
         while any(thread.is_alive() for thread in threads):
@@ -511,8 +511,8 @@ def main(ports, port_dict, save_dir):
         for thread in threads:  #全てのスレッドが終了するまで待機
             thread.join()
 
-        end = time.time()
-        print(f"計測時間: {end - start}秒")
+        # end = time.time()
+        # print(f"計測時間: {end - start}秒")
         # print("計測を終了しました")
 
         while not start_queue.empty():
@@ -525,7 +525,7 @@ def main(ports, port_dict, save_dir):
     start = time.time()
     for i, port in enumerate(ports):
         read_save_memory(port, port_dict, start_time_dict, save_dir)
-        print(f"{i+1}/{len(port)} 計測データをCSVに保存しました {port}")
+        print(f"{i+1}/{len(ports)} 計測データをCSVに保存しました {port}")
 
     end = time.time()
     print(f"保存にかかった時間: {end - start}秒")
@@ -538,7 +538,7 @@ if __name__ == "__main__":
     # 入力はメインプロセスでのみ実行
     if multiprocessing.current_process().name == "MainProcess":
         root_dir = Path(r"C:\Users\zutom\OneDrive\デスクトップ\IMU\data")
-
+        # root_dir = Path(r"C:\Users\BRLAB\Desktop\data\IMU")
         reuse_port_flag = "a"
         while reuse_port_flag != "y" and reuse_port_flag != "n":
             reuse_port_flag = input("前回のポート番号を再利用しますか？(y/n): ")
