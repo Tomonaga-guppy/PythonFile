@@ -272,7 +272,7 @@ def read_entry(ser, entry_number, port):
     response = b''  # レスポンスデータを格納する変数
 
     time.sleep(1)  # データの受信を待つ
-    print(f"受信バッファの初期データ数: {port}, {ser.in_waiting}")
+    # print(f"受信バッファの初期データ数: {port}, {ser.in_waiting}")
     # ser.in_waitingは受信データのバイト数を返す
     while ser.in_waiting > 0:
         read_data = ser.read(min(ser.in_waiting, 100))
@@ -473,7 +473,7 @@ def read_save_memory(port, port_dict, start_time_dict, save_dir):
         save_path = save_dir / f'sensor_data_{port_dict[port]}_{start_time_dict[port]}.csv'
         save_to_csv(accel_gyro_data, geomagnetic_data, save_path)
         del accel_gyro_data, geomagnetic_data
-        print(f"計測データをCSVに保存しました。 ({port})")
+        # print(f"計測データをCSVに保存しました。 ({port})")
 
     # 計測データの記録をクリア
     if entry_count > 40:
@@ -484,11 +484,8 @@ def read_save_memory(port, port_dict, start_time_dict, save_dir):
     # print(f"計測を終了し、シリアルポートを閉じました。 ({port})")
 
 def main(ports, port_dict, save_dir):
-
-
     #計測用の変数を初期化
     threads = []
-    threads_post = []
     barrier = multiprocessing.Barrier(len(ports))  # スレッド間の同期のためのバリアを作成
     start_queue = multiprocessing.Queue()  # 開始時刻を取得するためのキューを作成
     start_time_dict = {}
@@ -502,6 +499,9 @@ def main(ports, port_dict, save_dir):
     try:
         for thread in threads:
             thread.start()
+
+        start = time.time()
+
        # スレッドが実行中はメインスレッドはそのまま継続する
         while any(thread.is_alive() for thread in threads):
             time.sleep(0.00001)  # 少し待機しながらスレッドの終了を待つ
@@ -511,6 +511,8 @@ def main(ports, port_dict, save_dir):
         for thread in threads:  #全てのスレッドが終了するまで待機
             thread.join()
 
+        end = time.time()
+        print(f"計測時間: {end - start}秒")
         # print("計測を終了しました")
 
         while not start_queue.empty():
@@ -518,22 +520,15 @@ def main(ports, port_dict, save_dir):
             start_time_dict[port] = start_time
 
     ### 内部メモリの書き出し##############################################################################
-    # print("計測を終了しました。IMUメモリの書き出しを行います")
 
-    for port in ports:
-        thread_post = multiprocessing.Process(target=read_save_memory, args=(port, port_dict, start_time_dict, save_dir, ))
-        threads_post.append(thread_post)
+    print("メモリの書き出しを行っています 少々お待ちください(数分かかることがあります)")
+    start = time.time()
+    for i, port in enumerate(ports):
+        read_save_memory(port, port_dict, start_time_dict, save_dir)
+        print(f"{i+1}/{len(port)} 計測データをCSVに保存しました {port}")
 
-    for thread_post in threads_post:
-        thread_post.start()
-
-    print("メモリの書き出しを行っています 少々お待ちください")
-    start_time = time.time()
-
-    for thread_post in threads_post:
-        thread_post.join()
-    end_time = time.time()
-    print(f"経過時間: {end_time - start_time}秒")
+    end = time.time()
+    print(f"保存にかかった時間: {end - start}秒")
     print("\n全てのIMUで書き出しを終了しました プログラムを終了します\n ")
 
 
@@ -545,9 +540,9 @@ if __name__ == "__main__":
         root_dir = Path(r"C:\Users\zutom\OneDrive\デスクトップ\IMU\data")
 
         reuse_port_flag = "a"
-        while reuse_port_flag != "Y" and reuse_port_flag != "n":
-            reuse_port_flag = input("前回のポート番号を再利用しますか？(Y/n): ")
-            if reuse_port_flag == "Y":  #前回のポート番号を読み込んで再利用
+        while reuse_port_flag != "y" and reuse_port_flag != "n":
+            reuse_port_flag = input("前回のポート番号を再利用しますか？(y/n): ")
+            if reuse_port_flag == "y":  #前回のポート番号を読み込んで再利用
                 port_dict_file = root_dir / "port_dict.json"
                 try:
                     with open(port_dict_file, "r") as file:
@@ -588,19 +583,19 @@ if __name__ == "__main__":
                 port_dict = dict(zip(ports, ports_name))
 
             else:
-                print("Yまたはnを入力してください")
+                print("yまたはnを入力してください")
                 pass
 
 
         check_port = "a"
-        while check_port != "Y":
+        while check_port != "y":
             check_port = input(f"""ポート番号の確認
     同期用IMU AP09181356 : {sync_port}
     患者腰用IMU AP09182459 : {sub_port}
     療法士腰用IMU AP09182460 : {thera_port}
     療法士右手用IMU AP09182461 : {thera_rhand_port}
     療法士左手用IMU AP09182462 : {thera_lhand_port}
-上記のポート番号で正しいですか？(Y:/n): """)
+上記のポート番号で正しいですか？(y:/n): """)
 
             # print(f"以下のポート番号が正しいか確認してください")
             # print(f"同期用IMU AP09181356 : {sync_port}")
@@ -608,9 +603,9 @@ if __name__ == "__main__":
             # print(f"療法士腰用IMU AP09182460 : {thera_port}")
             # print(f"療法士右手用IMU AP09182461 : {thera_rhand_port}")
             # print(f"療法士左手用IMU AP09182462 : {thera_lhand_port}")
-            # check_port = input(f"以上の接続で良いですか？(Y:計測条件の入力/n:ポート番号の再設定): ")
+            # check_port = input(f"以上の接続で良いですか？(y:計測条件の入力/n:ポート番号の再設定): ")
 
-            if check_port == "Y":
+            if check_port == "y":
                 pass
             elif check_port == "n":
                 # tkzkの場合
@@ -637,7 +632,7 @@ if __name__ == "__main__":
                 ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
                 port_dict = dict(zip(ports, ports_name))
             else:
-                print("Yまたはnを入力してください")
+                print("yまたはnを入力してください")
 
         #ポート番号を再利用するためjsonファイルに保存
         port_dict_file = root_dir / "port_dict.json"
