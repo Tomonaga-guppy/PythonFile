@@ -436,23 +436,16 @@ def run_imu_on_port(port, barrier, start_queue):
         if not flag:
             raise Exception(f"計測の開始に失敗しました。 計測を終了します({port})")
 
-        def read_sensor_data(port):  #元々は値の表示用だったけどいまは停止イベントを受け取るだけ
-            try:
-                flag = True
-                while not stop_event.is_set():
-                    pass
-            except KeyboardInterrupt:
-                flag = False
-            return flag
-
-        flag = read_sensor_data(port)
-        if not flag:
-            raise Exception(f"計測を終了しました。 ({port})")
+        try:
+            while not stop_event.is_set():  # 終了イベントがセットされるまで待機
+                time.sleep(0.01)
+        except KeyboardInterrupt:
+            raise Exception
 
     except Exception:
         stop_measurement(ser, port)
         start_queue.put((port, start_time))
-        ser.close
+        ser.close()
 
 def read_save_memory(port, port_dict, start_time_dict, save_dir):
     ser = serial.Serial()
