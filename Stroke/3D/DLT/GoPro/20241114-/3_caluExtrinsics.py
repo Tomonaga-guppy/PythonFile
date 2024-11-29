@@ -6,9 +6,9 @@ import re
 import pickle
 import copy
 
-root_dir = r"G:\gait_pattern\20241114_ota_test\gopro"
+root_dir = r"G:\gait_pattern\20241126_br9g\gopro"
 
-cali_extrinsic_movs = glob.glob(os.path.join(root_dir, "fl", "ext_cali.MP4"))
+cali_extrinsic_movs = glob.glob(os.path.join(root_dir, "fr", "ext_cali.MP4"))
 print(cali_extrinsic_movs)
 visualize = False
 
@@ -112,7 +112,7 @@ def main():
         # with a bit of 2D point noise.
 
         target = os.path.basename(os.path.dirname(cali_extrinsic_mov))
-        targer2 = input("対象の病院を入力 ota, tkzk : ")
+        targer2 = input("対象の病院を入力 ota, tkrzk_9g : ")
         CameraParams_path = os.path.join(os.path.dirname(os.path.dirname(root_dir)), "int_cali", targer2, f"Intrinsic_{target}.pickle")
         try:
             with open(CameraParams_path, "rb") as f:
