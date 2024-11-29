@@ -2,8 +2,8 @@ import os
 import subprocess
 from pathlib import Path
 
-root_dir = Path(r"G:\gait_pattern\20241114_ota_test\gopro")
-ori_mov_paths = list(root_dir.glob(f"*\*sub*.MP4"))
+root_dir = Path(r"G:\gait_pattern\20241126_br9g\gopro")
+ori_mov_paths = list(root_dir.glob(f"*\*gait*.MP4"))
 print(f"ori_mov_paths: {ori_mov_paths}")
 
 

@@ -6,10 +6,10 @@ import re
 import pickle
 
 # 複数画像から内部パラメータを求める
-root_dir = r"G:\gait_pattern\int_cali\ota"
+root_dir = r"G:\gait_pattern\int_cali\tkrzk_9g"
 visualize = False
 
-cali_intrinsic_dirs = glob.glob(os.path.join(root_dir, "Intrinsic*fl"))
+cali_intrinsic_dirs = glob.glob(os.path.join(root_dir, "Intrinsic*fr"))
 cali_intrinsic_dirs = [cali_intrinsic_dir for cali_intrinsic_dir in cali_intrinsic_dirs if os.path.isdir(cali_intrinsic_dir)]
 print(cali_intrinsic_dirs)
 
@@ -98,7 +98,7 @@ def main():
                 # corners2 = cv2.cornerSubPix(
                 #     grayColor, corners, (11, 11), (-1, -1), criteria)
 
-                corners2 = corners/imageScaleFactor # Don't need subpixel refinement with findChessboardCornersSBWithMeta
+                corners2 = corners/imageScaleFactor # Don't need subpixel refinement with findChessboardCornersSBWithMeta（戻り値がサブピクセル精度）
                 twodpoints.append(corners2)
 
                 # Draw and display the corners
@@ -133,14 +133,8 @@ def main():
 
         print(f"\nCalculating camera parameters for {cali_intrinsic_dir}")
 
-        # ret, matrix, distortion, r_vecs, t_vecs = cv2.calibrateCamera(
-        #     threedpoints, twodpoints, grayColor.shape[::-1], None, None)
-
-
-        ret, matrix, distortion, r_vecs, t_vecs = cv2.fisheye.calibrate(
+        ret, matrix, distortion, r_vecs, t_vecs = cv2.calibrateCamera(
             threedpoints, twodpoints, grayColor.shape[::-1], None, None)
-
-
 
         CamParams = {'distortion':distortion,'intrinsicMat':matrix,'imageSize':imageSize}
         print(f"Camera parameters: {CamParams}")
