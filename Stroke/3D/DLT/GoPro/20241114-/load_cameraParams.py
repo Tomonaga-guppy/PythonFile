@@ -6,7 +6,7 @@ import pandas as pd
 from camera import Camera
 import cv2
 
-root_dir = r"G:\gait_pattern\20241114_ota_test\gopro"
+root_dir = r"G:\gait_pattern\20241126_br9g\gopro"
 pickle_files = glob.glob(os.path.join(root_dir, "*", "*soln0.pickle"))
 
 CamParamDict = {}
@@ -37,6 +37,7 @@ for pickle_file in pickle_files:
     """
     CamName = os.path.basename(os.path.dirname(pickle_file))
     CamParamDict[CamName] = CamParams
+    print(f"camparandidct: {CamParamDict}")
 
     keypoints_cheker_path = os.path.join(os.path.dirname(pickle_file), "object3d_twodpoints.csv")
     keypoints_df = pd.read_csv(keypoints_cheker_path, header=0)
@@ -65,8 +66,8 @@ for camParam in CamParamDict.values():
     cameraList.append(c)
 
 # triangulate
-def triangulatePoints(cameras, towdpoints):
-    print(f"twodpoints: {twodpoints}")
+def triangulatePoints(cameras, twodpoints):
+    # print(f"twodpoints: {twodpoints}")
 
     def _construct_D_block(P, uv,w=1):
         """
@@ -79,8 +80,8 @@ def triangulatePoints(cameras, towdpoints):
         :return: block of matrix D
         :rtype: numpy.ndarray, shape=(2, 4)
         """
-        print(f"uv shape: {uv.shape}, P shape: {P.shape}")
-        print(f"uv: {uv}, P: {P}")
+        # print(f"uv shape: {uv.shape}, P shape: {P.shape}")
+        # print(f"uv: {uv}, P: {P}")
 
         return w*np.vstack((uv[0] * P[2, :] - P[0, :],
                           uv[1] * P[2, :] - P[1, :]))
@@ -98,16 +99,16 @@ def triangulatePoints(cameras, towdpoints):
         return (projective / projective[-1, :])[0:-1, :]
 
     D = np.zeros((2*len(cameraList), 4))
-    print(f"len(cameras): {len(cameras)}")
-    print(f"cameras: {cameras}")
-    print(f"twodpoints: {twodpoints}")
+    # print(f"len(cameras): {len(cameras)}")
+    # print(f"cameras: {cameras}")
+    # print(f"twodpoints: {twodpoints}")
     for cam_idx, cam, uv in zip(range(len(cameras)), cameras, twodpoints):
         D[cam_idx * 2:cam_idx * 2 + 2, :] = _construct_D_block(cam.P, uv)
     Q = D.T.dot(D)
     u, s, vh = np.linalg.svd(Q)
     pt3d = p2e(u[:, -1, np.newaxis])
 
-    print(f"pt3d: {pt3d}")
+    # print(f"pt3d: {pt3d}")
     return pt3d
 
 # チェッカーボードの3D座標を再構成
