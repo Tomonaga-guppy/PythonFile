@@ -535,8 +535,8 @@ if __name__ == "__main__":
 
     # 入力はメインプロセスでのみ実行
     if multiprocessing.current_process().name == "MainProcess":
-        # root_dir = Path(r"C:\Users\zutom\OneDrive\デスクトップ\IMU\data")
-        root_dir = Path(r"C:\Users\BRLAB\Desktop\data\IMU")
+        root_dir = Path(r"C:\Users\zutom\OneDrive\デスクトップ\IMU\data")
+        # root_dir = Path(r"C:\Users\BRLAB\Desktop\data\IMU")
         reuse_port_flag = "a"
         while reuse_port_flag != "y" and reuse_port_flag != "n":
             reuse_port_flag = input("前回のポート番号を再利用しますか？(y/n): ")
@@ -639,14 +639,23 @@ if __name__ == "__main__":
 
         # 計測条件の入力、保存先のディレクトリを作成
         current_date = datetime.now().strftime('%Y%m%d')
-        condition = input("計測条件を入力してください: ")
-        save_dir = root_dir / current_date / condition
+        sub_num = "sub" + input("被験者番号を入力してください: sub")
+        thera_num = "thera" + input("介助者番号を入力してください（介助なしの場合は0を入力）: thera")
+        record_num = "-" + input("この条件での撮影回数を入力してください :")
+        save_dir = root_dir / current_date / sub_num / thera_num+record_num
 
         new_save_dir = save_dir
         i = 1
         while new_save_dir.exists():
-            new_save_dir = save_dir.with_name(f"{condition}_{i}")
+            new_save_dir = save_dir.with_name(f"{thera_num+record_num}_{i}")
             i += 1
         new_save_dir.mkdir(parents=True, exist_ok=False)
+
+        #IMU用のフォルダを作成
+        gopro_fl_path = new_save_dir / "fl"
+        gopro_fr_path = new_save_dir / "fr"
+        gopro_front_path = new_save_dir / "front"
+        gopro_sagi_path = new_save_dir / "sagi"
+        if not gopro_fl_path.exi
 
     main(ports, port_dict, new_save_dir)
