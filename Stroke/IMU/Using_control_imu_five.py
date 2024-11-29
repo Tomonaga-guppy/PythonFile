@@ -515,9 +515,9 @@ def main(ports, port_dict, save_dir):
     print("メモリの書き出しを5台分行います 少々お待ちください")
     start = time.time()
     for i, port in enumerate(ports):
-        save_path = save_dir / f'sensor_data_{port_dict[port]}_{start_time_dict[port]}.csv'
+        save_path = save_dir / f'{port_dict[port]}_{start_time_dict[port]}.csv'
         read_save_memory(port, port_dict, start_time_dict, save_path)
-        print(f"{i+1}/{len(ports)} 計測データを{save_path}に保存しました {port}")
+        print(f'{i+1}/{len(ports)} 計測データを "{save_path}" に保存しました {port}')
 
     end = time.time()
     # print(f"保存にかかった時間: {end - start}秒")
@@ -642,20 +642,33 @@ if __name__ == "__main__":
         sub_num = "sub" + input("被験者番号を入力してください: sub")
         thera_num = "thera" + input("介助者番号を入力してください（介助なしの場合は0を入力）: thera")
         record_num = "-" + input("この条件での撮影回数を入力してください :")
-        save_dir = root_dir / current_date / sub_num / thera_num+record_num
+        save_dir = root_dir / current_date / sub_num / (thera_num+record_num)
 
         new_save_dir = save_dir
-        i = 1
+        i = 2
         while new_save_dir.exists():
             new_save_dir = save_dir.with_name(f"{thera_num+record_num}_{i}")
             i += 1
         new_save_dir.mkdir(parents=True, exist_ok=False)
+
+        print(f"データは{new_save_dir}に保存されます")
 
         #IMU用のフォルダを作成
         gopro_fl_path = new_save_dir / "fl"
         gopro_fr_path = new_save_dir / "fr"
         gopro_front_path = new_save_dir / "front"
         gopro_sagi_path = new_save_dir / "sagi"
-        if not gopro_fl_path.exi
+        if not gopro_fl_path.exists():
+            gopro_fl_path.mkdir(parents=True, exist_ok=True)
+        if not gopro_fr_path.exists():
+            gopro_fr_path.mkdir(parents=True, exist_ok=True)
+        if not gopro_front_path.exists():
+            gopro_front_path.mkdir(parents=True, exist_ok=True)
+        if not gopro_sagi_path.exists():
+            gopro_sagi_path.mkdir(parents=True, exist_ok=True)
 
-    main(ports, port_dict, new_save_dir)
+        imu_save_foldr = new_save_dir / "IMU"
+        if not imu_save_foldr.exists():
+            imu_save_foldr.mkdir(parents=True, exist_ok=True)
+
+    main(ports, port_dict, imu_save_foldr)
