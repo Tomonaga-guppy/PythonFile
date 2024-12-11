@@ -6,7 +6,8 @@ import pandas as pd
 from camera import Camera
 import cv2
 
-root_dir = r"G:\gait_pattern\20241126_br9g\gopro"
+root_dir = r"G:\gait_pattern\20241114_ota_test\gopro"
+# root_dir = r"G:\gait_pattern\20241126_br9g\gopro"
 pickle_files = glob.glob(os.path.join(root_dir, "*", "*soln0.pickle"))
 
 CamParamDict = {}

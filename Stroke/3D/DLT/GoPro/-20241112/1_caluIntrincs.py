@@ -6,11 +6,13 @@ import re
 import pickle
 
 # 複数画像から内部パラメータを求める
-root_dir = r"G:\gait_pattern\int_cali\tkrzk_9g"
+root_dir = r"G:\gait_pattern\20241112\gopro"
 visualize = False
 
-cali_intrinsic_dirs = glob.glob(os.path.join(root_dir, "Intrinsic*fr"))
-cali_intrinsic_dirs = [cali_intrinsic_dir for cali_intrinsic_dir in cali_intrinsic_dirs if os.path.isdir(cali_intrinsic_dir)]
+pre_dirs = glob.glob(os.path.join(root_dir, "front_l"))
+pre_dirs = [pre_dir for pre_dir in pre_dirs if os.path.isdir(pre_dir)]
+
+cali_intrinsic_dirs = [os.path.join(pre_dir, "Intrinsic_ori") for pre_dir in pre_dirs]
 print(cali_intrinsic_dirs)
 
 def generate3Dgrid(checker_pattern, squareSize):
@@ -50,12 +52,9 @@ def main():
 
     imageScaleFactor = 1  # ここを変更すると小さく映っているチェッカーパターンの検出率が向上するみたい？
 
-    detect_false_list = []
-
     # Load images in for calibration
     for cali_intrinsic_dir in cali_intrinsic_dirs:
         imageFiles = glob.glob(os.path.join(cali_intrinsic_dir, "*.png"))
-        folder_name = os.path.basename(cali_intrinsic_dir)
 
         # 自然順で並べ替える関数
         def natural_sort_key(file_path):
@@ -67,9 +66,9 @@ def main():
         # print(f"imageFiles: {imageFiles}")
 
         for i, pathName in enumerate(imageFiles):
-            print(f"{i+1}/{len(imageFiles)} pathName: {pathName}")
+            print(f"i: {i}, pathName: {pathName}")
             iImage = os.path.basename(pathName).split(".")[0]
-            # print(f"iImage: {iImage}")
+            print(f"iImage: {iImage}")
 
             image = cv2.imread(pathName)
             imageSize = np.reshape(np.asarray(np.shape(image)[0:2]).astype(np.float64),(2,1)) # This all to be able to copy camera param dictionary
@@ -88,7 +87,7 @@ def main():
             if ret == True:
                 # 3D points real world coordinates
                 checker_pattern = meta.shape[::-1] # reverses order so width is first
-                # print(f"    Checkerboard pattern: {checker_pattern}")
+                print(f"    Checkerboard pattern: {checker_pattern}")
                 objectp3d = generate3Dgrid(checker_pattern, squareSize)
 
                 threedpoints.append(objectp3d)
@@ -98,7 +97,7 @@ def main():
                 # corners2 = cv2.cornerSubPix(
                 #     grayColor, corners, (11, 11), (-1, -1), criteria)
 
-                corners2 = corners/imageScaleFactor # Don't need subpixel refinement with findChessboardCornersSBWithMeta（戻り値がサブピクセル精度）
+                corners2 = corners/imageScaleFactor # Don't need subpixel refinement with findChessboardCornersSBWithMeta
                 twodpoints.append(corners2)
 
                 # Draw and display the corners
@@ -112,7 +111,7 @@ def main():
                 cv2.resize(image,(int(600*ar),600))
 
                 # Save intrinsic images
-                imageSaveDir = os.path.join(os.path.dirname(cali_intrinsic_dir),f'{folder_name}_Checkerboards')
+                imageSaveDir = os.path.join(os.path.dirname(cali_intrinsic_dir),'IntrinsicCheckerboards')
                 if not os.path.exists(imageSaveDir):
                     os.mkdir(imageSaveDir)
                 cv2.imwrite(os.path.join(imageSaveDir, str(iImage) + '.jpg'), image)
@@ -137,9 +136,9 @@ def main():
             threedpoints, twodpoints, grayColor.shape[::-1], None, None)
 
         CamParams = {'distortion':distortion,'intrinsicMat':matrix,'imageSize':imageSize}
-        print(f"Camera parameters: {CamParams}")
 
-        saveFileName = os.path.join(root_dir, f'{folder_name}.pickle')
+        id = os.path.basename(os.path.dirname(cali_intrinsic_dir))
+        saveFileName = os.path.join(root_dir, f'Intrinsics_{id}.pickle')
         saveCameraParameters(saveFileName,CamParams)
 
         print(f"Camera parameters saved to {saveFileName} !\n")

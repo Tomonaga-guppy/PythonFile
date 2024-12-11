@@ -4,7 +4,7 @@ import cv2
 import os
 from tqdm.auto import tqdm
 
-root_dir = Path(r"G:\gait_pattern\int_cali\tkrzk_9g")
+root_dir = Path(r"G:\gait_pattern\int_cali\ota")
 intrinsics_ch_paths = list(root_dir.glob("*Intrinsic_fr*.pickle"))
 
 print(f"intrinsics_ch_paths: {intrinsics_ch_paths}")
