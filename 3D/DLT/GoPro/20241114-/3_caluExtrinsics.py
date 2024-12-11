@@ -6,7 +6,7 @@ import re
 import pickle
 import copy
 
-root_dir = r"G:\gait_pattern\20241126_br9g\gopro"
+root_dir = r"G:\gait_pattern\20241114_ota_test\gopro"
 
 cali_extrinsic_movs = glob.glob(os.path.join(root_dir, "fr", "ext_cali.MP4"))
 print(cali_extrinsic_movs)

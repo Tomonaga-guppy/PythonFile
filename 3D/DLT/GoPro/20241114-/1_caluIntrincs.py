@@ -6,7 +6,8 @@ import re
 import pickle
 
 # 複数画像から内部パラメータを求める
-root_dir = r"G:\gait_pattern\int_cali\tkrzk_9g"
+root_dir = r"G:\gait_pattern\int_cali\ota"
+# root_dir = r"G:\gait_pattern\int_cali\tkrzk_9g"
 visualize = False
 
 cali_intrinsic_dirs = glob.glob(os.path.join(root_dir, "Intrinsic*fr"))

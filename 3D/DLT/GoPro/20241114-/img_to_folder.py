@@ -4,7 +4,7 @@ import shutil
 root_dir = Path(r"C:\Users\Tomson\Pictures")
 img_paths = list(root_dir.glob("*.png"))
 
-folder_path = root_dir / "Intrinsic_fr_15m"
+folder_path = root_dir / "Intrinsic"
 if not folder_path.exists():
     folder_path.mkdir()
 
