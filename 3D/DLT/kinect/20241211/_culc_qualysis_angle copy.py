@@ -8,9 +8,7 @@ import sys
 
 down_hz = False
 csv_path_dir = Path(r"G:\gait_pattern\20241016\qualisys")
-csv_paths = list(csv_path_dir.glob("sub5*.tsv"))
-
-#膝とかの欠損値保管してから補間、フィルタ処理
+csv_paths = list(csv_path_dir.glob("sub4*.tsv"))
 
 def culc_interpolate_frame(df):
     """
