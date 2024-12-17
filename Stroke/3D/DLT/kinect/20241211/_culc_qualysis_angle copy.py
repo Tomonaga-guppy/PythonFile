@@ -10,6 +10,8 @@ down_hz = False
 csv_path_dir = Path(r"G:\gait_pattern\20241016\qualisys")
 csv_paths = list(csv_path_dir.glob("sub4*.tsv"))
 
+#補間、フィルタ処理した後に欠損値補間（元々）
+
 def culc_interpolate_frame(df):
     """
     膝、足首で連続して5フレーム以上欠損しているフレームを算出

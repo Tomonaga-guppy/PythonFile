@@ -84,7 +84,6 @@ def read_2d_openpose(mkv_file):
     return keypoints_2d_openpose, valid_frames
 
 
-
 def main():
 
     check_side = "right"
