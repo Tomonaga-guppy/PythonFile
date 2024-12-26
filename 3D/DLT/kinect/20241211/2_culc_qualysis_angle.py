@@ -4,16 +4,42 @@ from pathlib import Path
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
+import sys
 
 down_hz = False
-csv_path_dir = Path(r"F:\Tomson\gait_pattern\20240912\qualisys")
-csv_paths = list(csv_path_dir.glob("sub3*normal*.tsv"))
+csv_path_dir = Path(r"G:\gait_pattern\20241016\qualisys")
+sub_num = input("被験者番号を入力してください: sub")
+csv_paths = list(csv_path_dir.glob(f"sub{sub_num}*abn*.tsv"))
+
+#膝とかの欠損値保管してから補間、フィルタ処理 これで相川研に共有
+
+def culc_interpolate_frame(df):
+    """
+    膝、足首で連続して5フレーム以上欠損しているフレームを記録
+    """
+    interplotae_frames_dict = dict()
+    #5フレーム以上連続して欠損値がある場合はSKYCOMに従って補間
+    for column in df.columns:
+        #5つ以上連続した欠損値を持つフレーム番号を取得
+        is_missing = df[column].isnull()  # 欠損値のインデックスを取得
+        group_id = (is_missing != is_missing.shift()).cumsum()  # 連続する欠損値に同じ番号を付けるためのグループIDを作成
+        consecutive_missing_counts = is_missing.groupby(group_id).cumsum()  # グループごとに、連続する欠損値の数をカウント
+        long_missing_group_numbers = consecutive_missing_counts[consecutive_missing_counts >= 5].groupby(is_missing).first().index   #連続欠損数が5フレーム以上のグループ番号を取得
+        long_missing_indices = df.groupby(is_missing).filter(lambda x: x.name in long_missing_group_numbers).index.tolist()  # 連続欠損数が5フレーム以上のグループに属するインデックスを取得
+
+        dict_keys = ["RKNE_X", "LKNE_X", "RANK_X", "LANK_X", "RKNE2_X", "LKNE2_X", "RANK2_X", "LANK2_X"]
+        if column in dict_keys:
+            interplotae_frames_dict[column] = long_missing_indices
+
+    return interplotae_frames_dict
 
 def read_3DMC(csv_path, down_hz):
     col_names = range(1,100)  #データの形が汚い場合に対応するためあらかじめ列数(100:適当)を設定
-    df = pd.read_csv(csv_path, names=col_names, sep='\t', skiprows=[0,1,2,3,4,5,6,7,8,10])  #Qualisis
+    df = pd.read_csv(csv_path, names=col_names, sep='\t', skiprows=[0,1,2,3,4,5,6,7,8,10])  #Qualisys
     df.columns = df.iloc[0]  # 最初の行をヘッダーに
     df = df.drop(0).reset_index(drop=True)  # ヘッダーにした行をデータから削除し、インデックスをリセット
+
+    print(f"tsv_read = \n{df}")
 
     if down_hz:
         df_down = df[::4].reset_index()
@@ -22,11 +48,11 @@ def read_3DMC(csv_path, down_hz):
         df_down = df
         sampling_freq = 120
 
-    marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
+    marker_keys = ["RASI", "LASI", "RPSI", "LPSI", "RKNE", "RKNE2", "LKNE", "LKNE2", "RANK", "RANK2", "LANK", "LANK2", "RTOE", "LTOE", "RHEE", "LHEE"]
     marker_dict = dict()
     xyz_list = ['X', 'Y', 'Z']
 
-    for marker in marker_set:
+    for marker in marker_keys:
         for i, xyz in enumerate(xyz_list):
             key_index = df_down.columns.get_loc(f'{marker}')
             marker_rows = (key_index-1)*3 + i
@@ -34,23 +60,27 @@ def read_3DMC(csv_path, down_hz):
 
     marker_set_df = pd.DataFrame(columns=marker_dict.keys())
     for column in marker_set_df.columns:
-        marker_set_df[column] = df_down.iloc[:, marker_dict[column]].values
+        marker_set_df[column] = df_down.iloc[:, marker_dict[column]]
 
     marker_set_df = marker_set_df.apply(pd.to_numeric, errors='coerce')  #文字列として読み込まれたデータを数値に変換
     marker_set_df.replace(0, np.nan, inplace=True)  #0をnanに変換
+    # marker_set_df.to_csv(csv_path.with_name(f"marker_set0_{csv_path.stem}.csv"))
 
-    df_copy = marker_set_df.copy()
-    valid_index_mask = df_copy.notna().all(axis=1)
-    valid_index = df_copy[valid_index_mask].index
+    df_copy0 = marker_set_df.copy()
+    df_copy = df_copy0.filter(regex='RASI|LASI|RPSI|LPSI|RTOE|LTOE|RHEE|LHEE')
+    valid_index_mask0 = df_copy.notna().all(axis=1)
+    valid_index = df_copy[valid_index_mask0].index
     valid_index = pd.Index(range(valid_index.min(), valid_index.max() + 1))  #欠損値がない行のインデックスを範囲で取得、この範囲の値を解析に使用する
-    marker_set_df = marker_set_df.loc[valid_index, :]  #欠損値のない行のみを抽出
-    interpolated_df = marker_set_df.interpolate(method='spline', order=3)  #3次スプライン補間
+    notnan_df = df_copy.loc[valid_index, :]  #欠損値のない行のみを抽出
+    interpolated_df = notnan_df.interpolate(method='spline', order=3)  #3次スプライン補間
     marker_set_fin_df = interpolated_df.apply(butter_lowpass_fillter, args=(4, 6, sampling_freq))  #4次のバターワースローパスフィルタ
 
-    output_csv_path = csv_path.with_name(f"marker_set_{csv_path.stem}.csv")
-    marker_set_fin_df.to_csv(output_csv_path)
+    merged_df = df_copy0.combine_first(marker_set_fin_df)  #欠損値を補間したデータと元のデータをマージ
+    merged_df.to_csv(csv_path.with_name(f"merged_{csv_path.stem}.csv"))
 
-    return marker_set_fin_df, valid_index
+    ineterpolate_frames_dict = culc_interpolate_frame(marker_set_df)  #欠損値のあるフレームを保持した辞書
+
+    return merged_df, valid_index, ineterpolate_frames_dict
 
 def butter_lowpass_fillter(column_data, order, cutoff_freq, sampling_freq):  #4次のバターワースローパスフィルタ
     nyquist_freq = sampling_freq / 2
@@ -62,12 +92,11 @@ def butter_lowpass_fillter(column_data, order, cutoff_freq, sampling_freq):  #4�
     return column_data
 
 def main():
+    h = float(input("被験者の身長を入力してください[m]:")) #sub4:1.72, sub5: 1.75
 
     for i, csv_path in enumerate(csv_paths):
-        marker_set_df, valid_index = read_3DMC(csv_path, down_hz)
-
         print(f"csv_path = {csv_path}")
-        print(f"valid_index = {valid_index}")
+        marker_set_df, valid_index, interpolate_frame_dict = read_3DMC(csv_path, down_hz)
 
         angle_list = []
         bector_list = []
@@ -90,13 +119,13 @@ def main():
         rank2 = marker_set_df[['RANK2_X', 'RANK2_Y', 'RANK2_Z']].to_numpy()
         lank2 = marker_set_df[['LANK2_X', 'LANK2_Y', 'LANK2_Z']].to_numpy()
 
+        # print(f"LASI = {lasi[0:20]}")
+        print(f"lknee2_ini = {lknee2[valid_index.min():valid_index.min()+20]}")
 
         for frame_num in valid_index:
-            frame_num = frame_num - valid_index.min()
             d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
             d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:]) / 2)
-            r = 0.012 #9/12
-            h = 1.74 #sub3
+            r = 0.012 #使用したマーカー径
             k = h/1.7
             beta = 0.1 * np.pi #[rad]
             theta = 0.496 #[rad]
@@ -138,6 +167,133 @@ def main():
             e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
             e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
             rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
+
+            # 欠損している膝、足首の座標を算出
+            if frame_num in interpolate_frame_dict["RKNE2_X"] and not frame_num in interpolate_frame_dict["RKNE_X"]:  #RKNEは存在し、RKNE2が欠損している場合
+                rknee2[frame_num, :] = rknee[frame_num, :] + (2 * r + 0.1 * k) * e_y_pelvis
+            if frame_num in interpolate_frame_dict["RKNE_X"] and not frame_num in interpolate_frame_dict["RKNE2_X"]:  #RKNE2は存在し、RKNEが欠損している場合
+                rknee[frame_num, :] = rknee2[frame_num, :] - (2 * r + 0.1 * k) * e_y_pelvis
+
+            if frame_num in interpolate_frame_dict["LKNE2_X"] and not frame_num in interpolate_frame_dict["LKNE_X"]:  #LKNEは存在し、LKNE2が欠損している場合
+                lknee2[frame_num, :] = lknee[frame_num, :] - (2 * r + 0.1 * k) * e_y_pelvis
+            if frame_num in interpolate_frame_dict["LKNE_X"] and not frame_num in interpolate_frame_dict["LKNE2_X"]:  #LKNE2は存在し、LKNEが欠損している場合
+                lknee[frame_num, :] = lknee2[frame_num, :] + (2 * r + 0.1 * k) * e_y_pelvis
+
+            if frame_num in interpolate_frame_dict["RANK2_X"] and not frame_num in interpolate_frame_dict["RANK_X"]:  #RANKは存在し、RANK2が欠損している場合
+                rank2[frame_num, :] = rank[frame_num, :] + (2 * r + 0.06 * k) * e_y_pelvis
+            if frame_num in interpolate_frame_dict["RANK_X"] and not frame_num in interpolate_frame_dict["RANK2_X"]:  #RANK2は存在し、RANKが欠損している場合
+                rank[frame_num, :] = rank2[frame_num, :] - (2 * r + 0.06 * k) * e_y_pelvis
+
+            if frame_num in interpolate_frame_dict["LANK2_X"] and not frame_num in interpolate_frame_dict["LANK_X"]:  #LANKは存在し、LANK2が欠損している場合
+                lank2[frame_num, :] = lank[frame_num, :] - (2 * r + 0.06 * k) * e_y_pelvis
+            if frame_num in interpolate_frame_dict["LANK_X"] and not frame_num in interpolate_frame_dict["LANK2_X"]:  #LANK2は存在し、LANKが欠損している場合
+                lank[frame_num, :] = lank2[frame_num, :] + (2 * r + 0.06 * k) * e_y_pelvis
+
+        target_columns = ["RKNE_X", "RKNE_Y", "RKNE_Z", "RKNE2_X", "RKNE2_Y", "RKNE2_Z", "RANK_X", "RANK_Y", "RANK_Z", "RANK2_X", "RANK2_Y", "RANK2_Z", "LKNE_X", "LKNE_Y", "LKNE_Z", "LKNE2_X", "LKNE2_Y", "LKNE2_Z", "LANK_X", "LANK_Y", "LANK_Z", "LANK2_X", "LANK2_Y", "LANK2_Z"]
+        marker_set_df_fin = marker_set_df.copy()
+
+        marker_set_df_fin.loc[valid_index, 'RKNE_X'] = rknee[valid_index, 0]
+        marker_set_df_fin.loc[valid_index, 'RKNE_Y'] = rknee[valid_index, 1]
+        marker_set_df_fin.loc[valid_index, 'RKNE_Z'] = rknee[valid_index, 2]
+        marker_set_df_fin.loc[valid_index, 'RKNE2_X'] = rknee2[valid_index, 0]
+        marker_set_df_fin.loc[valid_index, 'RKNE2_Y'] = rknee2[valid_index, 1]
+        marker_set_df_fin.loc[valid_index, 'RKNE2_Z'] = rknee2[valid_index, 2]
+        marker_set_df_fin.loc[valid_index, 'RANK_X'] = rank[valid_index, 0]
+        marker_set_df_fin.loc[valid_index, 'RANK_Y'] = rank[valid_index, 1]
+        marker_set_df_fin.loc[valid_index, 'RANK_Z'] = rank[valid_index, 2]
+        marker_set_df_fin.loc[valid_index, 'RANK2_X'] = rank2[valid_index, 0]
+        marker_set_df_fin.loc[valid_index, 'RANK2_Y'] = rank2[valid_index, 1]
+        marker_set_df_fin.loc[valid_index, 'RANK2_Z'] = rank2[valid_index, 2]
+        marker_set_df_fin.loc[valid_index, 'LKNE_X'] = lknee[valid_index, 0]
+        marker_set_df_fin.loc[valid_index, 'LKNE_Y'] = lknee[valid_index, 1]
+        marker_set_df_fin.loc[valid_index, 'LKNE_Z'] = lknee[valid_index, 2]
+        marker_set_df_fin.loc[valid_index, 'LKNE2_X'] = lknee2[valid_index, 0]
+        marker_set_df_fin.loc[valid_index, 'LKNE2_Y'] = lknee2[valid_index, 1]
+        marker_set_df_fin.loc[valid_index, 'LKNE2_Z'] = lknee2[valid_index, 2]
+        marker_set_df_fin.loc[valid_index, 'LANK_X'] = lank[valid_index, 0]
+        marker_set_df_fin.loc[valid_index, 'LANK_Y'] = lank[valid_index, 1]
+        marker_set_df_fin.loc[valid_index, 'LANK_Z'] = lank[valid_index, 2]
+        marker_set_df_fin.loc[valid_index, 'LANK2_X'] = lank2[valid_index, 0]
+        marker_set_df_fin.loc[valid_index, 'LANK2_Y'] = lank2[valid_index, 1]
+        marker_set_df_fin.loc[valid_index, 'LANK2_Z'] = lank2[valid_index, 2]
+
+        print(f"lknee2 (lkneeから補完しただけ) = {lknee2[valid_index.min():valid_index.min()+20]}")
+
+        for column in target_columns:
+            target_column = marker_set_df_fin.loc[valid_index, column]
+            interpolate_column = target_column.interpolate(method='spline', order=3)
+            numeric_column = pd.to_numeric(interpolate_column)
+            marker_set_df_fin.loc[valid_index, column] = butter_lowpass_fillter(numeric_column, 4, 6, 120)
+
+        rank = marker_set_df_fin[['RANK_X', 'RANK_Y', 'RANK_Z']].to_numpy()
+        lank = marker_set_df_fin[['LANK_X', 'LANK_Y', 'LANK_Z']].to_numpy()
+        rknee = marker_set_df_fin[['RKNE_X', 'RKNE_Y', 'RKNE_Z']].to_numpy()
+        lknee = marker_set_df_fin[['LKNE_X', 'LKNE_Y', 'LKNE_Z']].to_numpy()
+        rank2 = marker_set_df_fin[['RANK2_X', 'RANK2_Y', 'RANK2_Z']].to_numpy()
+        lank2 = marker_set_df_fin[['LANK2_X', 'LANK2_Y', 'LANK2_Z']].to_numpy()
+        rknee2 = marker_set_df_fin[['RKNE2_X', 'RKNE2_Y', 'RKNE2_Z']].to_numpy()
+        lknee2 = marker_set_df_fin[['LKNE2_X', 'LKNE2_Y', 'LKNE2_Z']].to_numpy()
+
+        print(f"lknee2（フィルター処理した後） = {lknee2[valid_index.min():valid_index.min()+20]}")
+        # print(f"marker_set_df_fin.loc[valid_index, 'LKNE2_X'] = {marker_set_df_fin.loc[valid_index, 'LKNE2_X']}")
+        print(f"valid_index = {valid_index}")
+
+        valid_df = marker_set_df_fin.copy()
+        valid_index_mask_fin = valid_df.notna().all(axis=1)
+        valid_index_fin = valid_df[valid_index_mask_fin].index
+        valid_index_fin = pd.Index(range(valid_index_fin.min(), valid_index_fin.max() + 1))  #欠損値がない行のインデックスを範囲で取得、この範囲の値を解析に使用する
+        print(f"valid_index_fin = {valid_index_fin}")
+
+        fin_df = valid_df.loc[valid_index_fin, :]
+        fin_df.to_csv(csv_path.with_name(f"fin_{csv_path.stem}.csv"))
+
+
+        for frame_num in valid_index_fin:
+            d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
+            d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:]) / 2)
+            r = 0.012 #使用したマーカー径
+            k = h/1.7
+            beta = 0.1 * np.pi #[rad]
+            theta = 0.496 #[rad]
+            c = 0.115 * d_leg - 0.00153
+            x_dis = 0.1288 * d_leg - 0.04856
+
+            # skycom + davis
+            x_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+            x_lthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+            y_rthigh = +(c * np.sin(theta) - d_asi/2)
+            y_lthigh = -(c * np.sin(theta)- d_asi/2)
+            z_rthigh = -(x_dis + r) * np.sin(beta) + c * np.cos(theta) * np.cos(beta)
+            z_lthigh = -(x_dis + r) * np.sin(beta) + c * np.cos(theta) * np.cos(beta)
+            rthigh_pelvis = np.array([x_rthigh, y_rthigh, z_rthigh]).T
+            lthigh_pelvis = np.array([x_lthigh, y_lthigh, z_lthigh]).T
+
+            hip_0 = (rasi[frame_num,:] + lasi[frame_num,:]) / 2
+            lumbar = (0.47 * (rasi[frame_num,:] + lasi[frame_num,:]) / 2 + 0.53 * (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
+
+            #骨盤節座標系（原点はhip）
+            e_y0_pelvis = lasi[frame_num,:] - rasi[frame_num,:]
+            e_z_pelvis = (lumbar - hip_0)/np.linalg.norm(lumbar - hip_0)
+            e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
+            e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
+            rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
+
+            transformation_matrix = np.array([[e_x_pelvis[0], e_y_pelvis[0], e_z_pelvis[0], hip_0[0]],
+                                                [e_x_pelvis[1], e_y_pelvis[1], e_z_pelvis[1], hip_0[1]],
+                                                [e_x_pelvis[2], e_y_pelvis[2], e_z_pelvis[2], hip_0[2]],
+                                                [0,       0,       0,       1]])
+
+            #モーキャプの座標系に変換してもう一度計算
+            rthigh = np.dot(transformation_matrix, np.append(rthigh_pelvis, 1))[:3]
+            lthigh = np.dot(transformation_matrix, np.append(lthigh_pelvis, 1))[:3]
+            hip = (rthigh + lthigh) / 2
+
+            e_y0_pelvis = lthigh - rthigh
+            e_z_pelvis = (lumbar - hip)/np.linalg.norm(lumbar - hip)
+            e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
+            e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
+            rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
+
 
             #必要な原点の設定
             rshank = (rknee[frame_num, :] + rknee2[frame_num, :]) / 2
@@ -215,12 +371,35 @@ def main():
             r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
             l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
 
-            r_hip_angle = 180 - r_hip_angle
-            l_hip_angle = 180 - l_hip_angle
-            r_knee_angle = 180 - r_knee_angle
-            l_knee_angle = 180 - l_knee_angle
-            r_ankle_angle = 90 - r_ankle_angle
-            l_ankle_angle = 90 - l_ankle_angle
+            # 膝や足首の補間を行った場合に調整
+            if r_hip_angle < 90:
+                pass
+            elif r_hip_angle > 270:
+                r_hip_angle = r_hip_angle - 360
+            else:
+                r_hip_angle = 180 - r_hip_angle
+
+            if l_hip_angle < 90:
+                pass
+            elif l_hip_angle > 270:
+                l_hip_angle = l_hip_angle - 360
+            else:
+                l_hip_angle = 180 - l_hip_angle
+
+            # r_hip_angle = 180 - r_hip_angle if r_hip_angle > 100 else r_hip_angle
+            # l_hip_angle = 180 - l_hip_angle if l_hip_angle > 100 else l_hip_angle
+            r_knee_angle = 180 - r_knee_angle if r_knee_angle < 180 else r_knee_angle - 180
+            l_knee_angle = 180 - l_knee_angle if l_knee_angle < 180 else l_knee_angle - 180
+            r_ankle_angle = 90 - r_ankle_angle if r_ankle_angle < 180 else 270 - r_ankle_angle
+            l_ankle_angle = 90 - l_ankle_angle if l_ankle_angle < 180 else 270 - l_ankle_angle
+
+            # # 元々（膝の補間とかがない場合）
+            # r_hip_angle = 180 - r_hip_angle
+            # l_hip_angle = 180 - l_hip_angle
+            # r_knee_angle = 180 - r_knee_angle
+            # l_knee_angle = 180 - l_knee_angle
+            # r_ankle_angle = 90 - r_ankle_angle
+            # l_ankle_angle = 90 - l_ankle_angle
 
             angles = [r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle]
             angle_list.append(angles)
@@ -319,8 +498,10 @@ def main():
             dist_list.append(np.linalg.norm(bector))
 
         angle_array = np.array(angle_list)
+        print(f"angle_array.shape = {angle_array.shape}")
         angle_df = pd.DataFrame({"r_hip_angle": angle_array[:, 0], "r_knee_angle": angle_array[:, 2], "r_ankle_angle": angle_array[:, 4], "l_hip_angle": angle_array[:, 1], "l_knee_angle": angle_array[:, 3], "l_ankle_angle": angle_array[:, 5]})
-        angle_df.index = valid_index
+        angle_df.index = valid_index_fin
+        # print(f"l_hip_angle = {angle_df['l_hip_angle']}")
         if down_hz:
             angle_df.to_csv(csv_path.with_name(f"angle_30Hz_{csv_path.stem}.csv"))
         else:
@@ -330,7 +511,7 @@ def main():
         lhee_pel_z = bector_array[:, 0]
         # lhee_pel_z = bector_array[:, 2]  #motiveの場合
         df = pd.DataFrame({"lhee_pel_z":lhee_pel_z})
-        df.index = valid_index
+        df.index = valid_index_fin
         df = df.sort_values(by="lhee_pel_z", ascending=True)
         # df = df.sort_values(by="lhee_pel_z", ascending=False)  #motiveの場合
         ic_list = df.index[:120].values
@@ -338,7 +519,7 @@ def main():
 
         dist_array = np.array(dist_list)
         df = pd.DataFrame({"dist": dist_array})
-        df.index = valid_index
+        df.index = valid_index_fin
 
         # plt.figure()
         # plt.plot(df.index, df["dist"])
