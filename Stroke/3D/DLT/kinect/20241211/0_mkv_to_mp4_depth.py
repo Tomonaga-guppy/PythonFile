@@ -15,7 +15,7 @@ from helpers import convert_to_bgra_if_required
 
 def main():
     mkv_folder = r"G:\gait_pattern\20241016"
-    mkv_files = glob.glob(os.path.join(mkv_folder, '*sub5*com*nfpa_2*.mkv'))
+    mkv_files = glob.glob(os.path.join(mkv_folder, '*sub4*abn*_2*.mkv'))
     print(f"mkv_files = {mkv_files}")
 
     for i, mkv_file_path in enumerate(mkv_files):
