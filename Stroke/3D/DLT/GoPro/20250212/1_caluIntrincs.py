@@ -8,13 +8,13 @@ root_dir = Path(r"G:\gait_pattern")
 
 target_facility = "tkrzk_9g"  #解析対象施設：tkrzk_9g か ota
 # target_facility = "ota"  #解析対象施設：tkrzk_9g か ota
-target_camrra = "fl"  #解析対象カメラ：fr か fl
+target_camera = "fl"  #解析対象カメラ：fr か fl
 
 if target_facility == "ota":  mov = "20241114_ota_test"
 elif target_facility == "tkrzk_9g":  mov = "20241126_br9g"
 
 int_cali_dir = root_dir / "int_cali" / target_facility  #内部キャリブレーション結果を保存するフォルダ
-mov_dir = root_dir / mov / "gopro" / target_camrra  #キャリブレーション動画や歩行動画が入っているフォルダ
+mov_dir = root_dir / mov / "gopro" / target_camera  #キャリブレーション動画や歩行動画が入っているフォルダ
 
 def generate3Dgrid(checker_pattern, squareSize):
     #  3D points real world coordinates. Assuming z=0
@@ -51,7 +51,6 @@ def main():
     # Vector for 2D points
     twodpoints = []
 
-    # checker_pattern = (5, 4)
     checker_pattern = (4, 5)
     squareSize = 35  # mm
 
@@ -70,7 +69,7 @@ def main():
             continue
         # image = cv2.imread(frame)
         image = frame
-        imageSaveDir0 = int_cali_dir / f"Checkerboards_Origin_{target_camrra}"
+        imageSaveDir0 = int_cali_dir / f"Checkerboards_Origin_{target_camera}"
         imageSaveDir0.mkdir(exist_ok=True)  #ない場合は作成
         cv2.imwrite(str(imageSaveDir0 / f"{frame_num}.jpg"), image)  #元画像を保存
 
@@ -100,7 +99,7 @@ def main():
                                                 corners2, ret)
 
             # 検出した画像を保存
-            imageSaveDir = int_cali_dir / f"Checkerboards_Used_{target_camrra}"
+            imageSaveDir = int_cali_dir / f"Checkerboards_Used_{target_camera}"
             imageSaveDir.mkdir(exist_ok=True)  #ない場合は作成
             cv2.imwrite(str(imageSaveDir / f"{frame_num}.jpg"), image)
 
@@ -109,6 +108,7 @@ def main():
         if ret == False:
             print("    Couldn't find checkerboard in " + str(frame_num))
 
+    cap.release()
     print(f"\nCalculating camera parameters using {used_frame_nums} images")
 
     ret, matrix, distortion, r_vecs, t_vecs = cv2.calibrateCamera(
@@ -121,7 +121,7 @@ def main():
     print(f"光学中心(cx, cy): {matrix[0,2],matrix[1,2]}")
     print(f"歪み係数: {distortion}")
 
-    saveFileName = str(int_cali_dir / f"Intrinsic_{target_camrra}.pickle")
+    saveFileName = str(int_cali_dir / f"Intrinsic_{target_camera}.pickle")
     saveCameraParameters(saveFileName,CamParams)
     # print(f"Camera parameters saved to {saveFileName} !")
 

@@ -2,7 +2,7 @@ import os
 import subprocess
 from pathlib import Path
 
-root_dir = Path(r"G:\gait_pattern\20241126_br9g\gopro")
+root_dir = Path(r"G:\gait_pattern\20241130_tkrzk\gopro")
 ori_mov_paths = list(root_dir.glob(f"*\*gait*.MP4"))
 print(f"ori_mov_paths: {ori_mov_paths}")
 
@@ -26,7 +26,7 @@ for i, ori_mov_path in enumerate(ori_mov_paths):
     after_images_place= f" --write_images {dir_name / f'{stem_name}_op'}"  #画像で出力
     images_format = f" --write_images_format jpg"  #画像出力のフォーマットを指定
     after_json_place= f" --write_json {dir_name / f'{stem_name}_op.json'}"  #各キーポイントの座標をjsonで出力
-    other_order= f" --number_people_max 2 --scale_number 2 --scale_gap 0.2"
+    other_order= f" --number_people_max 4 --scale_number 2 --scale_gap 0.2"
     cmd =program + pre_video_place + after_video_place + after_images_place + images_format + after_json_place + other_order
     ######OpenPoseへの命令作成終了
 
