@@ -31,6 +31,17 @@ def main():
     #カメラ間のフレーム差とおおよその歩行開始フレームを求める
     frame_diff = frame_ch_dfs[0].loc[0,"RiseHandFrame"] - frame_ch_dfs[1].loc[0,"RiseHandFrame"]
 
+    # 前までの処理で求めたカメラパラメータを読み込む
+    CamPramsPaths = [frame_ch_csvs[i].with_name(f"cameraIntrinsicsExtrinsics_soln0.pickle") for i in range(2)]
+    CamPrams_dict = {key:[] for key in camera_dict}
+    if CamPramsPaths[0].exists() and CamPramsPaths[1].exists():
+        for i, CamPramsPath in enumerate(CamPramsPaths):
+            camera_params_dict = m4.loadCameraParameters(CamPramsPath)
+            CamPrams_dict[target_cameras[i]] = camera_params_dict
+    else:
+        print(f"カメラパラメータファイルが見つかりません。")
+        sys.exit()
+
     # OpenPoseの結果を読み込んでCSVファイルに変換
     openpose_csv_dict = {key:[] for key in camera_dict}
     for src_dir in src_dirs:
@@ -43,7 +54,9 @@ def main():
     openpose_df_dict = {key:[] for key in camera_dict}
     for src_dir in src_dirs:
         for i, csv_file in enumerate(openpose_csv_dict[src_dir.stem]):
-            read_df = pd.read_csv(csv_file, index_col=0)
+            read_df_distort = pd.read_csv(csv_file, index_col=0)
+            # 検出した2次元座標に対して歪み補正
+            read_df = m4.undistordOpenposeData(read_df_distort, CamPrams_dict[src_dir.stem])
             if frame_diff >= 0 and src_dir.stem == "fr":
                 read_df = read_df.shift(periods=frame_diff)
                 walk_start_frame = frame_ch_dfs[0].loc[0,"StartWalkFrame"]
@@ -55,16 +68,7 @@ def main():
     keyoiints2d_dict = m4.adjustOpenposeDF(openpose_df_dict, walk_start_frame)
     frame_range = keyoiints2d_dict["fl"][0].index
 
-    # 前までの処理で求めたカメラパラメータを読み込む
-    CamPramsPaths = [frame_ch_csvs[i].with_name(f"cameraIntrinsicsExtrinsics_soln0.pickle") for i in range(2)]
-    CamPrams_dict = {key:[] for key in camera_dict}
-    if CamPramsPaths[0].exists() and CamPramsPaths[1].exists():
-        for i, CamPramsPath in enumerate(CamPramsPaths):
-            camera_params_dict = m4.loadCameraParameters(CamPramsPath)
-            CamPrams_dict[target_cameras[i]] = camera_params_dict
-    else:
-        print(f"カメラパラメータファイルが見つかりません。")
-        sys.exit()
+
 
     keypoints3d_dict = m4.cul_3DKeyPoints(keyoiints2d_dict, CamPrams_dict)
     for iPeople in range(len(keypoints3d_dict)):

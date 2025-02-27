@@ -122,6 +122,8 @@ def main():
     tvec = tvecs[1]
 
     print(f"解析対象：{target_facility}の{target_camera}カメラ")
+    print(f"姿勢ベクトル: {rvec}")
+    print(f"並進ベクトル: {tvec}")
     print(f"再投影誤差のRMS[ピクセル]: {reprojError}")
 
     if rets < 1 or np.max(rvec) == 0 or np.max(tvec) == 0:
