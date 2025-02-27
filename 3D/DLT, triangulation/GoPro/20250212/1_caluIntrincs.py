@@ -114,7 +114,7 @@ def main():
     ret, matrix, distortion, r_vecs, t_vecs = cv2.calibrateCamera(
         threedpoints, twodpoints, grayColor.shape[::-1], None, None)
 
-    CamParams = {'distortion':distortion,'intrinsicMat':matrix,'imageSize':imageSize}
+    CamParams = {'distortion':distortion,'intrinsicMat':matrix,'imageSize':imageSize, 'rms':ret}
     print(f"movie: {mov_dir}")
     print(f"再投影誤差のRMS[ピクセル]: {ret}")
     print(f"焦点距離(fx, fy): {matrix[0,0],matrix[1,1]}")

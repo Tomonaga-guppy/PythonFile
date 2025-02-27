@@ -31,9 +31,9 @@ ax.set_zlabel('Z')
 ax.set_title('3D Keypoint Animation')
 
 # 軸範囲 (データ全体から計算)
-x_cols = [f'{name}_X' for name in keypoint_names]
-y_cols = [f'{name}_Y' for name in keypoint_names]
-z_cols = [f'{name}_Z' for name in keypoint_names]
+x_cols = [f'{name}_Y' for name in keypoint_names]
+y_cols = [f'{name}_Z' for name in keypoint_names]
+z_cols = [f'{name}_X' for name in keypoint_names]
 
 x_min, x_max = df[x_cols].min().min(), df[x_cols].max().max()
 y_min, y_max = df[y_cols].min().min(), df[y_cols].max().max()
@@ -55,10 +55,10 @@ frame_text = ax.text2D(0.05, 0.95, '', transform=ax.transAxes)
 
 def update(frame_num):
     ax.cla()  # 現在の軸をクリア (軸ラベル、タイトル、範囲は再設定)
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_title('3D Keypoint Animation')
+    ax.set_xlabel('Y')
+    ax.set_ylabel('Z')
+    ax.set_zlabel('X')
+    ax.set_title(f'3D Keypoint Animation (Frame: {frame_num})')
     ax.set_xlim(-10000, 10000)
     ax.set_ylim(-10000, 10000)
     ax.set_zlim(-10000, 10000)
@@ -70,9 +70,9 @@ def update(frame_num):
     row = df[df['frame_num'] == frame_num].iloc[0]
 
     # X, Y, Z座標をリストに格納
-    x_coords = [row[f'{name}_X'] for name in keypoint_names]
-    y_coords = [row[f'{name}_Y'] for name in keypoint_names]
-    z_coords = [row[f'{name}_Z'] for name in keypoint_names]
+    x_coords = [row[f'{name}_Y'] for name in keypoint_names]
+    y_coords = [row[f'{name}_Z'] for name in keypoint_names]
+    z_coords = [row[f'{name}_X'] for name in keypoint_names]
 
     # 3D散布図としてプロット
     ax.scatter(x_coords, y_coords, z_coords, c='r', marker='o')
@@ -85,8 +85,9 @@ def update(frame_num):
 # --- アニメーション作成 ---
 
 ani = animation.FuncAnimation(
-    fig, update, frames=df['frame_num'].unique(), interval=interval, blit=False
-)
+    fig, update, frames=[1200], interval=interval, blit=False)
+    # fig, update, frames=df['frame_num'].unique(), interval=interval, blit=False)
+
 
 plt.tight_layout()
 plt.show()

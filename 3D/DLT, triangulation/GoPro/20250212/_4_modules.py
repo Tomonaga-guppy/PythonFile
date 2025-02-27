@@ -5,6 +5,7 @@ import csv
 from pathlib import Path
 from tqdm import tqdm
 import copy
+import cv2
 
 keypoints_name = ["Nose","Neck","RShoulder","RElbow","RWrist","LShoulder","LElbow",
                 "LWrist","MidHip","RHip","RKnee","RAnkle","LHip","LKnee","LAnkle",
@@ -73,8 +74,18 @@ def mkCSVOpenposeData(openpose_dir, overwrite=True):
 def mkFrameCheckCSV(frame_ch_csv):
     with open(frame_ch_csv, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["RiseHandFrame", "StartWalkFrame"])
+        writer.writerow(["RiseHandFrame", "StartWalkFrame", "0m"])
     print(f"{frame_ch_csv}を作成しました。")
+
+def undistordOpenposeData(openpose_df, CamPrams_dict):
+    print(f"openpose_df_dict:{openpose_df}")
+    print(f"CamPrams_dict:{CamPrams_dict}")
+
+    for keypoint_name in keypoints_name:
+        points = np.array([openpose_df[keypoint_name+"_x"], openpose_df[keypoint_name+"_y"]]).T
+        undistort_points =cv2.undistortPoints(points, CamPrams_dict["intrinsicMat"], CamPrams_dict["distortion"], P=CamPrams_dict["intrinsicMat"])
+        print(f"openpose_df[keypoint?name+'_x].shape:{openpose_df[keypoint_name+'_x'].shape}")
+    return openpose_df
 
 def adjustOpenposeDF(openpose_df_dict, walk_start_frame):
     # print(f"openpose_df_dict.items():{openpose_df_dict.items()}")
