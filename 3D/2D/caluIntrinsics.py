@@ -54,68 +54,60 @@ def main():
     imageScaleFactor = 1  # ここを変更すると小さく映っているチェッカーパターンの検出率が向上するみたい？
 
     check_frame_range = [[0, 1172], [2953, 4215], [5894, 7245]]  #カメラにおいておおよそ-2m, 0m, 2mの位置にいる画像のフレーム範囲
-    block_check_num = 10
-    check_frame_list = [np.linspace(check_frame_range[0], check_frame_range[1], block_check_num, dtype=int) for check_frame_range in check_frame_range]
+    check_frame_list = [np.linspace(check_frame_range[0], check_frame_range[1], 20, dtype=int) for check_frame_range in check_frame_range]
     # print(f"check_frame_list: {check_frame_list}")
 
-    #お試し 0m 位置の画像を半分削除
-    # for i in range(block_check_num//2):
-    #     check_frame_list[1] = np.delete(check_frame_list[1], i)
-    # print(f"check_frame_list: {check_frame_list}")
-
-    # check_num = 50  #検出を行う画像数
-    # check_frame_nums = np.linspace(0, all_frame_count, check_num, dtype=int)  #検出を行う画像のフレーム番号
+    check_num = 40  #検出を行う画像数
+    check_frame_nums = np.linspace(0, all_frame_count, check_num, dtype=int)  #検出を行う画像のフレーム番号
     used_frame_nums = 0  #パラメータ算出に使用した画像の枚数記録用
 
+    for i, frame_num in enumerate(check_frame_nums): #各フレーム数ごとに検出
+        print(f"{i+1}/{len(check_frame_nums)} {frame_num}frame  used for intrinsics calibration.")
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+        ret, frame = cap.read()
+        if not ret:
+            print(f"    frame_num: {frame_num} is not read")
+            continue
+        # image = cv2.imread(frame)
+        image = frame
+        imageSaveDir0 = int_cali_dir / f"Checkerboards_Origin_sg"
+        imageSaveDir0.mkdir(exist_ok=True)  #ない場合は作成
+        cv2.imwrite(str(imageSaveDir0 / f"{frame_num}.jpg"), image)  #元画像を保存
 
-    for iBlock, _ in enumerate(check_frame_list):
-        for iFrame, frame_num in enumerate(check_frame_list[iBlock]):
-            print(f"{iBlock+1}/{len(check_frame_list)} {iFrame+1}/{len(check_frame_list[iBlock])} {frame_num}frame  used for intrinsics calibration.")
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-            ret, frame = cap.read()
-            if not ret:
-                print(f"    frame_num: {frame_num} is not read")
-                continue
-            # image = cv2.imread(frame)
-            image = frame
-            imageSaveDir0 = int_cali_dir / f"Checkerboards_Origin_sg_2to2"
-            imageSaveDir0.mkdir(exist_ok=True)  #ない場合は作成
-            cv2.imwrite(str(imageSaveDir0 / f"{frame_num}.jpg"), image)  #元画像を保存
+        imageSize = np.reshape(np.asarray(np.shape(image)[0:2]).astype(np.float64),(2,1)) # This all to be able to copy camera param dictionary
+        grayColor = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-            imageSize = np.reshape(np.asarray(np.shape(image)[0:2]).astype(np.float64),(2,1)) # This all to be able to copy camera param dictionary
-            grayColor = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        ret,corners,meta = cv2.findChessboardCornersSBWithMeta(	grayColor, checker_pattern,
+                                                        cv2.CALIB_CB_EXHAUSTIVE +
+                                                        cv2.CALIB_CB_ACCURACY +
+                                                        cv2.CALIB_CB_LARGER)
 
-            ret,corners,meta = cv2.findChessboardCornersSBWithMeta(	grayColor, checker_pattern,
-                                                            cv2.CALIB_CB_EXHAUSTIVE +
-                                                            cv2.CALIB_CB_ACCURACY +
-                                                            cv2.CALIB_CB_LARGER)
+        # If desired number of corners can be detected then,
+        # refine the pixel coordinates and display
+        # them on the images of checker board
+        if ret == True:  #チェッカーパターンが検出された場合
+            # 3次元座標と2次元座標を保存
+            # 3D points real world coordinates
+            checker_pattern = meta.shape[::-1] # reverses order so width is first
+            objectp3d = generate3Dgrid(checker_pattern, squareSize)
+            threedpoints.append(objectp3d)
+            corners2 = corners/imageScaleFactor # Don't need subpixel refinement with findChessboardCornersSBWithMeta（戻り値がサブピクセル精度）
+            twodpoints.append(corners2)
 
-            # If desired number of corners can be detected then,
-            # refine the pixel coordinates and display
-            # them on the images of checker board
-            if ret == True:  #チェッカーパターンが検出された場合
-                # 3次元座標と2次元座標を保存
-                # 3D points real world coordinates
-                checker_pattern = meta.shape[::-1] # reverses order so width is first
-                objectp3d = generate3Dgrid(checker_pattern, squareSize)
-                threedpoints.append(objectp3d)
-                corners2 = corners/imageScaleFactor # Don't need subpixel refinement with findChessboardCornersSBWithMeta（戻り値がサブピクセル精度）
-                twodpoints.append(corners2)
+            # 検出したパターンを描画
+            image = cv2.drawChessboardCorners(image,
+                                                meta.shape[::-1],
+                                                corners2, ret)
 
-                # 検出したパターンを描画
-                image = cv2.drawChessboardCorners(image,
-                                                    meta.shape[::-1],
-                                                    corners2, ret)
+            # 検出した画像を保存
+            imageSaveDir = int_cali_dir / f"Checkerboards_Used_sg"
+            imageSaveDir.mkdir(exist_ok=True)  #ない場合は作成
+            cv2.imwrite(str(imageSaveDir / f"{frame_num}.jpg"), image)
 
-                # 検出した画像を保存
-                imageSaveDir = int_cali_dir / f"Checkerboards_Used_sg_2to2"
-                imageSaveDir.mkdir(exist_ok=True)  #ない場合は作成
-                cv2.imwrite(str(imageSaveDir / f"{frame_num}.jpg"), image)
+            used_frame_nums += 1
 
-                used_frame_nums += 1
-
-            if ret == False:
-                print("    Couldn't find checkerboard in " + str(frame_num))
+        if ret == False:
+            print("    Couldn't find checkerboard in " + str(frame_num))
 
     cap.release()
     print(f"\nCalculating camera parameters using {used_frame_nums} images")
@@ -130,7 +122,7 @@ def main():
     print(f"光学中心(cx, cy): {matrix[0,2],matrix[1,2]}")
     print(f"歪み係数: {distortion}")
 
-    saveFileName = str(int_cali_dir / f"Intrinsic_sg_2to2.pickle")
+    saveFileName = str(int_cali_dir / f"Intrinsic_sg.pickle")
     saveCameraParameters(saveFileName,CamParams)
     # print(f"Camera parameters saved to {saveFileName} !")
 
