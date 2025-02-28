@@ -13,6 +13,8 @@ keypoint_names = ["Nose","Neck","RShoulder","RElbow","RWrist","LShoulder","LElbo
 interval = 100  # アニメーションの更新間隔 (ミリ秒)
 
 # --- データ読み込みと前処理 ---
+
+
 df = pd.read_csv(csv_file)
 print(f"df:{df}")
 
@@ -74,10 +76,6 @@ def update(frame_num):
 
     # 3D散布図としてプロット
     ax.scatter(x_coords, y_coords, z_coords, c='r', marker='o')
-
-    # キーポイント名を各点に追加
-    for i, name in enumerate(keypoint_names):
-        ax.text(x_coords[i], y_coords[i], z_coords[i], name, fontsize=8)
 
     # フレーム数表示を更新
     frame_text.set_text(f'Frame: {frame_num}')
