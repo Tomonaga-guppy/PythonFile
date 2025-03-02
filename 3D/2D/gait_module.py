@@ -32,14 +32,14 @@ def mkCSVOpenposeData(openpose_dir, start_frame, overwrite=True):
             json_data = json.load(f_json)
         people_num.append(len(json_data["people"]))
     all_people_num = np.unique(people_num).max()
-    print(f"all_people_num:{all_people_num}")
+    # print(f"all_people_num:{all_people_num}")
 
     # すでにcsvファイルがあれば処理を終了する
     output_csvs = [openpose_dir.with_name("keypoints2d_"  + condition  + f"_{i}.csv") for i in range(all_people_num)]
     if overwrite:
         for output_csv in output_csvs:
             if output_csv.exists():
-                print(f"csvファイル{output_csvs}を上書きします。")
+                # print(f"csvファイル{output_csvs}を上書きします。")
                 output_csv.unlink()
     elif overwrite == False and output_csvs[0].exists() and output_csvs[1].exists():
         print(f"以前の{output_csvs}を再利用します。")
@@ -72,7 +72,7 @@ def mkCSVOpenposeData(openpose_dir, start_frame, overwrite=True):
                 pose_keypoints_2d_str.insert(0, str(frame))
                 writer.writerow(pose_keypoints_2d_str)
     print(f"OpenPose結果をcsvファイルに保存しました。")
-    print(f"csvファイル:{output_csvs}")
+    # print(f"csvファイル:{output_csvs}")
     # print(f"all_people_data:{len(all_people_data)}")
     return output_csvs
 
@@ -107,12 +107,12 @@ def mkFrameCheckCSV(frame_ch_csv, condition_list):
     for c in condition_list:
         for check in ["Start", "End"]:
             header.append(f"{c}_{check}")
-    print(f"header:{header}")
+    # print(f"header:{header}")
     with open(frame_ch_csv, "w", newline="") as f:
         writer = csv.writer(f)
         # writer.writerow(condition_list)
         writer.writerow(header)
-    print(f"{frame_ch_csv}を作成しました。")
+    # print(f"{frame_ch_csv}を作成しました。")
 
 def convert_nan(df, threshhold):
     for name in keypoints_name:
@@ -283,3 +283,112 @@ def animate_keypoints(data_dict, condition, save_path, all_check):
     ani.save(save_path, writer="ffmpeg", fps=60)  # アニメーションを保存
     # plt.show()
     plt.close(fig)  # プロットを閉じる
+
+def calc_dist_pel2heel(df):
+    dict_dist_pel2heel = {}
+    for iPeople in range(len(df)):
+        iPeople = str(iPeople)
+        # かかとと骨盤の座標を取得
+        RHeel_x = df[iPeople].loc[:, "RHeel_x"]
+        LHeel_x = df[iPeople].loc[:, "LHeel_x"]
+        MidHip_x = df[iPeople].loc[:, "MidHip_x"]
+        dist_Rx = RHeel_x - MidHip_x
+        dist_Lx = LHeel_x - MidHip_x
+        dict_dist_pel2heel[iPeople] = {"dist_Rx": dist_Rx, "dist_Lx": dist_Lx}
+    return dict_dist_pel2heel
+
+def find_initial_contact(dict_dist_pel2heel, condition, root_dir):
+    ic_frame_dict = {}
+    for iPeople in range(len(dict_dist_pel2heel)):
+        iPeople = str(iPeople)
+        dist_Rx = dict_dist_pel2heel[iPeople]["dist_Rx"].copy()
+        dist_Lx = dict_dist_pel2heel[iPeople]["dist_Lx"].copy()
+        start_frame = dist_Rx.index[0]
+
+        # かかとが地面に接地するタイミングを初期接地として記録
+        for dist_df, side in zip([dist_Rx, dist_Lx], ["R", "L"]):
+            dist_df_asc = dist_df.sort_values()
+            ic_check_list = dist_df_asc.index[:120].values
+            filler_list = []
+            skip_list = []
+            for check_frame in ic_check_list:
+                if check_frame in skip_list:
+                    continue
+                filler_list.append(check_frame)
+                [skip_list.append(sk_frame) for sk_frame in range(check_frame-30, check_frame+30)]
+            filler_list.sort()
+
+            if iPeople not in ic_frame_dict:
+                ic_frame_dict[iPeople] = {}
+            ic_frame_dict[iPeople][f"IC_{side}"] = filler_list
+            # print(f"filler_list_{side}:{filler_list}")
+            kari = [icframe - start_frame for icframe in filler_list]
+            # print(f"kari_{side}:{kari}")
+
+    # print(f"ic_frame_dict:{ic_frame_dict}")
+
+    for iPeople in range(len(dict_dist_pel2heel)):
+        iPeople = str(iPeople)
+        dist_Rx = dict_dist_pel2heel[iPeople]["dist_Rx"].copy()
+        dist_Lx = dict_dist_pel2heel[iPeople]["dist_Lx"].copy()
+        plt.plot(dist_Rx.reset_index(drop=True), label="R")
+        plt.plot(dist_Lx.reset_index(drop=True), label="L")
+        plt.legend()
+        save_path = root_dir / f"{condition}_{iPeople}_IC.png"
+        plt.savefig(save_path)
+        # plt.show()
+        plt.cla()
+
+    return ic_frame_dict
+
+def calc_stride_time(ic_frame_list, side, fps):
+    list = ic_frame_list[side]
+    #リスト内の要素間の差を計算
+    stride_time_frame = [list[i+1] - list[i] for i in range(len(list)-1)]
+    avg_stride_frame = np.mean(stride_time_frame)
+    avg_stride_time = avg_stride_frame / fps
+    return avg_stride_time
+
+def calc_walk_params(stride_time, pixpermm, ic_frame_dict, df_ft):
+    Rcycle = ic_frame_dict["IC_R"]
+    Lcycle = ic_frame_dict["IC_L"]
+    Rcycle_block = [[Rcycle[i], Rcycle[i+1]] for i in range(len(Rcycle)-1)]
+    Lcycle_block = [[Lcycle[i], Lcycle[i+1]] for i in range(len(Lcycle)-1)]
+    if Rcycle_block[0][0] > Lcycle_block[0][0]:
+        print("左足から接地開始")
+        start_ic_left = True
+    else:
+        start_ic_left = False
+        print("右足から接地開始")
+
+    walk_speed_list = []
+    stride_length_list = []
+    step_length_list = []
+    for i, block in enumerate(Lcycle_block):
+        mid_hip_start_x, mid_hip_start_y = df_ft.loc[block[0], "MidHip_x"], df_ft.loc[block[0], "MidHip_y"]
+        mid_hip_end_x, mid_hip_end_y = df_ft.loc[block[1], "MidHip_x"], df_ft.loc[block[1], "MidHip_y"]
+        Lheel_start_x, Lheel_start_y = df_ft.loc[block[0], "LHeel_x"], df_ft.loc[block[0], "LHeel_y"]
+        Lheel_end_x, Lheel_end_y = df_ft.loc[block[1], "LHeel_x"], df_ft.loc[block[1], "LHeel_y"]
+        walk_speed = (np.sqrt((mid_hip_end_x - mid_hip_start_x)**2 + (mid_hip_end_y - mid_hip_start_y)**2) * pixpermm / 1000) / stride_time #どちらもミリ単位
+        stride_length = np.sqrt((Lheel_end_x - Lheel_start_x)**2 + (Lheel_end_y - Lheel_start_y)**2) * pixpermm / 1000
+        if start_ic_left:  #左足から接地開始
+            if i>=len(Rcycle_block):
+                # print("右足のサイクルがなくなったので計算を終了します。")
+                continue
+            else:
+                ic_right_frame = Rcycle_block[i][0]
+                step_length = np.sqrt((df_ft.loc[ic_right_frame, "RHeel_x"] - df_ft.loc[block[0], "LHeel_x"])**2 + (df_ft.loc[ic_right_frame, "RHeel_y"] - df_ft.loc[block[0], "LHeel_y"])**2) * pixpermm / 1000
+        else:  #右足から接地開始
+            if (i+1)>=len(Rcycle_block):
+                # print("左足のサイクルがなくなったので計算を終了します。")
+                continue
+            else:
+                ic_right_frame = Rcycle_block[i+1][0]
+                step_length = np.sqrt((df_ft.loc[ic_right_frame, "RHeel_x"] - df_ft.loc[block[0], "LHeel_x"])**2 + (df_ft.loc[ic_right_frame, "RHeel_y"] - df_ft.loc[block[0], "LHeel_y"])**2) * pixpermm / 1000
+        walk_speed_list.append(walk_speed)
+        stride_length_list.append(stride_length)
+        step_length_list.append(step_length)
+    walk_speed = np.mean(walk_speed_list)
+    stride_length = np.mean(stride_length_list)
+    step_length = np.mean(step_length_list)
+    return walk_speed, stride_length, step_length
