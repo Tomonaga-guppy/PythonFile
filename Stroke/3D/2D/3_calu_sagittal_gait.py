@@ -7,54 +7,75 @@ import calu_saggital_gait_module as sggait
 import sys
 
 root_dir = Path(r"G:\gait_pattern\20241114_ota_test\gopro\sagi")
-condition_list = ["sub0_abngait", "sub0_asgait_1", "sub0_asgait_2"]
-# condition_list = ["sub0_asgait_1"]
-# condition_list = ["sub0_ngait"]
+# condition_list = ["sub0_abngait", "sub0_asgait_2"]
+# condition_list = ["sub0_abngait"]
+condition_list = ["sub0_asgait_2"]
 
 def main():
-    #各条件ごとに歩行開始目安のフレームを目視で確認してcsvファイルに保存
-    frame_ch_csv = root_dir / f"FrameCheck.csv"
-    if not frame_ch_csv.exists():
-        sggait.mkFrameCheckCSV(frame_ch_csv, condition_list)
+    # 動画を切り出す際に行っているはずなので削除
+    # #各条件ごとに歩行開始目安のフレームを目視で確認してcsvファイルに保存
+    # frame_ch_csv = root_dir / f"FrameCheck.csv"
+    # if not frame_ch_csv.exists():
+    #     sggait.mkFrameCheckCSV(frame_ch_csv, condition_list)
 
     for condition in condition_list:
         print(f"condition = {condition}")
-        # 歪みを補正するためのカメラパラメータを読み込む
-        camParames_path = root_dir.parent.parent.parent / "int_cali" / "ota" / "Intrinsic_sg.pickle"
-        CameraParams_dict = sggait.loadCameraParameters(camParames_path)
+        #歩行開始目安のフレームを取得
+        frame_ch_csv = root_dir / "FrameCheck.csv"
+        frame_check_df = pd.read_csv(frame_ch_csv)
+        start_frame = frame_check_df[f"{condition}_Start"].values[0]
         #2d上でのキーポイントを取得"
-        openpose_dir = root_dir / (condition + "_op.json")
-        csv_files = sggait.mkCSVOpenposeData(openpose_dir, overwrite=True)
+        openpose_dir = root_dir / (condition + "_udCropped_op.json")
+        csv_files = sggait.mkCSVOpenposeData(openpose_dir, start_frame, overwrite=True)
+        # OpenPose処理をした開始フレームを取得
+        frame_ch_csv = root_dir / "FrameCheck.csv"
+        frame_check_df = pd.read_csv(frame_ch_csv)
+        start_frame = frame_check_df[f"{condition}_Start"].values[0]
+        end_frame = frame_check_df[f"{condition}_End"].values[0]
+
+        print(f"csv_files = {csv_files}")
+
 
         openpose_df_dict = {key:[] for key in range(len(csv_files))}
         for iPeople, csv_file in enumerate(csv_files):
-            read_df_distort = pd.read_csv(csv_file, index_col=0)
-            read_df = sggait.undistordOpenposeData(read_df_distort, CameraParams_dict)
+            read_df = pd.read_csv(csv_file, index_col=0)
             read_df = sggait.fillindex(read_df)
-            openpose_df_dict[iPeople] = read_df
+            openpose_df_dict[iPeople] = read_df.loc[start_frame:end_frame]
 
         """
-        openpose_df_dict = {0:                 Nose_x       Nose_y   Nose_p       Neck_x       Neck_y    Neck_p  RShoulder_x  RShoulder_y  RShoulder_p  ...    RBigToe_x    RBigToe_y  RBigToe_p  RSmallToe_x  RSmallToe_y  RSmallToe_p      RHeel_x      RHeel_y   RHeel_p
-        frame_num                                                                                                                ...
-        33         -916.878974  -538.951577  0.00000  1189.444310  1171.589859  0.175547  1194.981554  1171.577124     0.151104  ...  1177.883606  1289.556565   0.196314  1183.616948  1295.080439     0.171203  1177.752887  1289.536505  0.132779
-        ...                ...          ...      ...          ...          ...       ...          ...          ...          ...  ...          ...          ...        ...          ...          ...          ...          ...          ...       ...
-        1753       -916.878974  -538.951577  0.00000  1189.635504  1159.922769  0.222892  1195.383603  1159.790705     0.208536  ...  1177.815929  1295.118300   0.223432  1183.586822  1295.150446     0.198983  1171.973680  1295.176230  0.168741
-        [1721 rows x 75 columns], 1:                 Nose_x       Nose_y    Nose_p       Neck_x       Neck_y    Neck_p  RShoulder_x  RShoulder_y  RShoulder_p  ...    RBigToe_x    RBigToe_y  RBigToe_p  RSmallToe_x  RSmallToe_y  RSmallToe_p      RHeel_x        RHeel_y   RHeel_p
-        frame_num                                                                                                                 ...
-        157        -916.878974  -538.951577  0.000000  1189.484033  1177.483313  0.207803  1195.071455  1177.450401     0.185503  ...  1165.919190  1295.304196   0.219265  1165.929265  1295.344216     0.189380  1165.929252  1295.314204  0.164109
-        ...                ...          ...       ...          ...          ...       ...          ...          ...          ...  ...          ...          ...        ...          ...          ...          ...          ...          ...       ...
-        1749       -916.878974  -538.951577  0.000000  -916.878974  -538.951577  0.000000  -916.878974  -538.951577     0.000000  ...  1590.591011  1295.656777   0.191401  1590.610857  1295.477066     0.192436  1625.872953  1295.458659  0.192937
-        [1593 rows x 75 columns]}
+        openpose_df_dict = {0:                 Nose_x      Nose_y    Nose_p       Neck_x      Neck_y    Neck_p  RShoulder_x  RShoulder_y  RShoulder_p  ...    RBigToe_x    RBigToe_y  RBigToe_p  RSmallToe_x  RSmallToe_y  RSmallToe_p      RHeel_x
+        RHeel_y   RHeel_p
+        frame_num                                                                                                               ...
+        1118       2665.214118  753.510564  0.893658  2778.941622  817.995691  0.844580  2749.118959   818.192262     0.848053  ...  2679.672847  1594.613102   0.900727  2679.432080  1576.886164     0.816999  2775.668392  1547.994006  0.751330
+        ...                ...         ...       ...          ...         ...       ...          ...          ...          ...  ...          ...          ...        ...          ...          ...          ...          ...          ...       ...
+        1397        809.060745  728.311302  0.877542   913.061947  752.938364  0.791799   925.059367   753.035688     0.711717  ...   934.296681  1536.595916   0.765661   952.717256  1536.127353     0.694959  1018.697317  1565.385644  0.769688
+        [280 rows x 75 columns], 1:                  Nose_x       Nose_y    Nose_p       Neck_x       Neck_y    Neck_p  RShoulder_x  RShoulder_y  RShoulder_p  ...    RBigToe_x    RBigToe_y  RBigToe_p  RSmallToe_x  RSmallToe_y  RSmallToe_p      RHeel_x
+        RHeel_y   RHeel_p
+        frame_num                                                                                                                  ...
+        1118       1.182388e+03  1166.856617  0.052723  1188.314411  1172.961306  0.195757  1188.657481  1172.860319     0.167680  ...  1176.309025  1291.229718   0.205865  1176.298257  1296.804564     0.180736  1176.248332  1291.260055  0.144976
+        ...                 ...          ...       ...          ...          ...       ...          ...          ...          ...  ...          ...          ...        ...          ...          ...          ...          ...          ...       ...
+        1397       0.000000e+00     0.000000  0.000000     0.000000     0.000000  0.000000     0.000000     0.000000     0.000000  ...     0.000000     0.000000   0.000000     0.000000     0.000000     0.000000     0.000000     0.000000  0.000000
+        [280 rows x 75 columns]}
         """
 
-        walk_start_frame = sggait.get_walk_start_frame(frame_ch_csv, condition)
-        #歩行開始フレームを取得
-        frame_adjust_df = sggait.adjust_frame(openpose_df_dict)
-        #矢状面2d用の処理
-        openpose_df_spline = sggait.spline_interpolation(openpose_df_dict)
+        #スプライン補間
+        openpose_df_post_dict = sggait.splineAndFillter(openpose_df_dict, sampling_freq=60, order=4, cutoff_freq=6)
+        #openpose_dictをpickleで保存
+        openpose_df_dict_path = root_dir / f"{condition}_2d_dict.pickle"
+        openpose_df_post_dict_path = root_dir / f"{condition}_2d_post_dict.pickle"
+        sggait.save_as_pickle(openpose_df_dict, openpose_df_dict_path)
+        sggait.save_as_pickle(openpose_df_post_dict, openpose_df_post_dict_path)
+
+        openpose_df_dict_chSw = sggait.checkSwithing(openpose_df_dict)
+        openpose_df_dict_chSw_path = root_dir / f"{condition}_2d_dict_chSw.pickle"
+        sggait.save_as_pickle(openpose_df_dict_chSw, openpose_df_dict_chSw_path)
 
 
 
+
+
+        continue
+        sys.exit()
 
         mid_hip_sagttal_2d = sggait.cubic_spline_interpolation(keypoints_sagittal_2d[:, 8, :], sagi_frame_2d) #[frame, 2]
         neck_sagittal_2d = sggait.cubic_spline_interpolation(keypoints_sagittal_2d[:, 1, :], sagi_frame_2d)
