@@ -29,8 +29,10 @@ m1m0 = np.linalg.norm(m1 - m0)
 p1m0 = np.linalg.norm(p1 - m0)
 mmperpix = 2000 / (m1m0 + p1m0)
 print(f"mmperpix: {mmperpix}")
-pickle_path = mov_path.with_name("mmperpix.pickle")
+
+mesure_param_dict = {"m1": m1, "m0": m0, "p1": p1, "mmperpix": mmperpix}
+pickle_path = mov_path.with_name("mesure_params.pickle")
 with open(pickle_path, "wb") as f:
-    pickle.dump(mmperpix, f)
+    pickle.dump(mesure_param_dict, f)
 
 
