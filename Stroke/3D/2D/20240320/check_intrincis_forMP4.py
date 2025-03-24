@@ -5,35 +5,44 @@ from tqdm.auto import tqdm
 from pathlib import Path
 import numpy as np
 import pandas as pd
-import calu_saggital_gait_module as sggait
+import gait_module as sggait
 import sys
 
 # 複数画像から内部パラメータを求める
 root_dir = Path(r"G:\gait_pattern")
 
-target_facility = "ota"  #解析対象施設：tkrzk_9g か ota
+##################### 毎回チェック！
+# target_facility = "ota"  #解析対象施設：tkrzk_9g か ota
+target_facility = "ota_20250228"   #このプログラム内ではどのキャリブレーション結果を使うか
+#####################
+
+mov = "20250228_ota"
+date = "20250221"
+sub = "sub0"
 
 int_cali_dir = root_dir / "int_cali" / target_facility  #内部キャリブレーション結果を保存するフォルダ
-pickle_path = int_cali_dir/f"Intrinsic_sg.pickle"
+pickle_path = int_cali_dir/f"Intrinsic_sg_custom.pickle"
 with open(pickle_path, "rb") as f:
     CameraParams = pickle.load(f)
-condition_list= ["sub0_abngait", "sub0_asgait_2"]
+condition_list= ["thera0-3", "thera1-1", "thera2-1"]
 
 for condition in condition_list:
     # mp4_path = int_cali_dir/f"20250227_ota_test/gopro/sa/gi/{condition}.MP4"
-    mp4_path = root_dir/ "20241114_ota_test" / "gopro" / "sagi" /f"{condition}.MP4"
+    sub_dir = root_dir/ mov / "data" / date / sub
+    mp4_dir = sub_dir / condition / "sagi"
+    print(f"mp4_dir: {mp4_dir}")
+    mp4_path = list(mp4_dir.glob("*.MP4"))[0]
     # print(f"pickle_path: {pickle_path}")
     # print(f"rms: {CameraParams['rms']}")
     # print(f"焦点距離(fx, fy): {CameraParams['intrinsicMat'][0,0],CameraParams['intrinsicMat'][1,1]}")
     # print(f"光学中心(cx, cy): {CameraParams['intrinsicMat'][0,2],CameraParams['intrinsicMat'][1,2]}")
     # print(f"歪み係数: {CameraParams['distortion']}")
 
-
-
     #FrameCheck.csvを読み込み
-    frame_check_csv_path = mp4_path.with_name(f"FrameCheck.csv")
+    frame_check_csv_path = (sub_dir / condition).with_name(f"FrameCheck.csv")
     if not frame_check_csv_path.exists():
         print(f"FrameCheck.csvが見つかりません。")
+        #これ実行されると書いていたフレームとか消されちゃうので注意！（要修正）
         sggait.mkFrameCheckCSV(frame_check_csv_path, condition_list)
         sys.exit()
 
@@ -43,7 +52,7 @@ for condition in condition_list:
     print(f"start_frame: {start_frame}")
 
     cap = cv2.VideoCapture(str(mp4_path))
-    ud_mov_path =mp4_path.with_name(mp4_path.stem+"_udCropped.MP4")
+    ud_mov_path =mp4_path.with_name(f"Undistort_Custom.MP4")
     fps = cap.get(cv2.CAP_PROP_FPS)
     all_frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
