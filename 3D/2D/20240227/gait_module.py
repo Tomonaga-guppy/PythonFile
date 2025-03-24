@@ -299,11 +299,13 @@ def calc_dist_pel2heel(df):
 
 def find_initial_contact(dict_dist_pel2heel, condition, root_dir):
     ic_frame_dict = {}
+    to_frame_dict = {}
     for iPeople in range(len(dict_dist_pel2heel)):
         iPeople = str(iPeople)
         dist_Rx = dict_dist_pel2heel[iPeople]["dist_Rx"].copy()
         dist_Lx = dict_dist_pel2heel[iPeople]["dist_Lx"].copy()
         start_frame = dist_Rx.index[0]
+        print(f"start_frame:{start_frame}")
 
         # かかとが地面に接地するタイミングを初期接地として記録
         for dist_df, side in zip([dist_Rx, dist_Lx], ["R", "L"]):
@@ -318,11 +320,32 @@ def find_initial_contact(dict_dist_pel2heel, condition, root_dir):
                 [skip_list.append(sk_frame) for sk_frame in range(check_frame-30, check_frame+30)]
             filler_list.sort()
 
+            #ここけす！
+            # filler_list = [icframe - start_frame for icframe in filler_list]
+
             if iPeople not in ic_frame_dict:
                 ic_frame_dict[iPeople] = {}
             ic_frame_dict[iPeople][f"IC_{side}"] = filler_list
             # print(f"filler_list_{side}:{filler_list}")
-            kari = [icframe - start_frame for icframe in filler_list]
+
+            #つま先接地のタイミングを記録
+            dist_df_desc = dist_df.sort_values(ascending=False)
+            to_check_list = dist_df_desc.index[:120].values
+            filler_list_to = []
+            skip_list_to = []
+            for check_frame in to_check_list:
+                if check_frame in skip_list_to:
+                    continue
+                filler_list_to.append(check_frame)
+                [skip_list_to.append(sk_frame) for sk_frame in range(check_frame-30, check_frame+30)]
+            filler_list_to.sort()
+
+            #ここけす！
+            # filler_list_to = [icframe - start_frame for icframe in filler_list_to]
+
+            if iPeople not in to_frame_dict:
+                to_frame_dict[iPeople] = {}
+            to_frame_dict[iPeople][f"TO_{side}"] = filler_list_to
             # print(f"kari_{side}:{kari}")
 
     # print(f"ic_frame_dict:{ic_frame_dict}")
@@ -335,11 +358,12 @@ def find_initial_contact(dict_dist_pel2heel, condition, root_dir):
         plt.plot(dist_Lx.reset_index(drop=True), label="L")
         plt.legend()
         save_path = root_dir / f"{condition}_{iPeople}_IC.png"
+        plt.title(f"{condition}_{iPeople}")
         plt.savefig(save_path)
         # plt.show()
         plt.cla()
 
-    return ic_frame_dict
+    return ic_frame_dict, to_frame_dict
 
 def calc_stride_time(ic_frame_list, side, fps):
     list = ic_frame_list[side]
@@ -362,33 +386,127 @@ def calc_walk_params(stride_time, pixpermm, ic_frame_dict, df_ft):
         print("右足から接地開始")
 
     walk_speed_list = []
-    stride_length_list = []
-    step_length_list = []
+    stride_length_list_l = []
+    step_length_list_l = []
+    stride_length_list_l = []
+    step_length_list_r = []
+
+    #左足の歩行パラメータを計算
     for i, block in enumerate(Lcycle_block):
         mid_hip_start_x, mid_hip_start_y = df_ft.loc[block[0], "MidHip_x"], df_ft.loc[block[0], "MidHip_y"]
         mid_hip_end_x, mid_hip_end_y = df_ft.loc[block[1], "MidHip_x"], df_ft.loc[block[1], "MidHip_y"]
         Lheel_start_x, Lheel_start_y = df_ft.loc[block[0], "LHeel_x"], df_ft.loc[block[0], "LHeel_y"]
         Lheel_end_x, Lheel_end_y = df_ft.loc[block[1], "LHeel_x"], df_ft.loc[block[1], "LHeel_y"]
         walk_speed = (np.sqrt((mid_hip_end_x - mid_hip_start_x)**2 + (mid_hip_end_y - mid_hip_start_y)**2) * pixpermm / 1000) / stride_time #どちらもミリ単位
-        stride_length = np.sqrt((Lheel_end_x - Lheel_start_x)**2 + (Lheel_end_y - Lheel_start_y)**2) * pixpermm / 1000
+        stride_length_l = np.sqrt((Lheel_end_x - Lheel_start_x)**2 + (Lheel_end_y - Lheel_start_y)**2) * pixpermm / 1000
         if start_ic_left:  #左足から接地開始
-            if i>=len(Rcycle_block):
-                # print("右足のサイクルがなくなったので計算を終了します。")
-                continue
-            else:
+            try:
                 ic_right_frame = Rcycle_block[i][0]
-                step_length = np.sqrt((df_ft.loc[ic_right_frame, "RHeel_x"] - df_ft.loc[block[0], "LHeel_x"])**2 + (df_ft.loc[ic_right_frame, "RHeel_y"] - df_ft.loc[block[0], "LHeel_y"])**2) * pixpermm / 1000
-        else:  #右足から接地開始
-            if (i+1)>=len(Rcycle_block):
-                # print("左足のサイクルがなくなったので計算を終了します。")
+            except:
+                print("右足のサイクルがなくなったので計算を終了します。")
                 continue
-            else:
-                ic_right_frame = Rcycle_block[i+1][0]
-                step_length = np.sqrt((df_ft.loc[ic_right_frame, "RHeel_x"] - df_ft.loc[block[0], "LHeel_x"])**2 + (df_ft.loc[ic_right_frame, "RHeel_y"] - df_ft.loc[block[0], "LHeel_y"])**2) * pixpermm / 1000
+        else:  #右足から接地開始
+            try:
+                ic_right_frame = Rcycle_block[i][1]
+            except:
+                print("左足のサイクルがなくなったので計算を終了します。")
+                continue
+        # ステップの計算が逆
+        step_length_l = np.sqrt((df_ft.loc[ic_right_frame, "RHeel_x"] - df_ft.loc[block[0], "LHeel_x"])**2 + (df_ft.loc[ic_right_frame, "RHeel_y"] - df_ft.loc[block[0], "LHeel_y"])**2) * pixpermm / 1000
         walk_speed_list.append(walk_speed)
-        stride_length_list.append(stride_length)
-        step_length_list.append(step_length)
+        stride_length_list_l.append(stride_length_l)
+        step_length_list_l.append(step_length_l)
+    print(f"Lcycle_block:{Lcycle_block}")
+    print(f"Rcycle_block:{Rcycle_block}")
+    #右足の歩行パラメータを計算
+    for i, block in enumerate(Rcycle_block):
+        Rheel_start_x, Rheel_start_y = df_ft.loc[block[0], "RHeel_x"], df_ft.loc[block[0], "RHeel_y"]
+        Rheel_end_x, Rheel_end_y = df_ft.loc[block[1], "RHeel_x"], df_ft.loc[block[1], "RHeel_y"]
+        stride_length_r = np.sqrt((Rheel_end_x - Rheel_start_x)**2 + (Rheel_end_y - Rheel_start_y)**2) * pixpermm / 1000
+        if start_ic_left:  #左足から接地開始
+            try:
+                ic_left_frame = Lcycle_block[i][1]
+            except:
+                print("左足のサイクルがなくなったので計算を終了します。1")
+                continue
+        else:  #右足から接地開始
+            try:
+                ic_left_frame = Lcycle_block[i][0]
+            except:
+                print("左足のサイクルがなくなったので計算を終了します。2")
+                continue
+        # ステップの計算が逆
+        step_length_r = np.sqrt((df_ft.loc[ic_left_frame, "LHeel_x"] - df_ft.loc[block[0], "RHeel_x"])**2 + (df_ft.loc[ic_left_frame, "LHeel_y"] - df_ft.loc[block[0], "RHeel_y"])**2) * pixpermm / 1000
+        step_length_list_r.append(step_length_r)
+
     walk_speed = np.mean(walk_speed_list)
-    stride_length = np.mean(stride_length_list)
-    step_length = np.mean(step_length_list)
-    return walk_speed, stride_length, step_length
+    stride_length_l = np.mean(stride_length_list_l)
+    step_length_l = np.mean(step_length_list_r)  #ステップの計算が逆なので一時的に反対に入れる（要修正）
+    stride_length_r = np.mean(stride_length_r)
+    step_length_r = np.mean(step_length_list_l)  #ステップの計算が逆なので一時的に反対に入れる（要修正）
+    return walk_speed, stride_length_l, stride_length_r, step_length_l, step_length_r
+
+def calc_stance_phase_ratio(ic_frame_dict, to_frame_dict):
+    stance_phase_ratio_list_r = []
+    stance_phase_ratio_list_l = []
+    for side in ("R", "L"):
+        ic_list = ic_frame_dict[f"IC_{side}"]
+        to_list = to_frame_dict[f"TO_{side}"]
+        print(f"ic_list:{ic_list}")
+        print(f"to_list:{to_list}")
+        loop_num = min(len(ic_list), len(to_list))
+        cycle_frame = np.mean([ic_list[i+1] - ic_list[i] for i in range(loop_num-1)])
+        if ic_list[0] > to_list[0]:
+            stance_phase_frame = np.mean([to_list[i+1] - ic_list[i] for i in range(loop_num-1)])
+        else:
+            stance_phase_frame = np.mean([to_list[i] - ic_list[i] for i in range(loop_num-1)])
+        stance_phase_ratio = (stance_phase_frame / cycle_frame * 100)
+        if side == "R":
+            stance_phase_ratio_list_r.append(stance_phase_ratio)
+        else:
+            stance_phase_ratio_list_l.append(stance_phase_ratio)
+    stance_phase_ratio_r = np.mean(stance_phase_ratio_list_r)
+    stance_phase_ratio_l = np.mean(stance_phase_ratio_list_l)
+    return stance_phase_ratio_r, stance_phase_ratio_l
+
+
+def calGaitPhase(ic_frame_dict_ori, to_frame_dict_ori):
+    phase_dict = {key : [] for key in ic_frame_dict_ori.keys()}
+    for iPeople in range(len(ic_frame_dict_ori)):
+        ic_frame_dict = ic_frame_dict_ori[f"{iPeople}"]
+        to_frame_dict = to_frame_dict_ori[f"{iPeople}"]
+        print(f"ic_frame_dict:{ic_frame_dict}")
+        print(f"to_frame_dict:{to_frame_dict}")
+        phase_frame_list = []
+        for i in range(len(ic_frame_dict["IC_L"])):
+            try:
+                IC_l_side_frame = ic_frame_dict["IC_L"][i]
+                TO_r_side_frame = [to_frame for to_frame in to_frame_dict["TO_R"] if to_frame > IC_l_side_frame][0]
+                IC_r_side_frame = [ic_frame for ic_frame in ic_frame_dict["IC_R"] if ic_frame > TO_r_side_frame][0]
+                To_l_side_frame = [to_frame for to_frame in to_frame_dict["TO_L"] if to_frame > IC_r_side_frame][0]
+                Next_IC_l_side_frame = [ic_frame for ic_frame in ic_frame_dict["IC_L"] if ic_frame > To_l_side_frame][0]
+
+                if Next_IC_l_side_frame > [ic_frame for ic_frame in ic_frame_dict["IC_L"] if ic_frame > IC_l_side_frame][0]:
+                    continue
+                # phase_frame_list.append([IC_l_side_frame, TO_r_side_frame, IC_r_side_frame, To_l_side_frame, Next_IC_l_side_frame])
+                phase_frame_list.append([IC_l_side_frame, TO_r_side_frame, To_l_side_frame, Next_IC_l_side_frame])
+            except:
+                continue
+        print(f"phase_frame_list:{phase_frame_list}")
+        phase_dict[f"{iPeople}"] = phase_frame_list
+    return phase_dict
+
+def calGaitPhasePercent(phase_frame_list_dict):
+    phase_percent_list_dict = {key : [] for key in phase_frame_list_dict.keys()}
+    for iPeople in range(len(phase_frame_list_dict)):
+        phase_frame_list = phase_frame_list_dict[f"{iPeople}"]
+        phase_percent_list_res = []
+        for i, phase_frames in enumerate(phase_frame_list):
+            phase_percent_list = []
+            for i in range(len(phase_frames)):
+                phase_percent = (phase_frames[i] - phase_frames[0]) / (phase_frames[-1] - phase_frames[0]) * 100
+                phase_percent_list.append(phase_percent)
+            phase_percent_list_res.append(phase_percent_list)
+        phase_percent_list_dict[f"{iPeople}"] = phase_percent_list_res
+    return phase_percent_list_dict
+
