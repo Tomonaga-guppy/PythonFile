@@ -198,3 +198,45 @@ def calGaitPhase(ic_frame_dict_ori, to_frame_dict_ori):
         print(f"phase_frame_list:{phase_frame_list}")
         phase_dict[f"{iPeople}"] = phase_frame_list
     return phase_dict
+
+
+def adjust_gait_event(target_frame_list, base_frame_list):
+    # 基準となるフレームリストに合わせて、ターゲットのフレームリストを調整する。
+    while target_frame_list[0] < base_frame_list[0]:
+        target_frame_list = target_frame_list[1:]
+    while target_frame_list[-1] > base_frame_list[-1]:
+        target_frame_list = target_frame_list[:-1]
+
+    for i in range(len(base_frame_list)-1):  # 基準フレームリストの間にターゲットフレームが入っているか確認
+        # baseframelistの最後の要素が足りない場合、最後のフレームを基準に追加する
+        if i == len(base_frame_list)-2 and len(target_frame_list) < len(base_frame_list) -1:
+            while len(target_frame_list) < len(base_frame_list) -1:
+                target_frame_list.append(target_frame_list[-1] + int(np.mean(np.diff(base_frame_list))))
+            break
+        # baseframelistの最後の一つ手前までの間にtargetframelistが入っていない場合、最後のフレームを基準に追加する
+        if base_frame_list[i] < target_frame_list[i] < base_frame_list[i+1]:
+            pass
+        else:
+            if i == 0:
+                target_frame_list.insert(i, base_frame_list[i+1] - int(np.mean(np.diff(base_frame_list))))
+            else:
+                target_frame_list.insert(i, base_frame_list[i+1] + int(np.mean(np.diff(base_frame_list))))
+        # print(f"target_frame_list:{target_frame_list}")
+    return target_frame_list
+
+def get_gait_event_block(IC_frame_l, IC_frame_r, TO_frame_l, TO_frame_r):
+    # 両足のIC, TOフレームリストから、歩行イベントのブロックを取得する。
+    gait_event_block = np.zeros((len(IC_frame_l)-1,5), dtype=int)
+    for i in range(len(IC_frame_l)-1):
+        gait_event_block[i] = [IC_frame_l[i], TO_frame_r[i], IC_frame_r[i], TO_frame_l[i], IC_frame_l[i+1]]
+    print(f"gait_event_block:{gait_event_block}")
+    return gait_event_block
+
+def get_event_percent_block(gait_event_frame_array):
+    print(f"gait_event_frame_array:{gait_event_frame_array}")
+    # イベントのフレームリストから、各イベントの割合を計算する。
+    event_percent_block = np.zeros((len(gait_event_frame_array), 5), dtype=float)
+    for i, event_frame in enumerate(gait_event_frame_array):
+        event_percent_block[i] = (event_frame - event_frame[0]) / (event_frame[-1]- event_frame[0]) * 100
+    print(f"event_percent_block:{event_percent_block}")
+    return event_percent_block
