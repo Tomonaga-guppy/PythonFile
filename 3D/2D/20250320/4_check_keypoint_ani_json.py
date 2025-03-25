@@ -10,8 +10,8 @@ import gait_module as sggait
 import copy
 
 root_dir = Path(r"G:\gait_pattern\20250228_ota\data\20250221\sub0")
-# condition_list = ["thera0-3", "thera1-1", "thera2-1"]
-condition_list = ["thera0-3"]
+condition_list = ["thera0-3", "thera1-1", "thera2-1"]
+# condition_list = ["thera0-3"]
 # condition_list = ["thera1-1", "thera2-1"]
 make_ani = True
 # cali = "ota_20250228"
@@ -152,7 +152,7 @@ def main():
         print(F"new_to_frame_dict:{new_to_frame_dict}")
 
         # 歩行の3つの層を決めるフレームや割合を計算
-        phase_frame_dict = sggait.calGaitPhase(ic_frame_dict, to_frame_dict)
+        phase_frame_dict = sggait.calGaitPhase(new_ic_frame_dict, new_to_frame_dict)
         new_phase_frame_dict = {key: [] for key in df_dict_ft.keys()}
         for iPeople in range(len(df_dict_ft)):
             for ic_frame_list in phase_frame_dict[f"{iPeople}"]:
@@ -163,8 +163,11 @@ def main():
         sggait.save_as_pickle(new_phase_frame_dict, condition_dir / "phase_frame.pickle")
         sggait.save_as_pickle(new_phase_percent_dict, condition_dir / "phase_percent.pickle")
 
+        print(f"phase_frame_dict:{new_phase_frame_dict}")
+        print(f"phase_percent_dict:{new_phase_percent_dict}")
+
         """
-        ew_phase_frame_dict:{'0': [[1349, 1356, 1392, 1421], [1421, 1428, 1461, 1489]], '1': [[1348, 1358, 1393, 1418], [1418, 1429, 1464, 1489], [1489, 1500, 1535, 1559]]}
+        new_phase_frame_dict:{'0': [[1349, 1356, 1392, 1421], [1421, 1428, 1461, 1489]], '1': [[1348, 1358, 1393, 1418], [1418, 1429, 1464, 1489], [1489, 1500, 1535, 1559]]}
         new_phase_percent_dict:{'0': [[0.0, 9.722222222222223, 59.72222222222222, 100.0], [0.0, 10.294117647058822, 58.82352941176471, 100.0]], '1': [[0.0, 14.285714285714285, 64.28571428571429, 100.0], [0.0, 15.492957746478872, 64.7887323943662, 100.0], [0.0, 15.714285714285714, 65.71428571428571, 100.0]]}
         """
 

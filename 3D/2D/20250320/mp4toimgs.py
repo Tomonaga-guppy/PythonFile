@@ -8,7 +8,7 @@ for condition in condition_list:
     mp4_dir = sub_dir / condition / "sagi"
     mp4_file = list(Path(mp4_dir).glob("GX*.MP4"))[0]
 
-    output_dir_name = "Ori_imgs"
+    output_dir_name = "Ori_full"
     output_dir = Path(mp4_file.parent, output_dir_name)
     output_dir.mkdir(exist_ok=True)  # ディレクトリが存在しなければ作成
 
@@ -16,7 +16,7 @@ for condition in condition_list:
         "ffmpeg",
         "-i", str(mp4_file),           # 入力動画ファイル
         "-r", "60",                  # フレームレート (例: 30fps)
-        str(output_dir / "frame_%04d.png") # 出力画像ファイル名
+        str(output_dir / "frame_%04d.jpg") # 出力画像ファイル名
     ]
 
     try:

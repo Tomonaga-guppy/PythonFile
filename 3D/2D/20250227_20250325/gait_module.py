@@ -114,64 +114,6 @@ def mkFrameCheckCSV(frame_ch_csv, condition_list):
         writer.writerow(header)
     # print(f"{frame_ch_csv}を作成しました。")
 
-def checkSwithing(openpose_df_dict):
-    # print(f"openpose_df_dict:{openpose_df_dict}")
-    # 2人以上いる場合は腰のキーポイントのx座標が前の方を1人目のデータとした
-    # print(f"openpose_df_dict:{openpose_df_dict}")
-    keys = list(openpose_df_dict.keys())  #人のidをリストで取得
-    people_num = len(keys)
-    # 格納されているdfのフレーム数を取得
-    if people_num > 0: #人が1人以上いる場合
-        first_key = list(openpose_df_dict.keys())[0]  # 最初のキーを取得
-        frames = openpose_df_dict[first_key].index #最初のdfのindexを取得
-        # print(f"frames:{frames}")
-    else:
-        return openpose_df_dict  #人が0人の場合はそのまま返す
-
-    new_openpose_df_dict = {key: {} for key in keys}
-    for key in keys:
-        new_openpose_df_dict[key] = openpose_df_dict[key].copy()
-
-
-    for frame in frames:
-        # print(f"frame:{frame}")
-        #midhip_x座標を比較して小さい法から順に並べ替え
-        skip = False
-        for key in keys:
-            # print(f"key:{key}")
-            try:
-                a = new_openpose_df_dict[key].loc[frame, "MidHip_x"]
-            except:
-                if key == "0": target = "1"
-                else: target = "0"
-                new_openpose_df_dict[target].drop(index=frame, inplace=True)
-                # print(f"{frame}フレームには2人のデータがありません。")
-                skip = True
-        if skip:
-            continue
-
-
-        mid_hip_x_list = []
-        for key in keys:
-            # print(f"key:{key}")
-            openpose_df = openpose_df_dict[key]
-            mid_hip_x = openpose_df.loc[frame, "MidHip_x"]
-            mid_hip_x_list.append([mid_hip_x, openpose_df.loc[frame, :]])
-        # if frame == 1645:
-        #     print(f"mid_hip_x_list 元々:{mid_hip_x_list}")
-        mid_hip_x_list.sort(key=lambda x: x[0])  #昇順に並べ替え
-        # if frame == 1645:
-        #     print(f"mid_hip_x_list 昇順:{mid_hip_x_list}\n")
-
-        for key in keys:
-            # if frame == 1645:
-            #     print(f"key:{key}")
-            #     print(f"mid_hip_x_list[int(key)][1]:{mid_hip_x_list[int(key)][1]}")
-            # openpose_df_dict[key].loc[frame, :] = mid_hip_x_list[int(key)][1]
-            new_openpose_df_dict[key].loc[frame, :] = mid_hip_x_list[int(key)][1]
-    return new_openpose_df_dict
-    # return openpose_df_dict
-
 def convert_nan(df, threshhold):
     for name in keypoints_name:
         #座標が0で信頼度が閾値よりも低い部分をnanに変換、nanの位置も記録しておく
@@ -183,23 +125,16 @@ def convert_nan(df, threshhold):
 def spline_interpolation(openpose_df_dicf):
     openpose_df_dict_spline = {}
     for iPeople in range(len(openpose_df_dicf)):
-        # print(f"spline処理中: iPeople:{iPeople}")
         iPeople = str(iPeople)
         # 座標が0で信頼度が閾値よりも低い部分をnanに変換、nanの位置も記録しておく
         df_dict_couvert_nan, nan_mask = convert_nan(openpose_df_dicf[iPeople], threshhold=0.2)
         df = pd.DataFrame()
         for name in openpose_df_dicf[iPeople].columns:
             data_not_nan = df_dict_couvert_nan[name].dropna()
-            # print(f"name:{name}, data_not_nan:{data_not_nan}")
             if data_not_nan.empty:  #nanしかない場合はそのまま返す
                 # openpose_df_dict_spline[name] = openpose_df_dicf.copy()[iPeople][name]
                 series = openpose_df_dicf[iPeople][name]
                 df[name] = series
-
-            elif len(data_not_nan) == 1:  #1つだけ値がある場合はそのまま返す
-                series = openpose_df_dicf[iPeople][name]
-                df[name] = series
-
             else:
                 # print(f"name{name}, data_not_nan:{data_not_nan}")
                 spline = CubicSpline(data_not_nan.index, data_not_nan.values)
@@ -227,7 +162,32 @@ def save_as_pickle(data, filename):
         pickle.dump(data, f)
     print(f"{filename}を保存しました。")
 
+def checkSwithing(openpose_df_dict):
+    # 2人以上いる場合は腰のキーポイントのx座標が前の方を1人目のデータとした
+    # print(f"openpose_df_dict:{openpose_df_dict}")
+    keys = list(openpose_df_dict.keys())  #人のidをリストで取得
+    people_num = len(keys)
+    # 格納されているdfのフレーム数を取得
+    if people_num > 0:  # 辞書が空でないことを確認
+        first_key = list(openpose_df_dict.keys())[0]  # 最初のキーを取得
+        frames = openpose_df_dict[first_key].index #最初のdfのindexを取得
+        # print(f"frames:{frames}")
+    else:
+        return openpose_df_dict  #人が0人の場合はそのまま返す
 
+    for frame in frames:
+        #midhip_x座標を比較して小さい法から順に並べ替え
+        mid_hip_x_list = []
+        for key in keys:
+            openpose_df = openpose_df_dict[key]
+            mid_hip_x = openpose_df.loc[frame, "MidHip_x"]
+            mid_hip_x_list.append([mid_hip_x, openpose_df.loc[frame, :]])
+        # print(f"mid_hip_x_list:{mid_hip_x_list}\n")
+        mid_hip_x_list.sort(key=lambda x: x[0])  #昇順に並べ替え
+        # print(f"mid_hip_x_list:{mid_hip_x_list}")
+        for key in keys:
+            openpose_df_dict[key].loc[frame, :] = mid_hip_x_list[int(key)][1]
+    return openpose_df_dict
 
 
 def animate_keypoints(data_dict, condition, save_path, all_check):
@@ -405,27 +365,13 @@ def find_initial_contact(dict_dist_pel2heel, condition, root_dir):
 
     return ic_frame_dict, to_frame_dict
 
-def check_edge_frame(event_frame_list):
-    # フレームリストの端の値が異常値の場合は削除
-    diffs = np.diff(event_frame_list)
-    median_diff = np.median(abs(diffs))
-    threshold = median_diff * 1.2
-    if abs(diffs[0]) > threshold:
-        event_frame_list = event_frame_list[1:]
-    if abs(diffs[-1]) > threshold:
-        event_frame_list = event_frame_list[:-1]
-    event_frame_list_filtered = event_frame_list
-    return event_frame_list_filtered
-
 def calc_stride_time(ic_frame_list, side, fps):
     list = ic_frame_list[side]
     #リスト内の要素間の差を計算
     stride_time_frame = [list[i+1] - list[i] for i in range(len(list)-1)]
     avg_stride_frame = np.mean(stride_time_frame)
-    std_frame = np.std(stride_time_frame)
     avg_stride_time = avg_stride_frame / fps
-    std_time = std_frame / fps
-    return avg_stride_time, std_time
+    return avg_stride_time
 
 def calc_walk_params(stride_time, pixpermm, ic_frame_dict, df_ft):
     Rcycle = ic_frame_dict["IC_R"]
@@ -449,14 +395,9 @@ def calc_walk_params(stride_time, pixpermm, ic_frame_dict, df_ft):
     for i, block in enumerate(Lcycle_block):
         mid_hip_start_x, mid_hip_start_y = df_ft.loc[block[0], "MidHip_x"], df_ft.loc[block[0], "MidHip_y"]
         mid_hip_end_x, mid_hip_end_y = df_ft.loc[block[1], "MidHip_x"], df_ft.loc[block[1], "MidHip_y"]
-        norm_mid_hip = np.sqrt((mid_hip_end_x - mid_hip_start_x)**2 + (mid_hip_end_y - mid_hip_start_y)**2)
-        print(f"i:{i}, block:{block}")
-        print(f"norm_mid_hip:{norm_mid_hip}")
-        print(f"stride_time:{stride_time}")
         Lheel_start_x, Lheel_start_y = df_ft.loc[block[0], "LHeel_x"], df_ft.loc[block[0], "LHeel_y"]
         Lheel_end_x, Lheel_end_y = df_ft.loc[block[1], "LHeel_x"], df_ft.loc[block[1], "LHeel_y"]
-        walk_speed = (norm_mid_hip * pixpermm / 1000) / stride_time #どちらもミリ単位
-        print(f"walk_speed:{walk_speed}")
+        walk_speed = (np.sqrt((mid_hip_end_x - mid_hip_start_x)**2 + (mid_hip_end_y - mid_hip_start_y)**2) * pixpermm / 1000) / stride_time #どちらもミリ単位
         stride_length_l = np.sqrt((Lheel_end_x - Lheel_start_x)**2 + (Lheel_end_y - Lheel_start_y)**2) * pixpermm / 1000
         if start_ic_left:  #左足から接地開始
             try:
@@ -503,12 +444,7 @@ def calc_walk_params(stride_time, pixpermm, ic_frame_dict, df_ft):
     step_length_l = np.mean(step_length_list_r)  #ステップの計算が逆なので一時的に反対に入れる（要修正）
     stride_length_r = np.mean(stride_length_r)
     step_length_r = np.mean(step_length_list_l)  #ステップの計算が逆なので一時的に反対に入れる（要修正）
-    std_walk_speed = np.std(walk_speed_list)
-    std_stride_length_l = np.std(stride_length_list_l)
-    std_step_length_l = np.std(step_length_list_r)
-    std_stride_length_r = np.std(stride_length_r)
-    std_step_length_r = np.std(step_length_list_l)
-    return walk_speed, stride_length_l, stride_length_r, step_length_l, step_length_r, std_walk_speed, std_stride_length_l, std_stride_length_r, std_step_length_l, std_step_length_r
+    return walk_speed, stride_length_l, stride_length_r, step_length_l, step_length_r
 
 def calc_stance_phase_ratio(ic_frame_dict, to_frame_dict):
     stance_phase_ratio_list_r = []
@@ -516,8 +452,8 @@ def calc_stance_phase_ratio(ic_frame_dict, to_frame_dict):
     for side in ("R", "L"):
         ic_list = ic_frame_dict[f"IC_{side}"]
         to_list = to_frame_dict[f"TO_{side}"]
-        print(f"{side} ic_list:{ic_list}")
-        print(f"{side} to_list:{to_list}")
+        print(f"ic_list:{ic_list}")
+        print(f"to_list:{to_list}")
         loop_num = min(len(ic_list), len(to_list))
         cycle_frame = np.mean([ic_list[i+1] - ic_list[i] for i in range(loop_num-1)])
         if ic_list[0] > to_list[0]:
