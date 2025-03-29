@@ -7,13 +7,14 @@ from scipy.signal import medfilt
 import numpy as np
 
 root_dir = Path(r"G:\gait_pattern\20250228_ota\data\20250221\IMU")
-target_imus = ["sync", "sub", "thera", "thera_lhand", "thera_rhand"]
+target_imus = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
 # target_dir = root_dir / target_imus[0]
 
 root_dir_op = Path(r"G:\gait_pattern\20250228_ota\data\20250221\sub0")
 condition_list = ["thera0-3", "thera1-1", "thera2-1"]
 op_IC_frame_paths = [root_dir_op / condition / "IC_frame.pickle" for condition in condition_list]
 op_TO_frame_paths = [root_dir_op / condition / "TO_frame.pickle" for condition in condition_list]
+op_gait_params_paths = [root_dir_op / condition / "gait_params.pickle" for condition in condition_list]
 
 #手を降り始めた瞬間のフレーム（目視）"thera0-3", "thera1-1", "thera2-1"の順
 op_sync_frame = [165, 146, 280]
@@ -22,13 +23,21 @@ op_sync_frame = [165, 146, 280]
 #imu同士のフレーム調整用
 sync_start_time_list = []
 
+# 各条件での比較用にリストを用意
+thera_r_hand_rms_list = []
+thera_l_hand_rms_list = []
 
 imu_result_dict = {key:[] for key in target_imus}
 for target_imu in target_imus:
     target_dir = root_dir / target_imu
+    #解析対象のimuファイルを取得
     csv_list = [file for file in target_dir.glob("*.csv")
         if file.name.startswith("1") or file.name.startswith("2") or file.name.startswith("3") ]
+
+    # 各条件での比較用にリストを用意
     sub_lumb_rms_list = []
+
+
     for i, csv_path in enumerate(csv_list):
         print(f"\ncsv_path:{csv_path}")
         print(f"condition_list[i]:{condition_list[i]}")
@@ -49,7 +58,9 @@ for target_imu in target_imus:
         # print(f"phase_frame_dict:{phase_frame_dict}")
         # print(f"phase_percent_list_dict:{phase_percent_list_dict}")
 
-
+        #歩行パラメータを取得
+        gait_params = imu.loadPickle(op_gait_params_paths[i])
+        walk_speed = gait_params["0"]["walk_speed"] #歩行速度(RMSの正規化に使用)
 
 
         imu_df_100hz = imu.read_ags_dataframe(csv_path)
@@ -119,23 +130,6 @@ for target_imu in target_imus:
             frame_diff = imu_sync_frame_x - op_sync_frame[i]
             imu_df.index = imu_df.index - frame_diff
             imu_df = imu_df[imu_df.index >= 0]
-            # print(f"imu_df:{imu_df.head()}")
-
-            # plt.rcParams["font.size"] = 20
-
-            # imu.create_plot(imu_df.index, [imu_df["acc_x"], imu_df["acc_y"]], title= f"{condition_list[i]}_accxy", xlabel="frames [-]", ylabel="acc [m/s^2]",
-            #                 labels=["acc_x", "acc_y"], colors=["red", "blue"], save_path=csv_path.with_name(f"{condition_list[i]}_acc_XY.png"))
-
-            # imu.create_plot(imu_df.index, [imu_df["acc_x"], imu_df["acc_y"], imu_df["acc_xyrms"]], title=None,
-            #                 xlabel="frames [-]", ylabel="acc [m/s^2]", labels=["acc_x", "acc_y", "acc_z"], colors=["red", "blue", "green"], save_path=csv_path.with_name(f"{condition_list[i]}_acc_xyrms.png"))
-
-            # imu.create_plot(imu_df.index, [imu_df["acc_x"], imu_df["acc_y"], imu_df["acc_z"]], title=None,
-            #                 xlabel="frames [-]", ylabel="acc [m/s^2]", labels=["acc_x", "acc_y", "acc_z"], colors=["red", "blue", "green"], save_path=csv_path.with_name(f"{condition_list[i]}_acc_XYZ.png"))
-
-            # imu.create_plot(imu_df.index, [imu_df["acc_rms"]], title=None,
-            #                 xlabel="frames [-]", ylabel="acc [m/s^2]", labels=["acc_rms"], colors=["black"], save_path=csv_path.with_name(f"{condition_list[i]}_acc_rms.png"))
-            # plt.close()
-
             continue
 
         # openposeと開始フレームを合わせる
@@ -146,21 +140,32 @@ for target_imu in target_imus:
 
         figsize_xyz = (11, 11)
 
+        sub_IC_frame_l = op_IC_frame_dict["0"]["IC_L"]
+        sub_IC_frame_r = op_IC_frame_dict["0"]["IC_R"]
+        sub_TO_frame_l = op_TO_frame_dict["0"]["TO_L"]
+        sub_TO_frame_r = op_TO_frame_dict["0"]["TO_R"]
+        sub_IC_frame_r = imu.adjust_gait_event(target_frame_list=sub_IC_frame_r, base_frame_list=sub_IC_frame_l)
+        sub_TO_frame_l = imu.adjust_gait_event(target_frame_list=sub_TO_frame_l, base_frame_list=sub_IC_frame_l)
+        sub_TO_frame_r = imu.adjust_gait_event(target_frame_list=sub_TO_frame_r, base_frame_list=sub_IC_frame_l)
+        # print(f"調整後のsub_IC_frame_l:{sub_IC_frame_l}")
+        # print(f"調整後のsub_IC_frame_r:{sub_IC_frame_r}")
+        # print(f"調整後のsub_TO_frame_l:{sub_TO_frame_l}")
+        # print(f"調整後のsub_TO_frame_r:{sub_TO_frame_r}")
+        gait_event_frame_array = imu.get_gait_event_block(sub_IC_frame_l, sub_IC_frame_r, sub_TO_frame_l, sub_TO_frame_r)
+        gait_event_percent_array = imu.get_event_percent_block(gait_event_frame_array)
+        """
+        gait_event_percent_array:
+        [[  0.          13.04347826  44.92753623  56.52173913 100.        ]
+        [  0.          11.5942029   44.92753623  55.07246377 100.        ]]"""
+        print(f"gait_event_percent_array.shape:{gait_event_percent_array.shape}")
+        print(f"gait_event_percent_array:{gait_event_percent_array}")
+
+        gait_event_percent_avg = np.mean(gait_event_percent_array, axis=0)
+        print(f"gait_event_percent_avg:{gait_event_percent_avg}")
+        # shape = (ブロック数, 5)
+
+
         if target_imu == "sub":
-            #
-            sub_IC_frame_l = op_IC_frame_dict["0"]["IC_L"]
-            sub_IC_frame_r = op_IC_frame_dict["0"]["IC_R"]
-            sub_TO_frame_l = op_TO_frame_dict["0"]["TO_L"]
-            sub_TO_frame_r = op_TO_frame_dict["0"]["TO_R"]
-            sub_IC_frame_r = imu.adjust_gait_event(target_frame_list=sub_IC_frame_r, base_frame_list=sub_IC_frame_l)
-            sub_TO_frame_l = imu.adjust_gait_event(target_frame_list=sub_TO_frame_l, base_frame_list=sub_IC_frame_l)
-            sub_TO_frame_r = imu.adjust_gait_event(target_frame_list=sub_TO_frame_r, base_frame_list=sub_IC_frame_l)
-            # print(f"調整後のsub_IC_frame_l:{sub_IC_frame_l}")
-            # print(f"調整後のsub_IC_frame_r:{sub_IC_frame_r}")
-            # print(f"調整後のsub_TO_frame_l:{sub_TO_frame_l}")
-            # print(f"調整後のsub_TO_frame_r:{sub_TO_frame_r}")
-
-
             plt.plot(imu_df["acc_x"], label="S-I", color="red")
             plt.plot(imu_df["acc_y"], label="L-R", color="green")
             plt.plot(imu_df["acc_z"], label="A-P", color="blue")
@@ -171,16 +176,16 @@ for target_imu in target_imus:
             plt.savefig(csv_path.with_name(f"check2_{condition_list[i]}.png"))
             plt.close()
 
-            gait_event_frame_array = imu.get_gait_event_block(sub_IC_frame_l, sub_IC_frame_r, sub_TO_frame_l, sub_TO_frame_r)
-            gait_event_percent_array = imu.get_event_percent_block(gait_event_frame_array)
+
 
             sub_ic_block_r = [[sub_IC_frame_r[i], sub_IC_frame_r[i+1]] for i in range(len(sub_IC_frame_r)-1)]
             sub_ic_block_l = [[sub_IC_frame_l[i], sub_IC_frame_l[i+1]] for i in range(len(sub_IC_frame_l)-1)]
             ### このあたりできたら次はfor分で回す
-            imu_df_sublumb = imu_df.loc[sub_ic_block_l[0][0]:sub_ic_block_l[-1][1]] #とりあえず左足基準で1周期分
+            imu_df_sublumb = imu_df.loc[sub_ic_block_l[0][0]:sub_ic_block_l[-1][1]] #とりあえず左足基準で最後まで
             ###
             imu_df_sublumb = imu_df_sublumb - imu_df_sublumb.loc[sub_IC_frame_l[0]]
 
+            # plt.figure(figsize=(11, 11))
             plt.plot(imu_df_sublumb["acc_x"], label="S-I", color="red")
             plt.plot(imu_df_sublumb["acc_y"], label="L-R", color="green")
             plt.plot(imu_df_sublumb["acc_z"], label="A-P", color="blue")
@@ -188,85 +193,121 @@ for target_imu in target_imus:
             [plt.axvline(sub_IC_frame_l[i], color="black", alpha=0.9, linestyle="-") for i in range(len(sub_IC_frame_l))]
             [plt.axvline(sub_IC_frame_r[i], color="black", alpha=0.9, linestyle="--") for i in range(len(sub_IC_frame_r))]
             # plt.show()
+            plt.ylim(-7.5, 15)
             plt.savefig(csv_path.with_name(f"check3_{condition_list[i]}.png"))
             plt.close()
 
-            # ratio_x = abs(imu_df_sublumb["acc_x"].max() / imu_df_sublumb["acc_x"].min())
-            # ratio_y = abs(imu_df_sublumb["acc_y"].max() / imu_df_sublumb["acc_y"].min())
-            # ratio_z = abs(imu_df_sublumb["acc_z"].max() / imu_df_sublumb["acc_z"].min())
-            # print(f"ratio_x:{ratio_x:.2f}, ratio_y:{ratio_y:.2f}, ratio_z:{ratio_z:.2f}")
-            # print(f"x_max = {imu_df_sublumb['acc_x'].max():.2f}, x_min = {imu_df_sublumb['acc_x'].min():.2f}")
-            # print(f"y_max = {imu_df_sublumb['acc_y'].max():.2f}, y_min = {imu_df_sublumb['acc_y'].min():.2f}")
-            # print(f"z_max = {imu_df_sublumb['acc_z'].max():.2f}, z_min = {imu_df_sublumb['acc_z'].min():.2f}")
-
-
-            # 相が切り替わるフレームと割合を取得
-            print(f"phase_percent_list_dict:{phase_percent_list_dict['0']}")
-            check_phase_frame_dict = {key: [] for key in op_IC_frame_dict.keys()}
-            for idx in range(len(phase_percent_list_dict["0"])):
-                if phase_frame_dict["0"][i][0] == op_IC_frame_dict["0"]["IC_L"][0]:
-                    check_phase_frame_dict["0"] = phase_frame_dict["0"][i]
-            print(f"check_phase_frame_dict:{check_phase_frame_dict}")
-
-            check_phase_frame_list = check_phase_frame_dict["0"]
-            check_phase_percent_list = []
-            for idx in range(len(check_phase_frame_list)):
-                persent = (check_phase_frame_list[idx]-check_phase_frame_list[0]) / (check_phase_frame_list[-1] - check_phase_frame_list[0]) * 100
-                check_phase_percent_list.append(persent)
-            print(f"check_phase_percent_list:{check_phase_percent_list}")
-
-
-
-
-            rms_dict = {key : [] for key in ["rms_x", "rms_y", "rms_z"]}
+            # 各歩行周期で各相のRMSを計算
+            rms_dict = {key : [] for key in ["rms_x", "rms_y", "rms_z", "std_x", "std_y", "std_z", "rms_x_n", "rms_y_n", "rms_z_n", "std_x_n", "std_y_n", "std_z_n"]}
             rms_x_list , rms_y_list, rms_z_list = [], [], []
-            for idx in range(len(check_phase_frame_list)-1):
-                start_frame = check_phase_frame_list[idx]
-                end_frame = check_phase_frame_list[idx+1]
-                imu_df_sublumb_in_phase = imu_df_sublumb.loc[start_frame:end_frame]
-                # print(f'imu_df_sublumb_in_phase["acc_x"]:{imu_df_sublumb_in_phase["acc_x"]}')
-                rms_x = np.sqrt(np.mean(imu_df_sublumb_in_phase["acc_x"]**2))
-                rms_y = np.sqrt(np.mean(imu_df_sublumb_in_phase["acc_y"]**2))
-                rms_z = np.sqrt(np.mean(imu_df_sublumb_in_phase["acc_z"]**2))
-                rms_x_list.append(rms_x)
-                rms_y_list.append(rms_y)
-                rms_z_list.append(rms_z)
-            rms_dict["rms_x"] = rms_x_list
-            rms_dict["rms_y"] = rms_y_list
-            rms_dict["rms_z"] = rms_z_list
-            print(f"rms_dict:{rms_dict}")
-            sub_lumb_rms_list.append(rms_dict)
+            for idx in range(gait_event_frame_array.shape[0]):
+                rms_x_list_cycle, rms_y_list_cycle, rms_z_list_cycle = [], [], []
+                for event_idx in range(gait_event_frame_array.shape[1]-1):
+                    start_frame = gait_event_frame_array[idx][event_idx]
+                    end_frame = gait_event_frame_array[idx][event_idx+1]
+                    # print(f"start_frame:{start_frame}, end_frame:{end_frame}")
+                    imu_df_sublumb_in_phase = imu_df_sublumb.loc[start_frame:end_frame]
+                    # print(f'imu_df_sublumb_in_phase["acc_x"]:{imu_df_sublumb_in_phase["acc_x"]}')
+                    rms_x = np.sqrt(np.mean(imu_df_sublumb_in_phase["acc_x"]**2))
+                    rms_y = np.sqrt(np.mean(imu_df_sublumb_in_phase["acc_y"]**2))
+                    rms_z = np.sqrt(np.mean(imu_df_sublumb_in_phase["acc_z"]**2))
+                    rms_x_list_cycle.append(rms_x)
+                    rms_y_list_cycle.append(rms_y)
+                    rms_z_list_cycle.append(rms_z)
+                rms_x_list.append(rms_x_list_cycle)
+                rms_y_list.append(rms_y_list_cycle)
+                rms_z_list.append(rms_z_list_cycle)
+            # 複数歩行周期の平均、標準偏差を取る
+            rms_x = np.mean(rms_x_list, axis=0)
+            rms_y = np.mean(rms_y_list, axis=0)
+            rms_z = np.mean(rms_z_list, axis=0)
+            std_x = np.std(rms_x_list, axis=0)
+            std_y = np.std(rms_y_list, axis=0)
+            std_z = np.std(rms_z_list, axis=0)
+            rms_dict["rms_x"] = rms_x
+            rms_dict["rms_y"] = rms_y
+            rms_dict["rms_z"] = rms_z
+            rms_dict["std_x"] = std_x
+            rms_dict["std_y"] = std_y
+            rms_dict["std_z"] = std_z
 
-            imu_df_sublumb.index = (imu_df_sublumb.index - imu_df_sublumb.index[0]) / (imu_df_sublumb.index[-1] - imu_df_sublumb.index[0]) * 100
+            # 歩行周期全体でのRMS（歩行速度の2乗で正規化）を計算
+            rms_x_n_list, rms_y_n_list, rms_z_n_list = [], [], []
+            for cycle_num in range(gait_event_frame_array.shape[0]):
+                print(f"サイクルの番号:{cycle_num}")
+                start_frame = gait_event_frame_array[cycle_num][0]
+                end_frame = gait_event_frame_array[cycle_num][-1]
+                imu_df_sublumb_rms_n = imu_df_sublumb.loc[start_frame:end_frame]
+                rms_x_n = np.sqrt(np.mean(imu_df_sublumb_rms_n["acc_x"]**2)) / (walk_speed**2)
+                rms_y_n = np.sqrt(np.mean(imu_df_sublumb_rms_n["acc_y"]**2)) / (walk_speed**2)
+                rms_z_n = np.sqrt(np.mean(imu_df_sublumb_rms_n["acc_z"]**2)) / (walk_speed**2)
+                rms_x_n_list.append(rms_x_n)
+                rms_y_n_list.append(rms_y_n)
+                rms_z_n_list.append(rms_z_n)
+            print(f"rms_x_n_list:{rms_x_n_list}")
+            rms_x_n = np.mean(rms_x_n_list, axis=0)
+            rms_y_n = np.mean(rms_y_n_list, axis=0)
+            rms_z_n = np.mean(rms_z_n_list, axis=0)
+            std_x_n = np.std(rms_x_n_list, axis=0)
+            std_y_n = np.std(rms_y_n_list, axis=0)
+            std_z_n = np.std(rms_z_n_list, axis=0)
+            print(f"rms_x_n:{rms_x_n}")
+            print(f"std_x_n:{std_x_n}")
+            rms_dict["rms_x_n"] = rms_x_n
+            rms_dict["rms_y_n"] = rms_y_n
+            rms_dict["rms_z_n"] = rms_z_n
+            rms_dict["std_x_n"] = std_x_n
+            rms_dict["std_y_n"] = std_y_n
+            rms_dict["std_z_n"] = std_z_n
 
-            print(f"condition_list[i]:{condition_list[i]}")
-            # 時間軸をとって加速度をプロット abngaitのときになぜかylimが適用されない（showから保存した）
-            plt.figure(figsize=(10,8))
-            plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_x"], label="S-I", color="red")
-            plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_y"], label="L-R", color="green")
-            plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_z"], label="A-P", color="blue")
-            plt.legend(fontsize=30)
-            plt.xlabel("Gait cycle [%]", fontsize=30)
-            plt.ylabel("Acc [m/$s^2$]", fontsize=30)
-            plt.tick_params(labelsize=30)
-            # plt.ylim(-15, 15)
-            plt.xlim(imu_df_sublumb.index[0], imu_df_sublumb.index[-1])
-            # plt.title(f"{condition_list[i]}_acc_XYZ", fontsize=20)
-            # [plt.axvline(frame, color="black", alpha=0.8) for frame in phase_percent_list_dict["0"][0]]
-            print(f"phase_percent_list_dict[0][0]:{phase_percent_list_dict['0'][0]}")
-            plt.axvline(phase_percent_list_dict["0"][0][1], color="black", alpha=0.9, linestyle="-")
-            plt.axvline(phase_percent_list_dict["0"][0][2], color="black", alpha=0.9, linestyle="--")
-            plt.grid()
-            plt.tight_layout()
-            plt.savefig(csv_path.with_name(f"{condition_list[i]}_acc_XYZ.png"))
-            # plt.show()
+            sub_lumb_rms_list.append(rms_dict)  #各条件でのRMSを比較するためにリストに格納
+
+            # 複数歩行周期の平均を取る
+            acc_x_list, acc_y_list, acc_z_list = [], [], []
+            for event_frame_array in gait_event_frame_array:
+                print(f"sub_IC_frame_l:{sub_IC_frame_l}")
+                start_frame = event_frame_array[0]
+                end_frame = event_frame_array[-1]
+                imu_df_sublumb_x = imu_df_sublumb["acc_x"].loc[start_frame:end_frame]
+                imu_df_sublumb_y = imu_df_sublumb["acc_y"].loc[start_frame:end_frame]
+                imu_df_sublumb_z = imu_df_sublumb["acc_z"].loc[start_frame:end_frame]
+                #各歩行周期のデータを正規化して1パーセントごとにリストに格納
+                imu_df_sublumb_x = imu.frame2percent(imu_df_sublumb_x)
+                imu_df_sublumb_y = imu.frame2percent(imu_df_sublumb_y)
+                imu_df_sublumb_z = imu.frame2percent(imu_df_sublumb_z)
+                acc_x_list.append(imu_df_sublumb_x)
+                acc_y_list.append(imu_df_sublumb_y)
+                acc_z_list.append(imu_df_sublumb_z)
+            acc_x_mean = np.mean(acc_x_list, axis=0)
+            acc_x_std = np.std(acc_x_list, axis=0)
+            acc_y_mean = np.mean(acc_y_list, axis=0)
+            acc_y_std = np.std(acc_y_list, axis=0)
+            acc_z_mean = np.mean(acc_z_list, axis=0)
+            acc_z_std = np.std(acc_z_list, axis=0)
+
+            plot_range = range(100)
+            plt.figure(figsize=(12, 8))
+            plt.plot(acc_x_mean, label="S-I", color="red")
+            plt.plot(acc_y_mean, label="L-R", color="green")
+            plt.plot(acc_z_mean, label="A-P", color="blue")
+            # plt.plot(acc_x_mean, label="Superior-Inferior", color="red")
+            # plt.plot(acc_y_mean, label="Left-Right", color="green")
+            # plt.plot(acc_z_mean, label="Anterior-Posterior", color="blue")
+            plt.fill_between(plot_range, acc_x_mean - acc_x_std, acc_x_mean + acc_x_std, alpha=0.3, color="red")
+            plt.fill_between(plot_range, acc_y_mean - acc_y_std, acc_y_mean + acc_y_std, alpha=0.3, color="green")
+            plt.fill_between(plot_range, acc_z_mean - acc_z_std, acc_z_mean + acc_z_std, alpha=0.3, color="blue")
+            plt.axvline(gait_event_percent_avg[0], color="black", alpha=0.5, linestyle="-")
+            plt.axvline(gait_event_percent_avg[1], color="black", alpha=0.5, linestyle="--")
+            plt.axvline(gait_event_percent_avg[2], color="black", alpha=0.5, linestyle="-.")
+            plt.axvline(gait_event_percent_avg[3], color="black", alpha=0.5, linestyle=":")
+            plt.axvline(gait_event_percent_avg[4], color="black", alpha=0.5, linestyle="-")
+            plt.xlabel("Gait cycle [%]", fontsize=25)
+            plt.ylabel("Acc [m/$s^2$]", fontsize=25)
+            # plt.legend(fontsize=25)
+            plt.tick_params(labelsize=25)
+            plt.ylim(-7.5, 15)
+            plt.savefig(csv_path.with_name(f"acc_multicycle_{condition_list[i]}.png"))
             plt.close()
-
-        ###
-        else:
-            break
-        ###
-
 
         if target_imu == "thera":
             if condition_list[i] == "thera0-3":
@@ -276,87 +317,181 @@ for target_imu in target_imus:
                 thera_ic_frame_l = op_IC_frame_dict["1"]["IC_L"]
 
         if target_imu == "thera_rhand":
-            if condition_list[i] == "thera0-3":
-                pass
+            if condition_list[i] != "thera0-3":
+                imu_df_therarhand = imu_df.loc[sub_IC_frame_l[0]:sub_IC_frame_l[-1]]  #患者の腰IMUと比較するため患者左足の初期接地を範囲に
+
+                # 有効範囲内の左足初期接地における腰IMUのデータをプロット
+                plt.plot(imu_df_therarhand["acc_x"], label="S-I", color="red")
+                plt.plot(imu_df_therarhand["acc_y"], label="L-R", color="green")
+                plt.plot(imu_df_therarhand["acc_z"], label="A-P", color="blue")
+                plt.plot(imu_df_therarhand["acc"], label="RMS", color="black")
+                [plt.axvline(sub_IC_frame_l[i], color="black", alpha=0.5, linestyle="-") for i in range(len(sub_IC_frame_l))]
+                [plt.axvline(sub_IC_frame_r[i], color="black", alpha=0.5, linestyle="--") for i in range(len(sub_IC_frame_r))]
+                plt.legend()
+                plt.ylim(-17.5, 17.5)
+                plt.xlabel("Frames [-]")
+                plt.ylabel("Acc [m/$s^2$]")
+                plt.savefig(csv_path.with_name(f"acc_{condition_list[i]}.png"))
+                # plt.show()
+                plt.close()
+
+                # 開始時点の加速度を0とする
+                imu_df_therarhand = imu_df_therarhand - imu_df_therarhand.loc[sub_IC_frame_l[0]]
+                #各層でのRMSを計算
+                rms_dict_rhand = {key : [] for key in ["rms", "std"]}
+                rms_rhand_list = []
+                for idx in range(gait_event_frame_array.shape[0]): #各歩行周期でのRMSを計算
+                    rms_cycle = []
+                    rms_n_cycle = []
+                    for event_idx in range(gait_event_frame_array.shape[1]-1): #5つのイベントごとにRMSを計算
+                        start_frame = gait_event_frame_array[idx][event_idx]
+                        end_frame = gait_event_frame_array[idx][event_idx+1]
+                        imu_df_therarhand_in_phase = imu_df_therarhand.loc[start_frame:end_frame]
+                        rms = np.sqrt(np.mean(imu_df_therarhand_in_phase["acc"]**2))
+                        rms_cycle.append(rms)
+                    rms_rhand_list.append(rms_cycle)
+
+                print(f"rms_rhand_list:{rms_rhand_list}")
+
+                rms = np.mean(rms_rhand_list, axis=0)
+                std = np.std(rms_rhand_list, axis=0)
+                print(f"rms:{rms}")
+                print(f"std:{std}")
+                rms_dict_rhand["rms"] = rms
+                rms_dict_rhand["std"] = std
+                thera_r_hand_rms_list.append(rms_dict_rhand)
             else:
-                # imu_df_therarhand = imu_df.loc[sub_IC_frame_l[0]:sub_IC_frame_l[1]]  #患者の腰IMUと比較するため患者左足の初期接地を範囲に
-                # imu_df_therarhand.index = (imu_df_therarhand.index - imu_df_therarhand.index[0]) / (imu_df_therarhand.index[-1] - imu_df_therarhand.index[0]) * 100
-                imu_df_therarhand = imu_df.copy() - imu_df.copy().loc[sub_IC_frame_l[0]]
-                rms_Rhand = []
-                for idx in range(len(check_phase_frame_list)-1):
-                    start_frame = check_phase_frame_list[idx]
-                    end_frame = check_phase_frame_list[idx+1]
-                    imu_df_therarhand_in_phase = imu_df_therarhand.loc[start_frame:end_frame]
-                    # print(f"imu_df_therarhand_in_phase:{imu_df_therarhand_in_phase}")
-                    rms_Rhand.append(np.sqrt(np.mean(imu_df_therarhand_in_phase["acc"]**2)))
+                pass
 
-                print(f"rms_Rhand:{rms_Rhand}")
 
-        #         imu.create_plot(imu_df_therarhand.index, [imu_df_therarhand["acc_x"], imu_df_therarhand["acc_y"], imu_df_therarhand["acc_z"]], title=None,
-        #                         xlabel="Gait cycle [%]", ylabel="Acc [m/$s^2$]", labels=["acc_x", "acc_y", "acc_z"], colors=["red", "green", "blue"], save_path=csv_path.with_name(f"{condition_list[i]}_acc_XYZ.png"))
-
-        #         imu.create_plot(imu_df_therarhand.index, [imu_df_therarhand["acc_x"], imu_df_therarhand["acc_y"], imu_df_therarhand["acc_z"], imu_df_therarhand["acc_rms"]], title=None,
-        #                         xlabel="Gait cycle [%]", ylabel="Acc [m/$s^2$]", labels=["acc_x", "acc_y", "acc_z", "acc_rms"], colors=["red", "green", "blue", "black"],
-        #                         save_path=csv_path.with_name(f"{condition_list[i]}_acc_rms.png"), plt_close=False, plt_save=False, legend_outside=True)
-        #         plt.axvline(openpose_res_dict["0"]["stance_phase_ratio_l"], color="black", alpha=0.5, linestyle="--")
-        #         plt.savefig(csv_path.with_name(f"{condition_list[i]}_acc_rms.png"))
 
 
 
         if target_imu == "thera_lhand":
-            if condition_list[i] == "thera0-3":
-                pass
+            if condition_list[i] != "thera0-3":
+                imu_df_theralhand = imu_df.loc[sub_IC_frame_l[0]:sub_IC_frame_l[-1]]
+
+                # 有効範囲内の左足初期接地における腰IMUのデータをプロット
+                plt.plot(imu_df_theralhand["acc_x"], label="S-I", color="red")
+                plt.plot(imu_df_theralhand["acc_y"], label="L-R", color="green")
+                plt.plot(imu_df_theralhand["acc_z"], label="A-P", color="blue")
+                plt.plot(imu_df_theralhand["acc"], label="RMS", color="black")
+                [plt.axvline(sub_IC_frame_l[i], color="black", alpha=0.5, linestyle="-") for i in range(len(sub_IC_frame_l))]
+                [plt.axvline(sub_IC_frame_r[i], color="black", alpha=0.5, linestyle="--") for i in range(len(sub_IC_frame_r))]
+                plt.legend()
+                plt.ylim(-17.5, 17.5)
+                plt.xlabel("Frames [-]")
+                plt.ylabel("Acc [m/$s^2$]")
+                plt.savefig(csv_path.with_name(f"acc_{condition_list[i]}.png"))
+                # plt.show()
+                plt.close()
+
+                # 開始時点の加速度を0とする
+                imu_df_theralhand = imu_df_theralhand - imu_df_theralhand.loc[sub_IC_frame_l[0]]
+                #各層でのRMSを計算
+                rms_dict_lhand = {key : [] for key in ["rms", "std"]}
+                rms_lhand_list = []
+                for idx in range(gait_event_frame_array.shape[0]): #各歩行周期でのRMSを計算
+                    rms_cycle = []
+                    for event_idx in range(gait_event_frame_array.shape[1]-1): #5つのイベントごとにRMSを計算
+                        start_frame = gait_event_frame_array[idx][event_idx]
+                        end_frame = gait_event_frame_array[idx][event_idx+1]
+                        imu_df_theralhand_in_phase = imu_df_theralhand.loc[start_frame:end_frame]
+                        rms = np.sqrt(np.mean(imu_df_theralhand_in_phase["acc"]**2))
+                        rms_cycle.append(rms)
+                    rms_lhand_list.append(rms_cycle)
+
+                rms = np.mean(rms_lhand_list, axis=0)
+                std = np.std(rms_lhand_list, axis=0)
+                rms_dict_lhand["rms"] = rms
+                rms_dict_lhand["std"] = std
+                thera_l_hand_rms_list.append(rms_dict_lhand)
             else:
-                # imu_df_theralhand = imu_df.loc[sub_IC_frame_l[0]:sub_IC_frame_l[1]]
-                # imu_df_theralhand.index = (imu_df_theralhand.index - imu_df_theralhand.index[0]) / (imu_df_theralhand.index[-1] - imu_df_theralhand.index[0]) * 100
-                imu_df_theralhand = imu_df.copy() - imu_df.copy().loc[sub_IC_frame_l[0]]
-                rms_Lhand = []
-                for idx in range(len(check_phase_frame_list)-1):
-                    start_frame = check_phase_frame_list[idx]
-                    end_frame = check_phase_frame_list[idx+1]
-                    imu_df_theralhand_in_phase = imu_df_theralhand.loc[start_frame:end_frame]
-                    rms_Lhand.append(np.sqrt(np.mean(imu_df_theralhand_in_phase["acc"]**2)))
+                pass
 
-                print(f"rms_Lhand:{rms_Lhand}")
-                # imu.create_plot(imu_df_theralhand.index, [imu_df_theralhand["acc_x"], imu_df_theralhand["acc_y"], imu_df_theralhand["acc_z"]], title=None,
-                #                 xlabel="Gait cycle [%]", ylabel="Acc [m/$s^2$]", labels=["acc_x", "acc_y", "acc_z"], colors=["red", "green", "blue"], save_path=csv_path.with_name(f"{condition_list[i]}_acc_XYZ.png"))
-
-                # imu.create_plot(imu_df_theralhand.index, [imu_df_theralhand["acc_x"], imu_df_theralhand["acc_y"], imu_df_theralhand["acc_z"], imu_df_theralhand["acc_rms"]], title=None,
-                #                 xlabel="Gait cycle [%]", ylabel="Acc [m/$s^2$]", labels=["acc_x", "acc_y", "acc_z", "acc_rms"], colors=["red", "green", "blue", "black"],
-                #                 save_path=csv_path.with_name(f"{condition_list[i]}_acc_rms.png"), plt_close=False, plt_save=False, legend_outside=True)
-                # plt.axvline(openpose_res_dict["0"]["stance_phase_ratio_l"], color="black", alpha=0.5, linestyle="--")
-                # plt.savefig(csv_path.with_name(f"{condition_list[i]}_acc_rms.png"))
-
-                # titjle_labels = []
 
 
     if target_imu == "sub":
         direction = ["Superior-Inferior", "Left-Right", "Anterior-Posterior"]
+
+        # 各方向で各条件ごとのRMSの比較
+        rms_n_list = sub_lumb_rms_list
+        tittle_labels = ["S-I", "L-R", "A-P"]
+        print(f"rms_n_list:{rms_n_list}")
+        unasi_rms_n = [rms_n_list[0]["rms_x_n"], rms_n_list[0]["rms_y_n"], rms_n_list[0]["rms_z_n"]]
+        asi_rms1_n = [rms_n_list[1]["rms_x_n"], rms_n_list[1]["rms_y_n"], rms_n_list[1]["rms_z_n"]]
+        asi_rms2_n = [rms_n_list[2]["rms_x_n"], rms_n_list[2]["rms_y_n"], rms_n_list[2]["rms_z_n"]]
+        x = np.arange(len(tittle_labels))  # 各棒の位置 (0, 1, 2)
+        width = 0.25  # 棒の幅
+
+        fig, ax = plt.subplots(figsize=(12, 8))
+        rects1 = ax.bar(x - width, unasi_rms_n, width, label='Unassisted', color="black")
+        rects2 = ax.bar(x, asi_rms1_n, width, label='Assisted PT1', color = "gray")
+        rects3 = ax.bar(x + width, asi_rms2_n, width, label='Assisted PT2', color = "orange")
+
+        # ラベル、タイトル、凡例の設定
+        ax.set_ylabel("RMS [1/m]", fontsize=30)
+        ax.set_xlabel("Direction", fontsize=30)
+        # ax.set_title(title)
+        ax.set_ylim(0, 6.5)
+        ax.set_xticks(x)
+        ax.set_xticklabels(tittle_labels, fontsize=30)
+        ax.tick_params(labelsize=30)
+        ax.legend(fontsize=25)
+        ax.margins(y=0.1)
+
+        # 各棒の上に値を表示 (オプション)
+        def autolabel(rects):
+            for rect in rects:
+                height = rect.get_height()
+                ax.annotate(f'{height:.2f}',
+                            xy=(rect.get_x() + rect.get_width() / 2, height),
+                            xytext=(0, 3),
+                            textcoords="offset points",
+                            ha='center', va='bottom', fontsize=25)
+
+        autolabel(rects1)
+        autolabel(rects2)
+        autolabel(rects3)
+
+        fig.tight_layout()
+        plt.savefig(csv_path.with_name(f"rms_normalized.png"))
+        # plt.show()
+        plt.close()
+
+
+        # 各方向ごとに各相における各条件RMSの比較
         for i, target in enumerate(["rms_x", "rms_y", "rms_z"]):
-            print(f"sub_lumb_rms_list:{sub_lumb_rms_list}")
+            # print(f"sub_lumb_rms_list:{sub_lumb_rms_list}")
             rms_list = sub_lumb_rms_list
-            tittle_labels = ["Phase 1", "Phase 2", "Phase 3"]
+            tittle_labels = ["Phase 1", "Phase 2", "Phase 3", "Phase 4"]
             labels = ["rms_x", "rms_y", "rms_z"]
             # 処理前後のデータの最初の要素を取り出す
-            before_values = rms_list[0][target][:]
-            after_values = rms_list[1][target][:]
+            unasi_rms = rms_list[0][target]  #介助無し
+            asi_rms1 = rms_list[1][target]  #介助あり 療法士1
+            asi_rms2 = rms_list[2][target]  #介助あり 療法士2
 
-            x = np.arange(len(labels))  # 各棒の位置 (0, 1, 2)
-            width = 0.3  # 棒の幅
+            x = np.arange(len(tittle_labels))  # 各棒の位置 (0, 1, 2, 3)
+            width = 0.2  # 棒の幅
 
-            fig, ax = plt.subplots(figsize=(10, 8))
-            rects1 = ax.bar(x - width/2, before_values, width, label='Unassisted')
-            rects2 = ax.bar(x + width/2, after_values, width, label='Assisted')
+            # print(f"unasi_rms:{unasi_rms}")
+            # print(f"asi_rms1:{asi_rms1}")
+            # print(f"asi_rms2:{asi_rms2}")
+
+            fig, ax = plt.subplots(figsize=(12, 8))
+            rects1 = ax.bar(x - width, unasi_rms, width, label='Unassisted')
+            rects2 = ax.bar(x, asi_rms1, width, label='Assisted PT1')
+            rects3 = ax.bar(x + width, asi_rms2, width, label='Assisted PT2')
 
             # ラベル、タイトル、凡例の設定
             ax.set_ylabel("RMS [m/$s^2$]", fontsize=30)
             ax.set_xlabel(f"{direction[i]}", fontsize=30)
             # ax.set_title(title)
-            # ax.set_ylim(0, 5)
+            ax.set_ylim(0, 5)
             ax.set_xticks(x)
             ax.set_xticklabels(tittle_labels, fontsize=30)
             ax.tick_params(labelsize=30)
-            # ax.legend(fontsize=30)
+            ax.legend(fontsize=25)
             ax.margins(y=0.1)
 
             # 各棒の上に値を表示 (オプション)
@@ -367,62 +502,73 @@ for target_imu in target_imus:
                                 xy=(rect.get_x() + rect.get_width() / 2, height),
                                 xytext=(0, 3),
                                 textcoords="offset points",
-                                ha='center', va='bottom', fontsize=30)
+                                ha='center', va='bottom', fontsize=20)
 
             autolabel(rects1)
             autolabel(rects2)
+            autolabel(rects3)
 
             fig.tight_layout()
-            plt.savefig(csv_path.with_name(f"subLumb_{target}.png"))
+            plt.savefig(csv_path.with_name(f"rms_phase_{target}.png"))
             # plt.show()
             plt.close()
 
-# Phase1,2,3でrms_Rhand, rms_Lhandの比較(棒グラフ)
-Rhand_values = [rms_Rhand[0], rms_Rhand[1], rms_Rhand[2]]
-Lhand_values = [rms_Lhand[0], rms_Lhand[1], rms_Lhand[2]]
 
-x = np.arange(3)  # 各棒の位置 (0, 1, 2)
-width = 0.35  # 棒の幅
+# 左右間でのRMSの比較
+for ithera in range(3):
+    if ithera == 0:
+        continue
 
-fig, ax = plt.subplots(figsize=(10, 8))
-rects1 = ax.bar(x - width/2, Rhand_values, width, label='Right hand')
-rects2 = ax.bar(x + width/2, Lhand_values, width, label='Left hand')
+    condition = condition_list[ithera]  # "thera1-1", "thera2-1"
+    # 各相でrms_Rhand, rms_Lhandの比較(棒グラフ)
+    print(f"thera_r_hand_rms_list:{thera_r_hand_rms_list}")
+    print(f"thera_l_hand_rms_list:{thera_l_hand_rms_list}")
+    """
+    # thera_r_hand_rms_list:
+    # [{'rms': array([ 9.15172206, 10.34387119,  9.29644235, 10.33462626]),  #療法士1
+    # 'std': array([0.10585933, 0.09781776, 0.52143535, 0.1499961 ])},
+    # {'rms': array([10.55574518, 10.76164765,  9.56614682, 10.10350017]),  #療法士2
+    # 'std': array([0.21175673, 0.06003275, 0.09850981, 0.04442505])}]
+    """
 
-# ラベル、タイトル、凡例の設定
-ax.set_ylabel("RMS [m/$s^2$]", fontsize=30)
-# ax.set_xlabel("Phase")
-# ax.set_title(title)
-# ax.set_ylim(0, 5)
-ax.set_xticks(x)
-ax.set_xticklabels(["Phase 1", "Phase 2", "Phase 3"], fontsize=30)
-ax.legend(fontsize=25)
-ax.margins(y=0.1)
+    print("ithear:", ithera)
+    Rhand_values = thera_r_hand_rms_list[ithera-1]["rms"]
+    Lhand_values = thera_l_hand_rms_list[ithera-1]["rms"]
+    # Rhand_values = thera_r_hand_rms_list[ithera-1]["rms"]
+    # Lhand_values = thera_l_hand_rms_list[ithera-1]["rms"]
 
-# 各棒の上に値を表示 (オプション)
-def autolabel(rects):
-    for rect in rects:
-        height = rect.get_height()
-        ax.annotate(f'{height:.2f}',
-                    xy=(rect.get_x() + rect.get_width() / 2, height),
-                    xytext=(0, 3),
-                    textcoords="offset points",
-                    ha='center', va='bottom', fontsize=30)
+    x = np.arange(4)  # 各棒の位置 (0, 1, 2)
+    width = 0.35  # 棒の幅
 
-autolabel(rects1)
-autolabel(rects2)
+    fig, ax = plt.subplots(figsize=(10, 8))
+    rects1 = ax.bar(x - width/2, Rhand_values, width, label='Right hand', color="moccasin")
+    rects2 = ax.bar(x + width/2, Lhand_values, width, label='Left hand', color="chocolate")
 
-fig.tight_layout()
-plt.savefig(csv_path.with_name(f"hand_rms.png"))
-# plt.show()
-plt.close()
+    # ラベル、タイトル、凡例の設定
+    ax.set_ylabel("RMS [m/$s^2$]", fontsize=30)
+    # ax.set_xlabel("Phase")
+    # ax.set_title(title)
+    ax.set_ylim(0, 5.5)
+    ax.set_xticks(x)
+    ax.set_xticklabels(["Phase 1", "Phase 2", "Phase 3", "Phase 4"], fontsize=30)
+    ax.tick_params(labelsize=30)
+    # ax.legend(fontsize=25)
+    ax.margins(y=0.1)
 
+    # 各棒の上に値を表示 (オプション)
+    def autolabel(rects):
+        for rect in rects:
+            height = rect.get_height()
+            ax.annotate(f'{height:.2f}',
+                        xy=(rect.get_x() + rect.get_width() / 2, height),
+                        xytext=(0, 3),
+                        textcoords="offset points",
+                        ha='center', va='bottom', fontsize=20)
 
+    autolabel(rects1)
+    autolabel(rects2)
 
-
-
-
-
-
-
-
-
+    fig.tight_layout()
+    plt.savefig(csv_path.parent.with_name(f"hand_rms_{condition}.png"))
+    # plt.show()
+    plt.close()
