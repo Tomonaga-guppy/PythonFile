@@ -2,6 +2,7 @@ import pandas as pd
 import io
 from scipy.signal import butter, filtfilt
 import pickle
+import numpy as np
 
 def read_ags_dataframe(csv_file):
     """
@@ -97,82 +98,6 @@ def find_sync_frame(imu_df, col_name):
     # print(f"imu_sync_frame_x:{imu_sync_frame}")
     return imu_sync_frame
 
-import matplotlib.pyplot as plt
-import numpy as np
-
-def create_plot(x_data, y_data_list, plot_type='plot', labels=None, colors=None, linestyles=None, markers=None,
-                title=None, xlabel=None, ylabel=None, grid=False, save_path=None, figsize=(8, 6), plt_show=False,
-                plt_close=True, plt_save=True, legend_outside=False):
-    """
-    汎用的なグラフ作成関数
-
-    Args:
-        x_data (list-like): x軸データ
-        y_data_list (list of list-like): y軸データ (複数のyデータ系列をリストで指定)
-        plot_type (str, optional): グラフの種類 ('plot', 'scatter', 'bar'など). デフォルトは 'plot'
-        labels (list of str, optional): 各データ系列のラベル (凡例用). デフォルトは None
-        colors (list of str, optional): 各データ系列の色. デフォルトは None (Matplotlibのデフォルト色を使用)
-        linestyles (list of str, optional): 折れ線グラフの線種. デフォルトは None (Matplotlibのデフォルト線種を使用)
-        markers (list of str, optional): 散布図などのマーカーの種類. デフォルトは None (マーカーなし)
-        title (str, optional): グラフタイトル. デフォルトは None
-        xlabel (str, optional): x軸ラベル. デフォルトは None
-        ylabel (str, optional): y軸ラベル. デフォルトは None
-        grid (bool, optional): グリッド線の表示/非表示. デフォルトは False (非表示)
-        save_path (str, optional): グラフの保存パス. デフォルトは None (保存しない)
-        figsize (tuple, optional): 図のサイズ (width, height). デフォルトは (8, 6)
-    """
-    if legend_outside:
-        fig, ax = plt.subplots(figsize=(figsize[0]+1, figsize[1]))
-    else:
-        fig, ax = plt.subplots(figsize=figsize)
-
-    # データ系列ごとにプロット
-    for i, y_data in enumerate(y_data_list):
-        label = labels[i] if labels else f'Data {i+1}' # ラベルが指定されていなければ自動でラベル生成
-        color = colors[i] if colors else None
-        linestyle = linestyles[i] if linestyles and plot_type == 'plot' else None # 折れ線グラフ以外ではlinestyleは無視
-        marker = markers[i] if markers else None
-
-        if plot_type == 'plot':
-            ax.plot(x_data, y_data, label=label, color=color, linestyle=linestyle, marker=marker)
-        elif plot_type == 'scatter':
-            ax.scatter(x_data, y_data, label=label, color=color, marker=marker)
-        elif plot_type == 'bar':
-            ax.bar(x_data, y_data, label=label, color=color) # bar plot はlinestyleとmarkerをサポートしない
-        else:
-            raise ValueError(f"Invalid plot_type: {plot_type}. Supported types are 'plot', 'scatter', 'bar'")
-
-    # グラフ要素の設定
-    if title:
-        ax.set_title(title)
-    if xlabel:
-        ax.set_xlabel(xlabel)
-    if ylabel:
-        ax.set_ylabel(ylabel)
-    if labels and plot_type != 'bar': # bar plot はlegendを表示しない方が良い場合がある
-        if legend_outside:
-            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-        else:
-            ax.legend()
-
-    if grid:
-        ax.grid(True)
-
-    ax.margins(x=0) # グラフの端とデータの間に余白を設
-
-    fig.tight_layout()
-
-    # グラフの保存
-    if save_path and plt_save:
-        plt.savefig(save_path)
-
-    if plt_show:
-        plt.show()
-
-    if plt_close:
-        plt.close()
-
-
 def calGaitPhase(ic_frame_dict_ori, to_frame_dict_ori):
     phase_dict = {key : [] for key in ic_frame_dict_ori.keys()}
     for iPeople in range(len(ic_frame_dict_ori)):
@@ -229,14 +154,28 @@ def get_gait_event_block(IC_frame_l, IC_frame_r, TO_frame_l, TO_frame_r):
     gait_event_block = np.zeros((len(IC_frame_l)-1,5), dtype=int)
     for i in range(len(IC_frame_l)-1):
         gait_event_block[i] = [IC_frame_l[i], TO_frame_r[i], IC_frame_r[i], TO_frame_l[i], IC_frame_l[i+1]]
-    print(f"gait_event_block:{gait_event_block}")
+    # print(f"gait_event_block:{gait_event_block}")
     return gait_event_block
 
 def get_event_percent_block(gait_event_frame_array):
-    print(f"gait_event_frame_array:{gait_event_frame_array}")
+    # print(f"event_frame_array:{gait_event_frame_array}")
     # イベントのフレームリストから、各イベントの割合を計算する。
     event_percent_block = np.zeros((len(gait_event_frame_array), 5), dtype=float)
     for i, event_frame in enumerate(gait_event_frame_array):
         event_percent_block[i] = (event_frame - event_frame[0]) / (event_frame[-1]- event_frame[0]) * 100
-    print(f"event_percent_block:{event_percent_block}")
+    # print(f"event_percent_block:{event_percent_block}")
     return event_percent_block
+
+
+def frame2percent(acc_frame_series):
+    ori_idx = acc_frame_series.index.to_numpy()
+    normalized_ori_idx = (ori_idx - ori_idx[0]) / (ori_idx[-1] - ori_idx[0]) * 100  # 横軸を0~100に正規化
+    acc_data = acc_frame_series.to_numpy()
+    # 0~99で1刻みになるようリサンプリング
+    new_start_idx = 0
+    new_end_idx = 100
+    num_points = 100
+    new_idx = np.linspace(new_start_idx, new_end_idx, num_points)
+    new_acc_data = np.interp(new_idx, normalized_ori_idx, acc_data)
+    # print(f"new_acc_data:{new_acc_data}")
+    return new_acc_data
