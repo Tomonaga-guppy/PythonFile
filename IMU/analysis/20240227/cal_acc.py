@@ -228,9 +228,12 @@ for target_imu in target_imus:
 
             # 時間軸をとって加速度をプロット abngaitのときになぜかylimが適用されない（showから保存した）
             plt.figure(figsize=(10,8))
-            plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_x"], label="S-I", color="red")
-            plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_y"], label="L-R", color="green")
-            plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_z"], label="A-P", color="blue")
+            plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_x"], label="鉛直方向（上向き＋）", color="red")
+            plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_y"], label="左右方向（左向き＋）", color="green")
+            plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_z"], label="前後方向（前向き＋）", color="blue")
+            # plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_x"], label="S-I", color="red")
+            # plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_y"], label="L-R", color="green")
+            # plt.plot(imu_df_sublumb.index, imu_df_sublumb["acc_z"], label="A-P", color="blue")
             plt.legend(fontsize=30)
             plt.xlabel("Gait cycle [%]", fontsize=30)
             plt.ylabel("Acc [m/$s^2$]", fontsize=30)
@@ -245,7 +248,7 @@ for target_imu in target_imus:
             plt.grid()
             plt.tight_layout()
             plt.savefig(csv_path.with_name(f"{condition_list[i]}_acc_XYZ.png"))
-            # plt.show()
+            plt.show()
             plt.close()
 
         if target_imu == "theraLumb":
@@ -438,6 +441,7 @@ ax.set_ylabel("RMS [m/$s^2$]", fontsize=30)
 # ax.set_ylim(0, 5)
 ax.set_xticks(x)
 ax.set_xticklabels(["Phase 1", "Phase 2", "Phase 3"], fontsize=30)
+ax.tick_params(labelsize=30)
 ax.legend(fontsize=25)
 ax.margins(y=0.1)
 
