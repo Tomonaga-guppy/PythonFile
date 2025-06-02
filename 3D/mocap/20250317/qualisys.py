@@ -150,6 +150,7 @@ def main():
             e_y_lfoot = np.cross(e_z_lfoot, e_x_lfoot)
             rot_lfoot = np.array([e_x_lfoot, e_y_lfoot, e_z_lfoot]).T
 
+            # 相対回転行列の計算
             r_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_rthigh)
             l_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_lthigh)
             r_knee_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rthigh)
@@ -164,6 +165,7 @@ def main():
             r_ankle_angle_rot = R.from_matrix(r_ankle_realative_rotation)
             l_ankle_angle_rot = R.from_matrix(l_ankle_realative_rotation)
 
+            # 回転行列から回転角を計算
             r_hip_angle = r_hip_angle_rot.as_euler('yzx', degrees=True)[0]
             l_hip_angle = l_hip_angle_rot.as_euler('yzx', degrees=True)[0]
             r_knee_angle = r_knee_angle_rot.as_euler('yzx', degrees=True)[0]
@@ -171,8 +173,8 @@ def main():
             r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
             l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
 
-
-
+            # 角度範囲を調整
+            # 角度が負の場合は360を足して正の値に変換
             r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
             l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
             r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
@@ -180,6 +182,7 @@ def main():
             r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
             l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
 
+            # 各角度について特定の範囲に変換
             r_hip_angle = 180 - r_hip_angle if r_hip_angle > 100 else r_hip_angle
             l_hip_angle = 180 - l_hip_angle if l_hip_angle > 100 else l_hip_angle
             r_knee_angle = 180 - r_knee_angle if r_knee_angle < 180 else r_knee_angle - 180

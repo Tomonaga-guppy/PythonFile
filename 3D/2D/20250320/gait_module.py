@@ -418,6 +418,7 @@ def check_edge_frame(event_frame_list):
     return event_frame_list_filtered
 
 def calc_stride_time(ic_frame_list, side, fps):
+    """指定された側の初期接地フレームリストから歩行周期の平均時間と標準偏差を計算"""
     list = ic_frame_list[side]
     #リスト内の要素間の差を計算
     stride_time_frame = [list[i+1] - list[i] for i in range(len(list)-1)]

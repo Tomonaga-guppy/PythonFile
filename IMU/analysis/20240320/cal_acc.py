@@ -61,6 +61,7 @@ for target_imu in target_imus:
         #歩行パラメータを取得
         gait_params = imu.loadPickle(op_gait_params_paths[i])
         walk_speed = gait_params["0"]["walk_speed"] #歩行速度(RMSの正規化に使用)
+        step = gait_params["0"]["step_avg"] #左右平均した歩幅(RMSの正規化に使用)
 
 
         imu_df_100hz = imu.read_ags_dataframe(csv_path)
@@ -231,7 +232,7 @@ for target_imu in target_imus:
             rms_dict["std_y"] = std_y
             rms_dict["std_z"] = std_z
 
-            # 歩行周期全体でのRMS（歩行速度の2乗で正規化）を計算
+            # 歩行周期全体でのRMS（歩行速度の2乗で除算して歩幅を乗算して正規化：水池さんの論文参考）を計算
             rms_x_n_list, rms_y_n_list, rms_z_n_list = [], [], []
             for cycle_num in range(gait_event_frame_array.shape[0]):
                 print(f"サイクルの番号:{cycle_num}")

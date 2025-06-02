@@ -151,6 +151,11 @@ def main():
         print(F"new_ic_frame_dict:{new_ic_frame_dict}")
         print(F"new_to_frame_dict:{new_to_frame_dict}")
 
+        """
+        new_ic_frame_dict:{'0': {'IC_R': [2582, 2645, 2708, 2773], 'IC_L': [2617, 2678, 2741]}, '1': {'IC_R': [2647, 2708, 2772, 2836], 'IC_L': [2616, 2678, 2741, 2805]}}
+        new_to_frame_dict:{'0': {'TO_R': [2624, 2686, 2748, 2814], 'TO_L': [2652, 2714, 2780]}, '1': {'TO_R': [2687, 2748, 2813], 'TO_L': [2656, 2718, 2780, 2844]}}
+        """
+
         # 歩行の3つの層を決めるフレームや割合を計算
         phase_frame_dict = sggait.calGaitPhase(new_ic_frame_dict, new_to_frame_dict)
         new_phase_frame_dict = {key: [] for key in df_dict_ft.keys()}
