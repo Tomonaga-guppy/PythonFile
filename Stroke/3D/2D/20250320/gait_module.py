@@ -573,3 +573,174 @@ def calGaitPhasePercent(phase_frame_list_dict):
         phase_percent_list_dict[f"{iPeople}"] = phase_percent_list_res
     return phase_percent_list_dict
 
+def extract_keypoints(dict_ft):
+    """患者側の使用するキーポイントを抽出し、辞書型で格納"""
+    keypoints_dict = {}
+    keypoints_dict["Neck"] = dict_ft["0"].loc[:, ["Neck_x", "Neck_y"]].copy()
+    keypoints_dict["MidHip"] = dict_ft["0"].loc[:, ["MidHip_x", "MidHip_y"]].copy()
+    keypoints_dict["RHip"] = dict_ft["0"].loc[:, ["RHip_x", "RHip_y"]].copy()
+    keypoints_dict["LHip"] = dict_ft["0"].loc[:, ["LHip_x", "LHip_y"]].copy()
+    keypoints_dict["RKnee"] = dict_ft["0"].loc[:, ["RKnee_x", "RKnee_y"]].copy()
+    keypoints_dict["LKnee"] = dict_ft["0"].loc[:, ["LKnee_x", "LKnee_y"]].copy()
+    keypoints_dict["RAnkle"] = dict_ft["0"].loc[:, ["RAnkle_x", "RAnkle_y"]].copy()
+    keypoints_dict["LAnkle"] = dict_ft["0"].loc[:, ["LAnkle_x", "LAnkle_y"]].copy()
+    keypoints_dict["RBigToe"] = dict_ft["0"].loc[:, ["RBigToe_x", "RBigToe_y"]].copy()
+    keypoints_dict["LBigToe"] = dict_ft["0"].loc[:, ["LBigToe_x", "LBigToe_y"]].copy()
+    keypoints_dict["RSmallToe"] = dict_ft["0"].loc[:, ["RSmallToe_x", "RSmallToe_y"]].copy()
+    keypoints_dict["LSmallToe"] = dict_ft["0"].loc[:, ["LSmallToe_x", "LSmallToe_y"]].copy()
+    keypoints_dict["RHeel"] = dict_ft["0"].loc[:, ["RHeel_x", "RHeel_y"]].copy()
+    keypoints_dict["LHeel"] = dict_ft["0"].loc[:, ["LHeel_x", "LHeel_y"]].copy()
+
+    print(f"keypoints_dict:{keypoints_dict.keys()}")
+
+    return keypoints_dict
+
+def calc_joint_angle(keypoints_dict):
+    """関節角度を計算して辞書型で格納"""
+    # 使用するキーポイントの抽出  valuesのためフレーム数の情報が飛んでいる
+    trunk_bec = keypoints_dict["Neck"].values - keypoints_dict["MidHip"].values
+    thigh_r_bec = keypoints_dict["RKnee"].values - keypoints_dict["RHip"].values
+    thigh_l_bec = keypoints_dict["LKnee"].values - keypoints_dict["LHip"].values
+    lower_leg_r_bec = keypoints_dict["RKnee"].values - keypoints_dict["RAnkle"].values
+    lower_leg_l_bec = keypoints_dict["LKnee"].values - keypoints_dict["LAnkle"].values
+    foot_r_bec = (keypoints_dict["RBigToe"].values + keypoints_dict["RSmallToe"].values) /2 - keypoints_dict["RHeel"].values
+    foot_l_bec = (keypoints_dict["LBigToe"].values + keypoints_dict["LSmallToe"].values) /2 - keypoints_dict["LHeel"].values
+
+    # 関節角度の計算
+    joint_angle_dict = {}
+    def _calc_angle(v1, v2):
+        """ベクトルv1とv2のなす角を計算 フレーム数は元データと対応していないので注意"""
+        angle_array = np.zeros(v1.shape[0])
+        for false_frame in range(v1.shape[0]):
+            if np.linalg.norm(v1[false_frame]) == 0 or np.linalg.norm(v2[false_frame]) == 0:
+                angle = np.nan
+            dot_product = np.dot(v1[false_frame], v2[false_frame])
+            cross_product = np.cross(v1[false_frame], v2[false_frame])
+            angle = np.rad2deg(np.arctan2(cross_product, dot_product))
+            angle_array[false_frame] = angle
+        # print(f"angle_array_shape:{angle_array.shape}")
+        # print(f"angle_array:{angle_array}")
+        return angle_array
+
+    Hip_r_angle = _calc_angle(thigh_r_bec, trunk_bec)
+    Hip_l_angle = _calc_angle(thigh_l_bec, trunk_bec)
+    Knee_r_angle = _calc_angle(thigh_r_bec, lower_leg_r_bec)
+    Knee_l_angle = _calc_angle(thigh_l_bec, lower_leg_l_bec)
+    Ankle_r_angle = _calc_angle(foot_r_bec, lower_leg_r_bec)
+    Ankle_l_angle = _calc_angle(foot_l_bec, lower_leg_l_bec)
+
+    Hip_r_angle = np.where(Hip_r_angle < 0, Hip_r_angle + 360, Hip_r_angle)
+    Hip_l_angle = np.where(Hip_l_angle < 0, Hip_l_angle + 360, Hip_l_angle)
+    Knee_r_angle = np.where(Knee_r_angle < 0, Knee_r_angle + 360, Knee_r_angle)
+    Knee_l_angle = np.where(Knee_l_angle < 0, Knee_l_angle + 360, Knee_l_angle)
+    Ankle_r_angle = np.where(Ankle_r_angle < 0, Ankle_r_angle + 360, Ankle_r_angle)
+    Ankle_l_angle = np.where(Ankle_l_angle < 0, Ankle_l_angle + 360, Ankle_l_angle)
+    joint_angle_dict["Hip_r"] = Hip_r_angle - 180
+    joint_angle_dict["Hip_l"] = 180 - Hip_l_angle
+    # joint_angle_dict["Knee_r"] = Knee_r_angle
+    # joint_angle_dict["Knee_l"] = Knee_l_angle
+    joint_angle_dict["Knee_r"] = 180 - Knee_r_angle
+    joint_angle_dict["Knee_l"] = 180 - Knee_l_angle
+    joint_angle_dict["Ankle_r"] = Ankle_r_angle - 90
+    joint_angle_dict["Ankle_l"] = 90 - Ankle_l_angle
+    return joint_angle_dict
+
+def changedict2df(joint_angle_dict, to_index):
+    """辞書型の関節角度データをDataFrameに変換する関数"""
+    df = pd.DataFrame()
+    for key, value in joint_angle_dict.items():
+        # print(f"key:{key}, value:{value}")
+        df[key] = value
+    df.index = to_index
+    # print(f"df:{df}")
+    return df
+
+def plot_angle(angle, frame, ylim, title, save_path):
+    """
+    関節角度をプロットする関数
+    Args:
+        angle: 関節角度の配列
+        ylim: y軸の範囲
+        title: グラフのタイトル
+        save_path: 保存先のパス
+    """
+    # print(f"angle:{angle}")
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(frame, angle, label=title)
+    plt.ylim(ylim)
+    plt.title(title)
+    plt.xlabel("Frame")
+    plt.ylabel("Angle (degrees)")
+    plt.savefig(save_path)
+    plt.close()  # プロットを閉じる
+
+def joint_agnle_devided_by_cycle(joint_angle_df, phase_frame_list):
+    """
+    関節角度を歩行サイクルごとに分割して保存する関数
+    Args:
+        joint_angle_df: 関節角度のDataFrame
+        phase_frame_list_dict: 歩行サイクルのフレームリスト辞書
+        save_dir: 保存先のディレクトリ
+    """
+
+    def _frame2percent(df):
+        """フレームをパーセントに変換する関数"""
+        angle_percent_array = np.zeros((len(df.columns), 100))
+        ori_idx = df.index
+        normalized_idx = (ori_idx - ori_idx[0]) / (ori_idx[-1] - ori_idx[0]) * 100
+        for i, name in enumerate(df.columns):
+            angle_data = df[name].values
+            new_start_idx = 0
+            new_end_idx = 100
+            num_points = 100
+            new_idx = np.linspace(new_start_idx, new_end_idx, num_points)
+            interpolated_data = np.interp(new_idx, normalized_idx, angle_data).T
+            # print(f"angle_percent_array.shape:{angle_percent_array.shape}")
+            # print(f"interpolated_data.shape:{interpolated_data.shape}")
+            angle_percent_array[i][:] = interpolated_data
+        # print(f"angle_percent_array:{angle_percent_array}")
+        # print(f"angle_percent_array_last.shape:{angle_percent_array.shape}")
+        return angle_percent_array
+
+    #結果を格納するnp配列を用意 形状：サイクル数 x 角度の種類 x ポイント数
+    all_angle_array = np.zeros((len(phase_frame_list), len(joint_angle_df.columns), 100))
+    for icycle, cycle_frames in enumerate(phase_frame_list):
+        print(f"icycle:{icycle}")
+        # if icycle == len(phase_frame_list) - 1:
+        #     continue
+        start_frame = cycle_frames[0]
+        end_frame = cycle_frames[-1]
+        joint_angle_df_cycle = joint_angle_df.loc[start_frame:end_frame].copy()
+        joint_angle_percent_array = _frame2percent(joint_angle_df_cycle)
+        all_angle_array[icycle, :, :] = joint_angle_percent_array
+    # print(f"all_angle_array:{all_angle_array}")
+    # print(f"all_angle_array.shape:{all_angle_array.shape}")
+    return all_angle_array
+
+def plot_angle_mean_std(all_angle_mean, all_angle_std, idx, angle_name, save_path):
+    """
+    関節角度の平均と標準偏差をプロットする関数
+    Args:
+        all_angle_mean: 関節角度の平均値
+        all_angle_std: 関節角度の標準偏差
+        angle_name: 関節名
+        save_path: 保存先のパス
+    """
+    # print(f"all_angle_mean:{all_angle_mean}")
+    # print(f"all_angle_std:{all_angle_std}")
+
+    plt.figure(figsize=(10, 6))
+    plt.ylim(-35, 75)  # y軸の範囲を設定
+    plt.plot(range(0,100), all_angle_mean, label=f"{angle_name}", color='blue')
+    plt.fill_between(range(len(all_angle_mean)), all_angle_mean - all_angle_std, all_angle_mean + all_angle_std, color='blue', alpha=0.2, label=f"{angle_name} Std")
+    plt.title(f"{angle_name} Angle", fontsize=25)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
+    plt.xlabel("Gait Cycle (%)", fontsize=20)
+    plt.ylabel("Angle (degrees)", fontsize=20)
+    # plt.legend()
+    plt.savefig(save_path)
+    # plt.show()  # グラフを表示
+    plt.close()  # プロットを閉じる
+

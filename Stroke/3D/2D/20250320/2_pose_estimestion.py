@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 
 root_dir = Path(r"G:\gait_pattern\20250228_ota\data\20250221\sub0")
-ori_mov_paths = list(root_dir.glob(f"**/UD*.MP4"))
+ori_mov_paths = list(root_dir.glob(f"*Undistort*.MP4"))
 print(f"ori_mov_paths: {ori_mov_paths}")
 
 # sys.exit()
