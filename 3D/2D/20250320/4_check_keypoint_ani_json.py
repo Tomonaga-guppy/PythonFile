@@ -47,7 +47,7 @@ def main():
             solo = True
         else:
             solo = False
-        # 前後の人のスイッチング処理
+        # 前後の人での全身のスイッチング処理(大雑把)
         df_dict_chsw = sggait.checkSwithing(copy.deepcopy(df_dict))
         frame_range = df_dict_chsw["0"].index
 
@@ -213,6 +213,64 @@ def main():
         # パラメータを保存
         gait_params_save_path = condition_dir / f"gait_params.pickle"
         sggait.save_as_pickle(gait_params_dict, gait_params_save_path)
+
+        ### 関節角度の計算 ###
+        # 使用するキーポイント(患者側)だけ抽出する
+        keypoints_dict = sggait.extract_keypoints(df_dict_ft)
+        # print(f"keypoints_dict:{keypoints_dict}")
+        # 関節角度を計算
+        joint_angle_dict = sggait.calc_joint_angle(keypoints_dict)
+        joint_angle_df = sggait.changedict2df(joint_angle_dict, df_dict_ft["0"].index)
+
+        """
+        joint_angle_df:                Hip_r      Hip_l      Knee_r      Knee_l    Ankle_r     Ankle_l
+        frame_num
+        2507      -140.126272  48.851265 -147.100521 -110.141040  -9.768265   82.420822
+        2508      -140.277611  48.872650 -147.312998 -110.088207  -9.817001   82.373698
+        2509      -140.519358  48.901551 -147.650076 -110.002274  -9.897127   82.307733
+        2517      -140.939439  48.937173 -148.229422 -109.848701 -10.042656   82.219173
+        2532      -141.823219  48.977649 -149.432693 -109.515994 -10.362851   82.094267
+        ...               ...        ...         ...         ...        ...         ...
+        2877         0.587222   2.123493   32.859426  176.306207  26.200021 -113.557886
+        2878         0.542184  -1.222229   35.648893  149.437810  25.722715 -137.959652
+        2880         0.226035  -3.000005   35.951068  139.059665  22.185063 -147.207365
+        2881        -0.210894  -3.946007   33.624663  143.814701  14.053066 -141.753885
+        2882        -0.678941  -4.411558   29.134150  148.626765  -1.278398 -136.468167
+        """
+
+        # 各関節角度の結果を出力(フレーム番号がインデックス)
+        print(f"joint_angle_df:\n{joint_angle_df}")
+        joint_angle_df.to_csv(openpose_dir.with_name(f"joint_angle_frame_{condition}.csv"))
+
+
+        # 平均値と標準偏差を計算
+        all_angle_by_cycle_array = sggait.joint_agnle_devided_by_cycle(joint_angle_df, new_phase_frame_dict["0"])
+        all_angle_mean_array = all_angle_by_cycle_array.mean(axis=0)
+        all_angle_std_array = all_angle_by_cycle_array.std(axis=0)
+        # print(f"all_angle_by_cycle_array:\n{all_angle_by_cycle_array}")
+        # print(f"all_angle_mean_array:\n{all_angle_mean_array}")
+        # print(f"all_angle_std_array:\n{all_angle_std_array}")
+
+        # 各関節角度の平均値と標準偏差を出力（%歩行周期がインデックス）
+        mean_columns = [f"{col}_mean" for col in joint_angle_df.columns]
+        std_columns = [f"{col}_std" for col in joint_angle_df.columns]
+
+        angle_mean_df = pd.DataFrame(all_angle_mean_array.T, columns= mean_columns)
+        angle_std_df = pd.DataFrame(all_angle_std_array.T, columns= std_columns)
+        print(f"angle_mean_df:\n{angle_mean_df}")
+        print(f"angle_std_df:\n{angle_std_df}")
+        angle_mean_std_df  = pd.concat([angle_mean_df, angle_std_df], axis=1)
+        print(f"angle_mean_std_df:\n{angle_mean_std_df}")
+        angle_mean_std_df.to_csv(openpose_dir.with_name(f"joint_angle_mean_std_{condition}.csv"))
+
+        # 図示
+        sggait.plot_angle_mean_std(all_angle_mean_array[0,:], all_angle_std_array[0,:], joint_angle_df.index, "HipAngle_r", save_path=openpose_dir.with_name("HipAngle_r.png"))
+        sggait.plot_angle_mean_std(all_angle_mean_array[1,:], all_angle_std_array[1,:], joint_angle_df.index, "HipAngle_l", save_path=openpose_dir.with_name("HipAngle_l.png"))
+        sggait.plot_angle_mean_std(all_angle_mean_array[2,:], all_angle_std_array[2,:], joint_angle_df.index, "KneeAngle_r", save_path=openpose_dir.with_name("KneeAngle_r.png"))
+        sggait.plot_angle_mean_std(all_angle_mean_array[3,:], all_angle_std_array[3,:], joint_angle_df.index, "KneeAngle_l", save_path=openpose_dir.with_name("KneeAngle_l.png"))
+        sggait.plot_angle_mean_std(all_angle_mean_array[4,:], all_angle_std_array[4,:], joint_angle_df.index, "AnkleAngle_r", save_path=openpose_dir.with_name("AnkleAngle_r.png"))
+        sggait.plot_angle_mean_std(all_angle_mean_array[5,:], all_angle_std_array[5,:], joint_angle_df.index, "AnkleAngle_l", save_path=openpose_dir.with_name("AnkleAngle_l.png"))
+
 
 
 

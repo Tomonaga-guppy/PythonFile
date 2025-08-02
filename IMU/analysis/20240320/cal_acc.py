@@ -75,6 +75,7 @@ for target_imu in target_imus:
         0  73338560  10131   -673    997
         1  73338570  10070   -726   1024
         """
+        # 100Hzのデータを60Hzにダウンサンプリングする前に、バターワースフィルタを適用
         imu_df_butter_100Hz = imu.butter_lowpass_fillter(copy.copy(imu_df_100hz), sampling_freq=60, order=4, cutoff_freq=10)
         # 100Hzのデータを60Hzにダウンサンプリング
         imu_df = imu.resampling(copy.copy(imu_df_butter_100Hz), pre_Hz = 100, post_Hz = 60)
@@ -90,7 +91,7 @@ for target_imu in target_imus:
         0     7.355353e+07 -1.004544 -7.907841   7.224084
         1     7.355355e+07 -1.052613 -7.922065   7.098026
         """
-        #RMSを追加
+        #三軸の合計加速度を追加
         imu_df["acc"] = (imu_df["acc_x"]**2 + imu_df["acc_y"]**2 + imu_df["acc_z"]**2) **0.5
         # imu_df["acc_xyrms"] = (imu_df["acc_x"]**2 + imu_df["acc_y"]**2) / 3 **0.5
 
@@ -422,13 +423,20 @@ for target_imu in target_imus:
         unasi_rms_n = [rms_n_list[0]["rms_x_n"], rms_n_list[0]["rms_y_n"], rms_n_list[0]["rms_z_n"]]
         asi_rms1_n = [rms_n_list[1]["rms_x_n"], rms_n_list[1]["rms_y_n"], rms_n_list[1]["rms_z_n"]]
         asi_rms2_n = [rms_n_list[2]["rms_x_n"], rms_n_list[2]["rms_y_n"], rms_n_list[2]["rms_z_n"]]
+
+        # --- 標準偏差のデータをエラーバー用に抽出 ---
+        unasi_errors_std = [rms_n_list[0]["std_x_n"], rms_n_list[0]["std_y_n"], rms_n_list[0]["std_z_n"]]
+        asi1_errors_std = [rms_n_list[1]["std_x_n"], rms_n_list[1]["std_y_n"], rms_n_list[1]["std_z_n"]]
+        asi2_errors_std = [rms_n_list[2]["std_x_n"], rms_n_list[2]["std_y_n"], rms_n_list[2]["std_z_n"]]
+        # ------------------------------------------
+
         x = np.arange(len(tittle_labels))  # 各棒の位置 (0, 1, 2)
         width = 0.25  # 棒の幅
 
         fig, ax = plt.subplots(figsize=(12, 8))
-        rects1 = ax.bar(x - width, unasi_rms_n, width, label='Unassisted', color="black")
-        rects2 = ax.bar(x, asi_rms1_n, width, label='Assisted PT1', color = "gray")
-        rects3 = ax.bar(x + width, asi_rms2_n, width, label='Assisted PT2', color = "orange")
+        rects1 = ax.bar(x - width, unasi_rms_n, width, label='Unassisted', color="#c0c0c0", yerr=unasi_errors_std, capsize=5)
+        rects2 = ax.bar(x, asi_rms1_n, width, label='Assisted PT1', color = "tab:blue", yerr=asi1_errors_std, capsize=5)
+        rects3 = ax.bar(x + width, asi_rms2_n, width, label='Assisted PT2', color = "tab:red", yerr=asi2_errors_std, capsize=5)
 
         # ラベル、タイトル、凡例の設定
         ax.set_ylabel("RMS [1/m]", fontsize=30)
@@ -451,9 +459,9 @@ for target_imu in target_imus:
                             textcoords="offset points",
                             ha='center', va='bottom', fontsize=25)
 
-        autolabel(rects1)
-        autolabel(rects2)
-        autolabel(rects3)
+        # autolabel(rects1)
+        # autolabel(rects2)
+        # autolabel(rects3)
 
         fig.tight_layout()
         plt.savefig(csv_path.with_name(f"rms_normalized.png"))
@@ -535,15 +543,16 @@ for ithera in range(3):
     print("ithear:", ithera)
     Rhand_values = thera_r_hand_rms_list[ithera-1]["rms"]
     Lhand_values = thera_l_hand_rms_list[ithera-1]["rms"]
-    # Rhand_values = thera_r_hand_rms_list[ithera-1]["rms"]
-    # Lhand_values = thera_l_hand_rms_list[ithera-1]["rms"]
+
+    Rhand_std = thera_r_hand_rms_list[ithera-1]["std"]
+    Lhand_std = thera_l_hand_rms_list[ithera-1]["std"]
 
     x = np.arange(4)  # 各棒の位置 (0, 1, 2)
     width = 0.35  # 棒の幅
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    rects1 = ax.bar(x - width/2, Rhand_values, width, label='Right hand', color="moccasin")
-    rects2 = ax.bar(x + width/2, Lhand_values, width, label='Left hand', color="chocolate")
+    rects1 = ax.bar(x + width/2, Rhand_values, width, label='Right hand', color="#90ee90", yerr=Rhand_std, capsize=5)
+    rects2 = ax.bar(x - width/2, Lhand_values, width, label='Left hand', color="#deb887", yerr=Lhand_std, capsize=5)
 
     # ラベル、タイトル、凡例の設定
     ax.set_ylabel("RMS [m/$s^2$]", fontsize=30)
@@ -566,8 +575,8 @@ for ithera in range(3):
                         textcoords="offset points",
                         ha='center', va='bottom', fontsize=20)
 
-    autolabel(rects1)
-    autolabel(rects2)
+    # autolabel(rects1)
+    # autolabel(rects2)
 
     fig.tight_layout()
     plt.savefig(csv_path.parent.with_name(f"hand_rms_{condition}.png"))
