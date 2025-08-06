@@ -10,8 +10,9 @@ from tqdm import tqdm
 
 # --- 設定項目 ---
 # ユーザー指定のファイルパスを維持
-INPUT_VIDEO_PATH = r"G:\gait_pattern\20250717_br\Tpose\fr\GX010150.MP4"
-OUTPUT_VIDEO_PATH = r"G:\gait_pattern\20250717_br\Tpose\fr\trim.mp4"
+INPUT_VIDEO_PATH = r"G:\gait_pattern\int_cali\9g_20250806\fr\GX010154.MP4"
+
+OUTPUT_VIDEO_PATH = r"G:\gait_pattern\int_cali\9g_20250806\fr\cali.mp4"
 
 def play_and_select_timing():
     """【修正版】再生バーとフレーム操作機能付きのウィンドウでタイミングを指定する"""

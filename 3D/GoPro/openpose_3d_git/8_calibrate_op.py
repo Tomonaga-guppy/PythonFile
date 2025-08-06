@@ -20,9 +20,9 @@ IMAGE_BASE_PATH = BASE_PATH / "int_cali"
 PARAMS_BASE_PATH = BASE_PATH / "camera_parameters"
 
 # チェスボードの設定
-SQUARE_SIZE_MM = "25"  # チェスボードのマスのサイズ (mm)
-BOARD_SQUARES_X = "7"  # チェスボードの横の"内側の"角の数
-BOARD_SQUARES_Y = "5"  # チェスボードの縦の"内側の"角の数
+SQUARE_SIZE_MM = "35"  # チェスボードのマスのサイズ (mm)
+BOARD_SQUARES_X = "5"  # チェスボードの横の"内側の"角の数
+BOARD_SQUARES_Y = "4"  # チェスボードの縦の"内側の"角の数
 # 新しいフラグ用に "XxY" 形式の文字列を作成
 grid_corners = f"{BOARD_SQUARES_X}x{BOARD_SQUARES_Y}"
 

@@ -5,8 +5,8 @@ from pathlib import Path
 
 OPENPOSE_DIR = Path(r"C:\Users\Tomson\openpose")
 OPENPOSE_EXECUTABLE_PATH = Path(r"C:\Users\Tomson\openpose\build\x64\Release\OpenPoseDemo.exe")
-VIDEO_FL_PATH = Path(r"G:\gait_pattern\20250717_br\ngait\fl\trim.mp4")
-VIDEO_FR_PATH = Path(r"G:\gait_pattern\20250717_br\ngait\fr\trim.mp4")
+VIDEO_FL_PATH = Path(r"G:\gait_pattern\20250717_br\Tpose\fl\trim.mp4")
+VIDEO_FR_PATH = Path(r"G:\gait_pattern\20250717_br\Tpose\fr\trim.mp4")
 CAMERA_PARAMETER_PATH = Path(r"G:\gait_pattern\20250717_br\camera_parameters")
 
 def run_command(command_list):
@@ -42,7 +42,7 @@ def run_command(command_list):
     else:
         print(f"\n[ERROR] コマンドの実行に失敗しました (終了コード: {return_code})\n")
 
-output_video_path = VIDEO_FL_PATH.parent.with_name("3d_.avi")
+output_video_path = VIDEO_FL_PATH.parent.with_name("3d.avi")
 output_json_path = VIDEO_FL_PATH.parent.with_name("3d_json")
 
 command_list = [

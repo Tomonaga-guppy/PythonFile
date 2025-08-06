@@ -6,9 +6,9 @@ from tqdm import tqdm
 
 def main():
     # --- パラメータ設定 ---
-    # 画像の場所をユーザー指定のパスに修正
+    # ステレオキャリブレーション用の画像が保存されているディレクトリ
     stereo_cali_dir = Path(r"G:\gait_pattern\stero_cali\9g_6x5")
-    # 各カメラの内部パラメータが保存されている場所
+    # 各カメラの内部パラメータが保存されているディレクトリ
     int_cali_dir = Path(r"G:\gait_pattern\int_cali\9g_6x5")
 
     left_cam_dir_name = 'fl'
@@ -24,12 +24,11 @@ def main():
     # 終了基準
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'='*80}")
     print(f"ステレオキャリブレーションを開始します: ({left_cam_dir_name} と {right_cam_dir_name})")
-    print(f"{'='*60}")
+    print(f"{'='*80}")
 
     # --- 1. 各カメラの内部パラメータを読み込む ---
-    # 注意: 内部パラメータは元の 'int_cali' ディレクトリから読み込む想定
     left_params_path = int_cali_dir / left_cam_dir_name / "camera_params.json"
     right_params_path = int_cali_dir / right_cam_dir_name / "camera_params.json"
 
@@ -54,21 +53,26 @@ def main():
     print("読み込み完了。")
 
     # --- 2. 対応する画像ペアからコーナーを検出 ---
-    # <--- 変更点: ユーザー指定のステレオ画像用ディレクトリを参照
     left_img_folder = stereo_cali_dir / left_cam_dir_name / "cali_imgs"
     right_img_folder = stereo_cali_dir / right_cam_dir_name / "cali_imgs"
-    print(f"\n左カメラ画像フォルダ: {left_img_folder}")
-    print(f"右カメラ画像フォルダ: {right_img_folder}")
 
-    left_imgs = sorted(list(left_img_folder.glob("*.png")))
+    # 除外されていない画像のみを対象にする
+    left_imgs = sorted([p for p in left_img_folder.glob("*.png") if not p.name.startswith("excluded_")])
+
     if not left_imgs:
-        print(f"エラー: 左カメラの画像フォルダにPNGファイルが見つかりません: {left_img_folder}")
+        print(f"エラー: 左カメラの画像フォルダに有効なPNGファイルが見つかりません: {left_img_folder}")
         return
+
+    # 検出成功画像を保存するフォルダを作成
+    success_folder_l = stereo_cali_dir / left_cam_dir_name / "success"
+    success_folder_r = stereo_cali_dir / right_cam_dir_name / "success"
+    success_folder_l.mkdir(exist_ok=True)
+    success_folder_r.mkdir(exist_ok=True)
 
     image_pairs = []
     for left_img_path in left_imgs:
         right_img_path = right_img_folder / left_img_path.name
-        if right_img_path.exists():
+        if right_img_path.exists() and not right_img_path.name.startswith("excluded_"):
             image_pairs.append((left_img_path, right_img_path))
 
     if not image_pairs:
@@ -80,6 +84,7 @@ def main():
     objpoints = []
     imgpoints_l = []
     imgpoints_r = []
+    used_pairs = [] # 検出に成功したペアのパスを保存
 
     for left_path, right_path in tqdm(image_pairs, desc="コーナー検出中"):
         img_l = cv2.imread(str(left_path))
@@ -93,31 +98,92 @@ def main():
         if ret_l and ret_r:
             corners2_l = cv2.cornerSubPix(gray_l, corners_l, (11, 11), (-1, -1), criteria)
             corners2_r = cv2.cornerSubPix(gray_r, corners_r, (11, 11), (-1, -1), criteria)
+
             objpoints.append(objp)
             imgpoints_l.append(corners2_l)
             imgpoints_r.append(corners2_r)
+            used_pairs.append((left_path, right_path))
+
+            # 成功した画像にコーナーを描画して保存
+            corner_img_l = cv2.drawChessboardCorners(img_l.copy(), checker_pattern, corners2_l, ret_l)
+            cv2.imwrite(str(success_folder_l / left_path.name), corner_img_l)
+            corner_img_r = cv2.drawChessboardCorners(img_r.copy(), checker_pattern, corners2_r, ret_r)
+            cv2.imwrite(str(success_folder_r / right_path.name), corner_img_r)
+
 
     if not objpoints:
         print("エラー: 全ての画像ペアでコーナー検出に失敗しました。")
         return
 
-    print(f"\n{len(objpoints)} 組の有効なコーナーを検出しました。")
-    img_size = gray_l.shape[::-1]
+    print(f"\n{len(objpoints)} 組のペアでコーナー検出に成功しました。")
+    print(f"成功画像は 'success' フォルダに保存されました。")
 
-    # --- 3. ステレオキャリブレーションを実行 ---
-    print("\nステレオキャリブレーションを実行中...")
+    # --- 3. ユーザーによる目視での画像ペア除外 ---
+    print("\n--- 画像ペア除外リスト ---")
+    for i, (left_path, right_path) in enumerate(used_pairs):
+        print(f"  [{i:2d}] {left_path.name}")
+
+    excluded_indices = []
+    while True:
+        try:
+            print("\n最終キャリブレーションから『除外する』ペアの番号をカンマ区切りで入力してください。")
+            user_input = input("何も除外しない場合は、そのままEnterキーを押してください: ")
+            if not user_input: break
+            excluded_indices = [int(i.strip()) for i in user_input.split(',')]
+            if all(0 <= i < len(used_pairs) for i in excluded_indices): break
+            else: print("エラー: 範囲外の番号が入力されました。")
+        except ValueError: print("エラー: 不正な入力です。")
+
+    if excluded_indices:
+        print("\n以下の画像ペアを除外対象としてファイル名を変更します:")
+        excluded_indices_set = set(excluded_indices)
+        for i in sorted(list(excluded_indices_set), reverse=True):
+            left_to_exclude, right_to_exclude = used_pairs[i]
+
+            # successフォルダ内のファイルもリネーム
+            success_path_l = success_folder_l / left_to_exclude.name
+            success_path_r = success_folder_r / right_to_exclude.name
+            for path_to_exclude in [success_path_l, success_path_r]:
+                 new_name = f"excluded_{path_to_exclude.name}"
+                 new_path = path_to_exclude.with_name(new_name)
+                 if path_to_exclude.exists() and not new_path.exists():
+                     path_to_exclude.rename(new_path)
+
+    # 除外されなかったデータを整理
+    objpoints_clean, imgpoints_l_clean, imgpoints_r_clean = [], [], []
+    kept_paths = []
+    for i in range(len(used_pairs)):
+        if i not in excluded_indices:
+            objpoints_clean.append(objpoints[i])
+            imgpoints_l_clean.append(imgpoints_l[i])
+            imgpoints_r_clean.append(imgpoints_r[i])
+            kept_paths.append(used_pairs[i])
+
+    if len(objpoints_clean) < 10:
+        print(f"警告: 残った優良な画像ペアが少なすぎます ({len(objpoints_clean)}組)。")
+        if not objpoints_clean:
+            print("使用可能な画像ペアがなくなったため、処理を中断します。")
+            return
+
+    print("\n以下の画像ペアが最終キャリブレーションに使用されます:")
+    for left_path, _ in kept_paths:
+        print(f"  - {left_path.name}")
+
+    # --- 4. ステレオキャリブレーションを実行 ---
+    print(f"\n{len(objpoints_clean)} 組の画像ペアで最終キャリブレーションを実行します...")
+    img_size = gray_l.shape[::-1]
     flags = cv2.CALIB_FIX_INTRINSIC
     ret, _, _, _, _, R, T, E, F = cv2.stereoCalibrate(
-        objpoints, imgpoints_l, imgpoints_r, mtx_l, dist_l, mtx_r, dist_r,
+        objpoints_clean, imgpoints_l_clean, imgpoints_r_clean, mtx_l, dist_l, mtx_r, dist_r,
         img_size, flags=flags, criteria=criteria
     )
 
     if not ret:
-        print("ステレオキャリブレーションに失敗しました。")
+        print("最終キャリブレーションに失敗しました。")
         return
 
-    # --- 4. 結果の表示と保存 ---
-    print("\n【ステレオキャリブレーション結果】")
+    # --- 5. 結果の表示と保存 ---
+    print("\n【最終的なステレオキャリブレーション結果】")
     print(f"再投影誤差(RMS): {ret:.4f} pixels")
     print("\n回転行列 (R):")
     print(R)
@@ -131,7 +197,7 @@ def main():
         "camera_matrix_right": mtx_r.tolist(),
         "distortion_right": dist_r.tolist(),
         "R": R.tolist(), "T": T.tolist(), "E": E.tolist(), "F": F.tolist(),
-        "image_size": img_size
+        "image_size": [img_size[0], img_size[1]]
     }
 
     with open(output_params_path, 'w') as f:

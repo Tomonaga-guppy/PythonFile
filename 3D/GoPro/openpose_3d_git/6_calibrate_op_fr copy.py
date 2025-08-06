@@ -20,9 +20,9 @@ IMAGE_BASE_PATH = BASE_PATH / "int_cali"
 PARAMS_BASE_PATH = BASE_PATH / "camera_parameters"
 
 # チェスボードの設定
-SQUARE_SIZE_MM = "25"  # チェスボードのマスのサイズ (mm)
-BOARD_SQUARES_X = "7"  # チェスボードの横の"内側の"角の数
-BOARD_SQUARES_Y = "5"  # チェスボードの縦の"内側の"角の数
+SQUARE_SIZE_MM = "35"  # チェスボードのマスのサイズ (mm)
+BOARD_SQUARES_X = "5"  # チェスボードの横の"内側の"角の数
+BOARD_SQUARES_Y = "4"  # チェスボードの縦の"内側の"角の数
 # 新しいフラグ用に "XxY" 形式の文字列を作成
 grid_corners = f"{BOARD_SQUARES_X}x{BOARD_SQUARES_Y}"
 
@@ -81,7 +81,7 @@ def calibrate_intrinsics():
 
         for camera_name in CAMERA_NAMES:
             print(f"--- カメラ '{camera_name}' の処理を開始 ---")
-            image_dir = IMAGE_BASE_PATH / camera_name / "8x6" / "cali_frames_all"
+            image_dir = IMAGE_BASE_PATH / camera_name / "6x5" / "cali_frames_all"
             output_param_folder = PARAMS_BASE_PATH
 
             if not image_dir.is_dir():

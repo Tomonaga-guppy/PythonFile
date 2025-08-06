@@ -31,7 +31,7 @@ def load_keypoints_from_json(json_path):
 def main():
     # --- 1. パス設定 ---
     # Tposeビデオデータが格納されているルートディレクトリ
-    video_dir = Path(r"G:\gait_pattern\20250717_br\ngait")
+    video_dir = Path(r"G:\gait_pattern\20250717_br\Tpose")
     # ステレオキャリブレーションのパラメータファイル
     stereo_params_path = Path(r"G:\gait_pattern\stero_cali\9g_6x5\stereo_params.json")
 

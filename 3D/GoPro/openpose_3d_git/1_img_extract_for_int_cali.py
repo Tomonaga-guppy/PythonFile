@@ -4,14 +4,14 @@ import numpy as np
 
 # --- 設定項目 ---
 
-SIDE = "fr"
+SIDE = "fl"
 
 # 1. 入力する動画ファイルのパス
 # ご自身の動画ファイルのパスに変更してください
-INPUT_VIDEO_PATH = fr"G:\gait_pattern\20250717_br\ext_cali\{SIDE}\8x6\cali_trim.mp4"
+INPUT_VIDEO_PATH = fr"G:\gait_pattern\20250717_br\int_cali\{SIDE}\6x5\cali.mp4"
 
 # 2. 画像を保存するフォルダのパス (このフォルダは自動で作成されます)
-OUTPUT_DIR = fr"G:\gait_pattern\20250717_br\ext_cali\{SIDE}\8x6\cali_frames"
+OUTPUT_DIR = fr"G:\gait_pattern\20250717_br\int_cali\{SIDE}\6x5\cali_framesr"
 
 # 3. 保存する画像の枚数
 NUM_IMAGES_TO_SAVE = 40

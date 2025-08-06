@@ -7,7 +7,7 @@ import shutil
 
 # --- 設定項目 ---
 
-ROOT_DIR = r"G:\gait_pattern\20250717_br\int_cali\fr\8x6"
+ROOT_DIR = r"G:\gait_pattern\20250717_br\int_cali\fl\6x5"
 # 1. 統合元のフォルダ パス (1つ目)
 # ご自身の環境に合わせて変更してください
 SOURCE_DIR_A = os.path.join(ROOT_DIR, "cali_frames")
