@@ -26,8 +26,8 @@ SKELETON_CONNECTIONS = [
 
 def main():
     # --- 1. パス設定 ---
-    video_dir = Path(r"G:\gait_pattern\20250717_br\ngait")
-    input_csv_path = video_dir / "keypoints_3d.csv"
+    video_dir = Path(r"G:\gait_pattern\20250717_br\Tpose")
+    input_csv_path = video_dir / "keypoints_3d_origin_set.csv"
     output_video_path = video_dir / "skeleton_3d_animation.mp4"
 
     print(f"\n{'='*60}")
@@ -107,21 +107,20 @@ def main():
         ax.set_ylim((y_min + y_max - max_range) / 2, (y_min + y_max + max_range) / 2)
         ax.set_zlim((z_min + z_max - max_range) / 2, (z_min + z_max + max_range) / 2)
         ax.set_xlabel("X (mm)")
-        ax.set_ylabel("Y (mm)")
-        ax.set_zlabel("Z (mm)")
+        ax.set_ylabel("Z (mm)")
+        ax.set_zlabel("Y (mm)")
         ax.set_title(f"3D Skeleton Animation (Frame: {frame_num})")
-        ax.invert_zaxis()
+        # ax.invert_zaxis()
+        # ax.view_init(elev=0, azim=0)
 
     # --- 5. アニメーションの生成と保存 ---
     print("\nアニメーションを生成しています... (フレーム数: {})".format(len(frames)))
     # frames=frames を指定することで、実際にデータが存在するフレームのみを対象にする
-    # ★★★ 変更点: 60fpsに設定 ★★★
     ani = FuncAnimation(fig, update, frames=frames, interval=1000/60) # intervalはミリ秒 (60fps相当)
 
     # tqdmを使ってプログレスバーを表示
     progress_callback = lambda i, n: pbar.update()
     with tqdm(total=len(frames), desc="動画ファイル保存中") as pbar:
-        # ★★★ 変更点: 60fpsに設定 ★★★
         ani.save(output_video_path, writer='ffmpeg', fps=60, progress_callback=progress_callback)
 
     plt.close(fig) # メモリ解放

@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-root_dir = Path(r"G:\gait_pattern\int_cali\9g_6x5")
+root_dir = Path(r"G:\gait_pattern\int_cali\9g_8x6")
 directions = ["fl", "fr"]
 
 def extract_frames(video_path, output_dir, num_frames, video_name):

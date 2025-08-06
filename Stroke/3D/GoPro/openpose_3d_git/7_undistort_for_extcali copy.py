@@ -60,7 +60,7 @@ for camera_name in CAMERA_NAMES:
         # print("キャリブレーションの初期値として使用されたカメラ行列です。")
         print(camera_matrix_initial)
 
-    imgs_folder = Path(f"G:/gait_pattern/20250717_br/ext_cali/{camera_name}/8x6/cali_frames")
+    imgs_folder = Path(f"G:/gait_pattern/20250717_br/ext_cali/{camera_name}/6x5/cali_frames")
     imgs = list(imgs_folder.glob("*.png"))
     undistorted_img_folder = imgs_folder.parent.parent.with_name("cali_ud")
     if not undistorted_img_folder.exists():
