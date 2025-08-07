@@ -31,19 +31,19 @@ def load_keypoints_from_json(json_path):
 def main():
     # --- 1. パス設定 ---
     # Tposeビデオデータが格納されているルートディレクトリ
-    video_dir = Path(r"G:\gait_pattern\20250717_br\Tpose")
+    video_dir = Path(r"G:\gait_pattern\20250807_br\Tpose")
     # ステレオキャリブレーションのパラメータファイル
-    stereo_params_path = Path(r"G:\gait_pattern\stero_cali\9g_6x5\stereo_params.json")
+    stereo_params_path = Path(r"G:\gait_pattern\stereo_cali\9g_20250807_6x5_49d5\stereo_params.json")
 
     left_cam_name = 'fl'
     right_cam_name = 'fr'
 
     # OpenPoseが出力したJSONファイルが格納されているディレクトリ
-    left_json_dir = video_dir / left_cam_name / "openpose.json"
-    right_json_dir = video_dir / right_cam_name / "openpose.json"
+    left_json_dir = video_dir / left_cam_name / "openpose_49d5.json"
+    right_json_dir = video_dir / right_cam_name / "openpose_49d5.json"
 
     # 3D座標の出力先CSVファイル
-    output_csv_path = video_dir / "keypoints_3d.csv"
+    output_csv_path = video_dir / "keypoints_3d_49d5.csv"
 
     # 信頼度の閾値。これより低い信頼度のキーポイントは計算に使用しない
     CONFIDENCE_THRESHOLD = 0.5

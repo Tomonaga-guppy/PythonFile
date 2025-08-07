@@ -36,5 +36,5 @@ def sort_images_in_folder(folder_path):
 
 if __name__ == "__main__":
     # 使用例
-    folder_path = Path(r"G:\gait_pattern\stero_cali\9g_6x5\fl\cali_imgs")  # ここに対象のフォルダパスを指定
+    folder_path = Path(r"G:\gait_pattern\stereo_cali\9g_20250807_6x5_35\fr\cali_imgs")  # ここに対象のフォルダパスを指定
     sort_images_in_folder(folder_path)

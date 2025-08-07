@@ -7,10 +7,13 @@ import matplotlib.pyplot as plt
 
 def main():
     # --- パラメータ設定 ---
-    root_dir = Path(r"G:\gait_pattern\int_cali\9g_6x5")
-    directions = ['fl', 'fr']
+    root_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5_49d5")
+    directions = ['fr']
+    # directions = ['fl', 'fr']
     checker_pattern = (5, 4)
-    square_size = 35.0
+    square_size = 49.5  # mm単位
+
+    print(f"チェッカーボードのパターン: {checker_pattern[0]}x{checker_pattern[1]}, 正方形のサイズ: {square_size} mm")
 
     # 3D座標の準備 (標準モデル用の形式)
     objp = np.zeros((checker_pattern[0] * checker_pattern[1], 3), np.float32)
@@ -178,7 +181,10 @@ def main():
             "model_type": "standard_rational", "reprojection_error_rms": ret,
             "intrinsics": final_mtx.tolist(), "distortion": final_dist.tolist(),
             "image_width": image_size[0], "image_height": image_size[1],
-            "used_images_count_final": len(objpoints_clean)
+            "used_images_count_final": len(objpoints_clean),
+            "excluded_images_indices": excluded_indices,
+            "used_checkerboard_pattern": checker_pattern,
+            "used_square_size_mm": square_size,
         }
         with open(result_file, 'w') as f:
             json.dump(result_data, f, indent=4)
