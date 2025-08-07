@@ -7,14 +7,15 @@ from tqdm import tqdm
 def main():
     # --- パラメータ設定 ---
     # ステレオキャリブレーション用の画像が保存されているディレクトリ
-    stereo_cali_dir = Path(r"G:\gait_pattern\stero_cali\9g_6x5")
+    stereo_cali_dir = Path(r"G:\gait_pattern\stereo_cali\9g_20250807_6x5_49d5")
     # 各カメラの内部パラメータが保存されているディレクトリ
-    int_cali_dir = Path(r"G:\gait_pattern\int_cali\9g_6x5")
+    int_cali_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5_49d5")
 
     left_cam_dir_name = 'fl'
     right_cam_dir_name = 'fr'
     checker_pattern = (5, 4)
-    square_size = 35.0  # mm単位
+    square_size = 49.5  # mm単位
+    print(f"チェッカーボードのパターン: {checker_pattern[0]}x{checker_pattern[1]}, 正方形のサイズ: {square_size} mm")
 
     # チェッカーボードの3D座標を準備
     objp = np.zeros((checker_pattern[0] * checker_pattern[1], 3), np.float32)
@@ -56,8 +57,7 @@ def main():
     left_img_folder = stereo_cali_dir / left_cam_dir_name / "cali_imgs"
     right_img_folder = stereo_cali_dir / right_cam_dir_name / "cali_imgs"
 
-    # 除外されていない画像のみを対象にする
-    left_imgs = sorted([p for p in left_img_folder.glob("*.png") if not p.name.startswith("excluded_")])
+    left_imgs = sorted([p for p in left_img_folder.glob("*.png")])
 
     if not left_imgs:
         print(f"エラー: 左カメラの画像フォルダに有効なPNGファイルが見つかりません: {left_img_folder}")
@@ -71,8 +71,13 @@ def main():
 
     image_pairs = []
     for left_img_path in left_imgs:
-        right_img_path = right_img_folder / left_img_path.name
-        if right_img_path.exists() and not right_img_path.name.startswith("excluded_"):
+        left_img_name = left_img_path.name
+        # left_img_sign_parts = left_img_path.stem.split('_')
+        # left_img_sign = '_'.join(left_img_sign_parts[0:2])
+
+        # right_img_path = list(right_img_folder.glob(f"{left_img_sign}_*.png"))[0]
+        right_img_path = right_img_folder / left_img_name
+        if right_img_path.exists():
             image_pairs.append((left_img_path, right_img_path))
 
     if not image_pairs:
@@ -197,7 +202,11 @@ def main():
         "camera_matrix_right": mtx_r.tolist(),
         "distortion_right": dist_r.tolist(),
         "R": R.tolist(), "T": T.tolist(), "E": E.tolist(), "F": F.tolist(),
-        "image_size": [img_size[0], img_size[1]]
+        "image_size": [img_size[0], img_size[1]],
+        "excluded_images_indices": excluded_indices,
+        "used_images_count_final": len(objpoints_clean),
+        "used_checkerboard_pattern": checker_pattern,
+        "used_square_size_mm": square_size
     }
 
     with open(output_params_path, 'w') as f:

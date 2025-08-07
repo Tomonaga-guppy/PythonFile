@@ -31,7 +31,7 @@ def define_world_origin(stereo_params_path, left_cam_name, right_cam_name, origi
     print(f"\n世界の原点を '{origin_image_name}' のチェッカーボードに設定します...")
 
     # ステレオキャリブレーション用の画像があった場所
-    stereo_cali_dir = Path(r"G:\gait_pattern\stero_cali\9g_6x5")
+    stereo_cali_dir = Path(r"G:\gait_pattern\stereo_cali\9g_20250807_6x5_49d5")
     left_img_path = stereo_cali_dir / left_cam_name / "cali_imgs" / origin_image_name
     right_img_path = stereo_cali_dir / right_cam_name / "cali_imgs" / origin_image_name
 
@@ -80,18 +80,19 @@ def define_world_origin(stereo_params_path, left_cam_name, right_cam_name, origi
 
 def main():
     # --- 1. パス設定 ---
-    video_dir = Path(r"G:\gait_pattern\20250717_br\Tpose")
-    stereo_params_path = Path(r"G:\gait_pattern\stero_cali\9g_6x5\stereo_params.json")
+    video_dir = Path(r"G:\gait_pattern\20250807_br\Tpose")
+    stereo_params_path = Path(r"G:\gait_pattern\stereo_cali\9g_20250807_6x5_35\stereo_params.json")
 
     left_cam_name = 'fl'
     right_cam_name = 'fr'
 
     # ★★★ 原点としたい画像ファイル名を指定 ★★★
-    origin_image_name = "0007.png"
+    origin_image_name = "0031.png"  #35mm
+    # origin_image_name = "0027.png"  #49.5mm
 
-    left_json_dir = video_dir / left_cam_name / "openpose.json"
-    right_json_dir = video_dir / right_cam_name / "openpose.json"
-    output_csv_path = video_dir / "keypoints_3d_origin_set.csv" # 出力ファイル名を変更
+    left_json_dir = video_dir / left_cam_name / "openpose_distorted.json"
+    right_json_dir = video_dir / right_cam_name / "openpose_distorted.json"
+    output_csv_path = video_dir / "keypoints_3d_distorted_35.csv" # 出力ファイル名を変更
     CONFIDENCE_THRESHOLD = 0.5
 
     # --- 2. ワールド座標系の原点を定義 ---

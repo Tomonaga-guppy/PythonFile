@@ -26,9 +26,9 @@ SKELETON_CONNECTIONS = [
 
 def main():
     # --- 1. パス設定 ---
-    video_dir = Path(r"G:\gait_pattern\20250717_br\Tpose")
-    input_csv_path = video_dir / "keypoints_3d_origin_set.csv"
-    output_video_path = video_dir / "skeleton_3d_animation.mp4"
+    video_dir = Path(r"G:\gait_pattern\20250807_br\Tpose")
+    input_csv_path = video_dir / "keypoints_3d_49d5_udOP.csv"
+    output_video_path = video_dir / "skeleton_3d_animation_49d5_udOP.mp4"
 
     print(f"\n{'='*60}")
     print("3D骨格アニメーションの作成を開始します。")
@@ -45,6 +45,15 @@ def main():
     # NaN値を含む行は描画に問題を起こすため、座標計算前に除外
     df.dropna(subset=['x', 'y', 'z'], inplace=True)
 
+    # -10000から10000の範囲外にある異常なデータを除外
+    df = df[
+        (df['x'] > -10000) & (df['x'] < 10000) &
+        (df['y'] > -10000) & (df['y'] < 10000) &
+        (df['z'] > -10000) & (df['z'] < 10000)
+    ]
+
+    print(f"フィルタリング後のdf:\n{df}")
+
     if df.empty:
         print("エラー: 有効な3D座標データがCSVにありません。")
         return
@@ -60,6 +69,8 @@ def main():
     x_min, x_max = df['x'].min(), df['x'].max()
     y_min, y_max = df['y'].min(), df['y'].max()
     z_min, z_max = df['z'].min(), df['z'].max()
+
+    print(f"データの範囲: X({x_min}, {x_max}), Y({y_min}, {y_max}), Z({z_min}, {z_max})")
 
     # 見やすいように少しマージンを追加
     x_range = x_max - x_min

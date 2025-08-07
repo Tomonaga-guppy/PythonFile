@@ -23,14 +23,14 @@ SKELETON_CONNECTIONS = [
 
 def main():
     # --- 1. パスと設定 ---
-    video_dir = Path(r"G:\gait_pattern\20250717_br\Tpose")
-    input_csv_path = video_dir / "keypoints_3d_origin_set.csv"
+    video_dir = Path(r"G:\gait_pattern\20250807_br\Tpose")
+    input_csv_path = video_dir / "keypoints_3d_distorted_35.csv"
 
     # プロットするフレーム番号を指定
-    target_frame = 160
+    target_frame = 100
 
     # 出力する画像ファイル名
-    output_image_path = video_dir / f"skeleton_3d_frame_{target_frame}.png"
+    output_image_path = video_dir / f"skeleton_3d_frame_{target_frame}_dist_35mm.png"
 
     print(f"\n{'='*60}")
     print(f"フレーム {target_frame} の3D骨格プロットを作成します。")
@@ -49,6 +49,13 @@ def main():
     if df.empty:
         print("エラー: 有効な3D座標データがCSVにありません。")
         return
+
+    # -10000から10000の範囲外にある異常なデータを除外
+    df = df[
+        (df['x'] > -10000) & (df['x'] < 10000) &
+        (df['y'] > -10000) & (df['y'] < 10000) &
+        (df['z'] > -10000) & (df['z'] < 10000)
+    ]
 
     # --- 3. 指定フレームのデータを抽出 ---
     frame_data = df[df['frame'] == target_frame]
@@ -80,6 +87,10 @@ def main():
     x_min, x_max = df['x'].min(), df['x'].max()
     y_min, y_max = df['y'].min(), df['y'].max()
     z_min, z_max = df['z'].min(), df['z'].max()
+
+    # x_min, x_max = -5000, 5000
+    # y_min, y_max = -5000, 5000
+    # z_min, z_max = -5000, 5000
 
     x_range = x_max - x_min
     y_range = y_max - y_min

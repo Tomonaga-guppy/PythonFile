@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 import sys
 
-root_dir = Path(r"G:\gait_pattern\20250717_br\Tpose")
+root_dir = Path(r"G:\gait_pattern\20250807_br\ngait")
 directions = ["fl", "fr"]
 max_people = 1
 
@@ -13,9 +13,9 @@ os.chdir(r"C:\Users\Tomson\openpose")###OpenPoseのあるところにカレン�
 
 for i, direction in enumerate(directions):
     print(f"{i+1}/{len(directions)}: {direction}")
-    ori_img_dir = root_dir / direction / "undistorted"
+    ori_img_dir = root_dir / direction / "distorted"
 
-    stem_name = f"openpose"
+    stem_name = f"openpose_dstorted"
     if Path(ori_img_dir.with_name(stem_name+'.avi')).exists():
         print(f"{stem_name}.avi はすでに存在します") #すでに推定済みの場合はスキップ
         continue

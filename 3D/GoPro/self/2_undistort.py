@@ -6,7 +6,7 @@ from tqdm import tqdm  # tqdmをインポート
 
 # 基本のパス設定
 root_dir = Path(r"G:\gait_pattern")
-video_dir = root_dir / "20250717_br" / "Tpose"
+video_dir = root_dir / "20250807_br" / "ngait"
 directions = ["fl", "fr"]
 
 for direction in directions:
@@ -18,11 +18,11 @@ for direction in directions:
     video_path = work_dir / "trim.mp4"
 
     # 歪み補正後の動画と画像の保存先
-    output_video_path = work_dir / "undistorted.mp4"
-    output_img_dir = work_dir / "undistorted"
+    output_video_path = work_dir / "undistorted_49d5.mp4"
+    output_img_dir = work_dir / "undistorted_49d5"
 
     # 歪みパラメータのパス
-    camera_params_path = root_dir / "int_cali" / "9g_6x5" / direction / "camera_params.json"
+    camera_params_path = root_dir / "int_cali" / "9g_20250807_6x5_49d5" / direction / "camera_params.json"
 
     # --- 入力ファイルの存在確認 ---
     if not video_path.exists():
