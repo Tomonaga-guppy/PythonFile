@@ -27,8 +27,8 @@ SKELETON_CONNECTIONS = [
 def main():
     # --- 1. パス設定 ---
     video_dir = Path(r"G:\gait_pattern\20250807_br\Tpose")
-    input_csv_path = video_dir / "keypoints_3d_49d5_udOP.csv"
-    output_video_path = video_dir / "skeleton_3d_animation_49d5_udOP.mp4"
+    input_csv_path = video_dir / "keypoints_3d.csv"
+    output_video_path = video_dir / "skeleton_3d_animation.mp4"
 
     print(f"\n{'='*60}")
     print("3D骨格アニメーションの作成を開始します。")
