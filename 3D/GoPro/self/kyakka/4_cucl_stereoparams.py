@@ -7,14 +7,14 @@ from tqdm import tqdm
 def main():
     # --- パラメータ設定 ---
     # ステレオキャリブレーション用の画像が保存されているディレクトリ
-    stereo_cali_dir = Path(r"G:\gait_pattern\stereo_cali\9g_20250807_6x5_49d5")
+    stereo_cali_dir = Path(r"G:\gait_pattern\stereo_cali\9g_20250807_6x5_35")
     # 各カメラの内部パラメータが保存されているディレクトリ
-    int_cali_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5_49d5")
+    int_cali_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5_35")
 
     left_cam_dir_name = 'fl'
     right_cam_dir_name = 'fr'
     checker_pattern = (5, 4)
-    square_size = 49.5  # mm単位
+    square_size = 35.0  # mm単位
     print(f"チェッカーボードのパターン: {checker_pattern[0]}x{checker_pattern[1]}, 正方形のサイズ: {square_size} mm")
 
     # チェッカーボードの3D座標を準備
@@ -177,7 +177,8 @@ def main():
     # --- 4. ステレオキャリブレーションを実行 ---
     print(f"\n{len(objpoints_clean)} 組の画像ペアで最終キャリブレーションを実行します...")
     img_size = gray_l.shape[::-1]
-    flags = cv2.CALIB_FIX_INTRINSIC
+    flags = cv2.CALIB_USE_INTRINSIC_GUESS  # 内部パラメータを初期値として使用
+    # flags = cv2.CALIB_FIX_INTRINSIC  #内部パラメータを初期値で固定
     ret, _, _, _, _, R, T, E, F = cv2.stereoCalibrate(
         objpoints_clean, imgpoints_l_clean, imgpoints_r_clean, mtx_l, dist_l, mtx_r, dist_r,
         img_size, flags=flags, criteria=criteria

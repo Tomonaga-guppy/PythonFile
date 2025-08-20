@@ -13,9 +13,9 @@ os.chdir(r"C:\Users\Tomson\openpose")###OpenPoseのあるところにカレン�
 
 for i, direction in enumerate(directions):
     print(f"{i+1}/{len(directions)}: {direction}")
-    ori_img_dir = root_dir / direction / "distorted"
+    ori_img_dir = root_dir / direction / "undistorted_35_sb"
 
-    stem_name = f"openpose_dstorted"
+    stem_name = f"openpose_35_sb"  # 出力ファイルの名前のベース
     if Path(ori_img_dir.with_name(stem_name+'.avi')).exists():
         print(f"{stem_name}.avi はすでに存在します") #すでに推定済みの場合はスキップ
         continue

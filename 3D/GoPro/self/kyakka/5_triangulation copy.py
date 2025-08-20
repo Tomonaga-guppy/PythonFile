@@ -49,10 +49,12 @@ def define_world_origin(stereo_params_path, left_cam_name, right_cam_name, origi
 
     # チェッカーボード情報を設定
     checker_pattern = (5, 4)
-    square_size = 35.0
+    square_size = 49.5  # mm
     objp = np.zeros((checker_pattern[0] * checker_pattern[1], 3), np.float32)
     objp[:, :2] = np.mgrid[0:checker_pattern[0], 0:checker_pattern[1]].T.reshape(-1, 2)
     objp *= square_size
+
+    print(f"チェッカーボードのパターン: {checker_pattern}, 正方形のサイズ: {square_size} mm")
 
     # 左カメラの画像からコーナーを検出
     img_l = cv2.imread(str(left_img_path))
@@ -90,9 +92,9 @@ def main():
     origin_image_name = "0031.png"  #35mm
     # origin_image_name = "0027.png"  #49.5mm
 
-    left_json_dir = video_dir / left_cam_name / "openpose_distorted.json"
-    right_json_dir = video_dir / right_cam_name / "openpose_distorted.json"
-    output_csv_path = video_dir / "keypoints_3d_distorted_35.csv" # 出力ファイル名を変更
+    left_json_dir = video_dir / left_cam_name / "openpose_35_sb.json"
+    right_json_dir = video_dir / right_cam_name / "openpose_35_sb.json"
+    output_csv_path = video_dir / "keypoints_3d_ori_35_sb.csv" # 出力ファイル名を変更
     CONFIDENCE_THRESHOLD = 0.5
 
     # --- 2. ワールド座標系の原点を定義 ---
@@ -172,4 +174,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-# ★★★ ここまでが追加/変更箇所 ★★★

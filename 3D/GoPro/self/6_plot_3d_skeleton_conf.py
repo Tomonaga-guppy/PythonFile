@@ -7,7 +7,6 @@ from pathlib import Path
 from tqdm import tqdm
 
 # --- 骨格情報の定義 ---
-# 5_triangulate.py と同じマッピングを使用
 BODY_25_MAPPING = {
     0: "Nose", 1: "Neck", 2: "RShoulder", 3: "RElbow", 4: "RWrist",
     5: "LShoulder", 6: "LElbow", 7: "LWrist", 8: "MidHip", 9: "RHip",
@@ -16,7 +15,6 @@ BODY_25_MAPPING = {
     20: "LSmallToe", 21: "LHeel", 22: "RBigToe", 23: "RSmallToe", 24: "RHeel",
 }
 
-# BODY_25モデルの骨格を定義する。各タプルは接続する2つのキーポイントのIDを示す。
 SKELETON_CONNECTIONS = [
     (1, 8), (1, 2), (1, 5), (2, 3), (3, 4), (5, 6), (6, 7),
     (8, 9), (9, 10), (10, 11), (8, 12), (12, 13), (13, 14),
@@ -26,8 +24,8 @@ SKELETON_CONNECTIONS = [
 
 def main():
     # --- 1. パス設定 ---
-    video_dir = Path(r"G:\gait_pattern\20250807_br\Tpose")
-    input_csv_path = video_dir / "keypoints_3d.csv"
+    video_dir = Path(r"G:\gait_pattern\20250807_br\ngait")
+    input_csv_path = video_dir / "keypoints_3d_world_origin.csv"
     output_video_path = video_dir / "skeleton_3d_animation.mp4"
 
     print(f"\n{'='*60}")
@@ -42,99 +40,102 @@ def main():
         return
 
     df = pd.read_csv(input_csv_path)
-    # NaN値を含む行は描画に問題を起こすため、座標計算前に除外
     df.dropna(subset=['x', 'y', 'z'], inplace=True)
 
-    # -10000から10000の範囲外にある異常なデータを除外
     df = df[
         (df['x'] > -10000) & (df['x'] < 10000) &
         (df['y'] > -10000) & (df['y'] < 10000) &
         (df['z'] > -10000) & (df['z'] < 10000)
     ]
 
-    print(f"フィルタリング後のdf:\n{df}")
+    confidence_threshold = 0.6
+    original_rows = len(df)
+    df = df[(df['confidence_L'] >= confidence_threshold) & (df['confidence_R'] >= confidence_threshold)]
+    print(f"\n信頼度フィルタリング (閾値: {confidence_threshold}):")
+    print(f"  {original_rows}行 -> {len(df)}行 にフィルタリングしました。")
 
     if df.empty:
-        print("エラー: 有効な3D座標データがCSVにありません。")
+        print("エラー: フィルタリング後に有効な3D座標データが残っていません。")
         return
 
-    frames = df['frame'].unique()
+    frames = sorted(df['frame'].unique())
 
     # --- 3. 3Dプロットの準備 ---
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
 
-    # 軸の範囲をデータ全体から決定し、固定する
-    # これによりアニメーション中に視点がぶれないようにする
     x_min, x_max = df['x'].min(), df['x'].max()
     y_min, y_max = df['y'].min(), df['y'].max()
     z_min, z_max = df['z'].min(), df['z'].max()
 
-    print(f"データの範囲: X({x_min}, {x_max}), Y({y_min}, {y_max}), Z({z_min}, {z_max})")
+    x_center, y_center, z_center = df['x'].mean(), df['y'].mean(), df['z'].mean()
+    max_range = np.array([x_max - x_min, y_max - y_min, z_max - z_min]).max() / 2.0
 
-    # 見やすいように少しマージンを追加
-    x_range = x_max - x_min
-    y_range = y_max - y_min
-    z_range = z_max - z_min
-    max_range = max(x_range, y_range, z_range)
+    ground_level = y_min
+    plot_x_min, plot_x_max = x_center - max_range, x_center + max_range
+    plot_z_min, plot_z_max = z_center - max_range, z_center + max_range
+    ground_x, ground_z = np.meshgrid(
+        np.linspace(plot_x_min, plot_x_max, 2),
+        np.linspace(plot_z_min, plot_z_max, 2)
+    )
+    ground_y = np.full_like(ground_x, ground_level)
 
-    ax.set_xlim((x_min + x_max - max_range) / 2, (x_min + x_max + max_range) / 2)
-    ax.set_ylim((y_min + y_max - max_range) / 2, (y_min + y_max + max_range) / 2)
-    ax.set_zlim((z_min + z_max - max_range) / 2, (z_min + z_max + max_range) / 2)
-
-    ax.set_xlabel("X (mm)")
-    ax.set_ylabel("Y (mm)")
-    ax.set_zlabel("Z (mm)")
-    ax.set_title("3D Skeleton Animation")
-    # Y軸とZ軸の向きを一般的な3D座標系に合わせる
-    ax.invert_zaxis()
-
+    axis_length = 500 # mm
 
     # --- 4. アニメーションの更新関数を定義 ---
     def update(frame_num):
-        ax.cla() # 前のフレームの描画をクリア
+        ax.cla()
 
-        # 現在のフレームのデータを抽出
         frame_data = df[df['frame'] == frame_num]
         if frame_data.empty:
             return
 
-        # 座標データを取得
-        coords = frame_data[['keypoint_id', 'x', 'y', 'z']].set_index('keypoint_id')
+        coords = frame_data.set_index('keypoint_id')
 
-        # キーポイントを点でプロット
-        ax.scatter(coords['x'], coords['y'], coords['z'], c='red', marker='o')
+        # 基準軸を描画
+        # X軸 (赤)
+        ax.plot([0, axis_length], [0, 0], [0, 0], color='r', linewidth=2)
+        ax.text(axis_length, 0, 0, 'X', color='r', fontsize=12)
+        # Y軸 (緑)
+        ax.plot([0, 0], [0, 0], [axis_length, 0], color='g', linewidth=2)
+        ax.text(0, 0, axis_length, 'Y', color='g', fontsize=12)
+        # Z軸 (青)
+        ax.plot([0, 0], [0, axis_length], [0, 0], color='b', linewidth=2)
+        ax.text(0, axis_length, 0, 'Z', color='b', fontsize=12)
 
-        # 骨格を線でプロット
+        # YとZを入れ替えてプロット
+        # ★★★ 変更点: キーポイントと骨格の色を元に戻す ★★★
+        ax.scatter(coords['x'], coords['z'], coords['y'], c='red', marker='o')
+
         for p1_id, p2_id in SKELETON_CONNECTIONS:
-            # 接続する両方のキーポイントが存在する場合のみ線を描画
             if p1_id in coords.index and p2_id in coords.index:
                 p1 = coords.loc[p1_id]
                 p2 = coords.loc[p2_id]
-                ax.plot([p1['x'], p2['x']], [p1['y'], p2['y']], [p1['z'], p2['z']], 'b-')
+                ax.plot([p1['x'], p2['x']], [p1['z'], p2['z']], [p1['y'], p2['y']], 'b-')
+
+        ax.plot_surface(ground_x, ground_z, ground_y, alpha=0.2, color='gray')
 
         # 毎回、軸の範囲とラベルを再設定
-        ax.set_xlim((x_min + x_max - max_range) / 2, (x_min + x_max + max_range) / 2)
-        ax.set_ylim((y_min + y_max - max_range) / 2, (y_min + y_max + max_range) / 2)
-        ax.set_zlim((z_min + z_max - max_range) / 2, (z_min + z_max + max_range) / 2)
+        ax.set_xlim(plot_x_min, plot_x_max)
+        ax.set_ylim(plot_z_min, plot_z_max)
+        ax.set_zlim(y_center - max_range, y_center + max_range)
         ax.set_xlabel("X (mm)")
         ax.set_ylabel("Z (mm)")
         ax.set_zlabel("Y (mm)")
         ax.set_title(f"3D Skeleton Animation (Frame: {frame_num})")
-        # ax.invert_zaxis()
-        # ax.view_init(elev=0, azim=0)
+
+        ax.invert_xaxis()
+        ax.invert_zaxis()
 
     # --- 5. アニメーションの生成と保存 ---
-    print("\nアニメーションを生成しています... (フレーム数: {})".format(len(frames)))
-    # frames=frames を指定することで、実際にデータが存在するフレームのみを対象にする
-    ani = FuncAnimation(fig, update, frames=frames, interval=1000/60) # intervalはミリ秒 (60fps相当)
+    print(f"\nアニメーションを生成しています... (フレーム数: {len(frames)})")
+    ani = FuncAnimation(fig, update, frames=frames, interval=1000/60)
 
-    # tqdmを使ってプログレスバーを表示
     progress_callback = lambda i, n: pbar.update()
     with tqdm(total=len(frames), desc="動画ファイル保存中") as pbar:
         ani.save(output_video_path, writer='ffmpeg', fps=60, progress_callback=progress_callback)
 
-    plt.close(fig) # メモリ解放
+    plt.close(fig)
     print(f"\nアニメーションの保存が完了しました。")
     print(f"-> {output_video_path}")
 

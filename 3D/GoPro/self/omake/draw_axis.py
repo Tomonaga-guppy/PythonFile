@@ -18,7 +18,7 @@ axis_length = square_size * 3
 
 def main():
     for direction in ['fl', 'fr']:
-        image_path = Path(r"G:\gait_pattern\stero_cali\9g_6x5") / direction / "cali_imgs" / "0007.png"
+        image_path = Path(fr"G:\gait_pattern\stereo_cali\9g_20250807_6x5_35\{direction}\cali_imgs\0031.png")
         # 画像を読み込む
         img = cv2.imread(str(image_path))
         if img is None:
@@ -85,14 +85,14 @@ def main():
             print("チェッカーボードのサイズ設定や画像の品質を確認してください。")
 
 
-        # 結果の画像を表示
-        cv2.imshow('Checkerboard with Axes', img)
-        print("画像が表示されています。何かキーを押すとウィンドウが閉じます。")
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # # 結果の画像を表示
+        # cv2.imshow('Checkerboard with Axes', img)
+        # print("画像が表示されています。何かキーを押すとウィンドウが閉じます。")
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
 
         # 結果をファイルに保存
-        output_path = Path(r"G:\gait_pattern\stero_cali\9g_6x5") / direction / "cali_imgs" / "output_0007.png"
+        output_path = Path(r"G:\gait_pattern\stereo_cali\9g_20250807_6x5_35") / f"{direction}_checkerboard_axes.png"
         cv2.imwrite(str(output_path), img)
         print(f"結果を '{output_path}' に保存しました。")
 

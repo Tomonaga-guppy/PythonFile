@@ -91,10 +91,10 @@ def main():
     right_json_dir = video_dir / right_cam_name / "openpose_49d5.json"
 
     # 3D座標の出力先CSVファイル
-    output_csv_path = video_dir / "keypoints_3d_49d5_udOP.csv"
+    output_csv_path = video_dir / "keypoints_3d_49d5.csv"
 
     # 信頼度の閾値。これより低い信頼度のキーポイントは計算に使用しない
-    CONFIDENCE_THRESHOLD = 0.6
+    CONFIDENCE_THRESHOLD = 0.5
 
     print(f"\n{'='*60}")
     print("3D三角測量（歪み補正付き）を開始します。")
