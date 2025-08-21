@@ -484,6 +484,8 @@ def run_imu_on_port(port, barrier, start_queue):
             raise Exception(f"計測の開始に失敗しました。 計測を終了します({port})")
 
         set_voltage(ser, params=[8,1,0,0]) #1が入力，8がlow出力，9がHigh出力
+        time.sleep(1)  #1秒間だけLEDが点灯するように
+        set_voltage(ser, params=[9,0,0,0]) #1が入力，8がlow出力，9がHigh出力
 
         try:
             while not stop_event.is_set():  # 終了イベントがセットされるまで待機
@@ -492,7 +494,6 @@ def run_imu_on_port(port, barrier, start_queue):
             raise Exception
 
     except Exception:
-        set_voltage(ser, params=[9,0,0,0]) #1が入力，8がlow出力，9がHigh出力
         stop_measurement(ser, port)
         start_queue.put((port, start_time))
         ser.close()
