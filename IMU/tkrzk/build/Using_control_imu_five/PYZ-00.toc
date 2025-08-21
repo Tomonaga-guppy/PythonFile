@@ -1,4 +1,4 @@
-('C:\\Users\\zutom\\PythonCode\\gait\\IMU\\LED\\tkrzk\\build\\Using_control_imu_five\\PYZ-00.pyz',
+('C:\\Users\\zutom\\PythonFile\\Stroke\\IMU\\tkrzk\\build\\Using_control_imu_five\\PYZ-00.pyz',
  [('__future__',
    'C:\\Program Files\\Python313\\Lib\\__future__.py',
    'PYMODULE'),

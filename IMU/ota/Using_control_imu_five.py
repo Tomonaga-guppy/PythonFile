@@ -196,14 +196,27 @@ def set_expantion_terminal(ser):
     """
     # 1. 外部出力端子の「記録」を有効にする (コマンド: 0x1E)
     # [周期, 送信平均, 記録平均, 送信設定, 記録設定]
-    params_1E = bytes([10, 1, 1, 0, 0])
+    params_1E = bytes([10, 1, 1, 1, 1])
     send_fire_and_forget(ser, 0x1E, params_1E)
 
-def set_voltage(ser, level):
+def set_voltage(ser, params):
     """
-    外部への電圧出力設定（levelは8がLowで9がHigh）
+    params(外部端子1~4の4つの要素で指定)
+    0:未使用端子
+    1:入力端子
+    2:立ち下りエッジ検出機能付き入力端子
+    3:立ち上りエッジ検出機能付き入力端子
+    4:両エッジ検出機能付き入力端子
+    5:立ち下りエッジ検出＋チャタリング除去機能付き入力端子
+    6:立ち上りエッジ検出＋チャタリング除去機能付き入力端子
+    7:両エッジ検出＋チャタリング除去機能付き入力端子
+    8: Low 出力
+    9:High 出力
+    10:AD 入力（外部端子 3,4 のみ）
+    11:DA 出力（外部端子 1 のみ）
+
     """
-    params_30 = bytes([level, 0, 0, 0])
+    params_30 = bytes(params)
     send_fire_and_forget(ser, 0x30, params_30)
 
 def stop_measurement(ser, port):
@@ -295,65 +308,74 @@ def read_entry(ser, entry_number, port):
         response += read_data
         time.sleep(0.01)
 
-
-    # time.sleep(1)  # データの受信を待つ
-    # while ser.in_waiting > 0:
-    #     response += ser.read(100)
-    #     time.sleep(0.01)
-
-    # # レスポンスの内容を表示
-    # print(f"レスポンス: {response}")
-    # print(f"内部メモリから全てのデータを取得しました {port}")
-
     accel_gyro_data = []
     geomagnetic_data = []
+    extension_data = [] 
 
     # print(f"{port}の合計データ数（バイト）: {len(response)}")
 
     i = 0
     while i < len(response):
         if response[i] == 0x9a:
-            if response[i + 1] == 0x80 and i + 24 <= len(response):
-                # # 加速度角速度データ
-                timestamp = struct.unpack('<I', response[i + 2:i + 6])[0]
-                accel_x = parse_3byte_signed(response[i + 6:i + 9])
-                accel_y = parse_3byte_signed(response[i + 9:i + 12])
-                accel_z = parse_3byte_signed(response[i + 12:i + 15])
-                gyro_x = parse_3byte_signed(response[i + 15:i + 18])
-                gyro_y = parse_3byte_signed(response[i + 18:i + 21])
-                gyro_z = parse_3byte_signed(response[i + 21:i + 24])
-                accel_gyro_data.append([timestamp, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z])
-                i += 24
-            elif response[i + 1] == 0x81 and i + 12 <= len(response):
-                # 地磁気データ
-                timestamp = struct.unpack('<I', response[i + 2:i + 6])[0]
-                geo_x = parse_3byte_signed(response[i + 6:i + 9])
-                geo_y = parse_3byte_signed(response[i + 9:i + 12])
-                geo_z = parse_3byte_signed(response[i + 12:i + 15])
-                geomagnetic_data.append([timestamp, geo_x, geo_y, geo_z])
-                i += 15
+            if i + 1 < len(response): # 応答コードにアクセスする前に長さをチェック
+                if response[i + 1] == 0x80 and i + 24 <= len(response):
+                    # # 加速度角速度データ
+                    timestamp = struct.unpack('<I', response[i + 2:i + 6])[0]
+                    accel_x = parse_3byte_signed(response[i + 6:i + 9])
+                    accel_y = parse_3byte_signed(response[i + 9:i + 12])
+                    accel_z = parse_3byte_signed(response[i + 12:i + 15])
+                    gyro_x = parse_3byte_signed(response[i + 15:i + 18])
+                    gyro_y = parse_3byte_signed(response[i + 18:i + 21])
+                    gyro_z = parse_3byte_signed(response[i + 21:i + 24])
+                    accel_gyro_data.append([timestamp, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z])
+                    i += 24
+                elif response[i + 1] == 0x81 and i + 15 <= len(response):
+                    # 地磁気データ
+                    timestamp = struct.unpack('<I', response[i + 2:i + 6])[0]
+                    geo_x = parse_3byte_signed(response[i + 6:i + 9])
+                    geo_y = parse_3byte_signed(response[i + 9:i + 12])
+                    geo_z = parse_3byte_signed(response[i + 12:i + 15])
+                    geomagnetic_data.append([timestamp, geo_x, geo_y, geo_z])
+                    i += 15
+                # 外部拡張端子データのコマンドコードを 0x84 に修正
+                elif response[i + 1] == 0x84 and i + 11 <= len(response):
+                    # 外部拡張端子データ
+                    timestamp = struct.unpack('<I', response[i + 2:i + 6])[0]
+                    port_status = response[i + 6]
+                    port0 = (port_status >> 0) & 1
+                    port1 = (port_status >> 1) & 1
+                    port2 = (port_status >> 2) & 1
+                    port3 = (port_status >> 3) & 1
+                    # 外部拡張端子3, 4のAD値としてパース
+                    ad0 = struct.unpack('<H', response[i + 7:i + 9])[0] 
+                    ad1 = struct.unpack('<H', response[i + 9:i + 11])[0]
+                    extension_data.append([timestamp, port0, port1, port2, port3, ad0, ad1])
+                    i += 11
+                else:
+                    # 予期しないデータブロックの場合は次に進む
+                    i += 1
             else:
-                # 予期しないデータブロックの場合は次に進む
-                i += 1
+                 i += 1
         else:
             # 予期しないデータの場合は次に進む
             i += 1
 
     del response
 
-    return accel_gyro_data, geomagnetic_data
+    return accel_gyro_data, geomagnetic_data, extension_data
 
-def save_to_csv(accel_gyro_data, geomagnetic_data, filename):
+def save_to_csv(accel_gyro_data, geomagnetic_data, extension_data, filename):
     with open(filename, mode='w', newline='') as file:
         writer = csv.writer(file)
         # 列名を指定
         writer.writerow([
             "Type", "Timestamp_Acc", "Acc_X 0.1[mG]", "Acc_Y 0.1[mG]", "Acc_Z 0.1[mG]", "Gyro_X 0.01[dps]", "Gyro_Y 0.01[dps]", "Gyro_Z 0.01[dps]",
-            "Type", "Timestamp_Mag", "Mag_X 0.1[μT]", "Mag_Y 0.1[μT]", "Mag_Z 0.1[μT]"
+            "Type", "Timestamp_Mag", "Mag_X 0.1[μT]", "Mag_Y 0.1[μT]", "Mag_Z 0.1[μT]",
+            "Type", "Timestamp_Ext", "Port 0", "Port1", "Port2", "Port3", "AD0", "AD1"
         ])
 
-        # 加速度・角速度データと地磁気データの数が同じと仮定
-        max_len = max(len(accel_gyro_data), len(geomagnetic_data))
+        # 加速度・角速度データと地磁気データ、拡張データの最大長を取得
+        max_len = max(len(accel_gyro_data), len(geomagnetic_data), len(extension_data))
 
         for i in range(max_len):
             # accel_gyro_dataがある場合はそのデータを使用し、なければ空欄を埋める
@@ -368,8 +390,14 @@ def save_to_csv(accel_gyro_data, geomagnetic_data, filename):
             else:
                 geo_data = ["geo", "", "", "", ""]
 
+            # extension_dataがある場合はそのデータを使用し、なければ空欄を埋める
+            if i < len(extension_data):
+                ext_data = ["ext data"] + extension_data[i]
+            else:
+                ext_data = ["ext data", "", "", "", "", "", "", ""]
+
             # データを横に結合してCSVに書き込み
-            writer.writerow(ag_data + geo_data)
+            writer.writerow(ag_data + geo_data + ext_data)
 
 def parse_3byte_signed(data):
     """3バイトの符号付きデータを整数として解釈する"""
@@ -423,11 +451,6 @@ def run_imu_on_port(port, barrier, start_queue):
     ser.timeout = 1.0
     ser.baudrate = 115200
     start_time = ""
-    # try:
-    #     ser.open()
-    # except Exception as e:
-    #     print(f"シリアルポートを開くことができませんでした。 ({port})")
-    #     return
     
     i = 1
     while not ser.is_open:
@@ -457,7 +480,9 @@ def run_imu_on_port(port, barrier, start_queue):
 
         # 外部拡張端子の出力設定
         set_expantion_terminal(ser)  # 拡張端子の出力記録
-        set_voltage(ser, level=9) #levelは8がlowで9がHigh
+        # AD入力を有効にするため、端子3,4を10:AD入力に設定
+        # 端子1をHigh出力(9)、端子2を入力(1)に設定
+        set_voltage(ser, params=[9, 1, 10, 10]) 
         print(f"拡張端子の設定が完了しました")
 
 
@@ -470,8 +495,11 @@ def run_imu_on_port(port, barrier, start_queue):
         if not flag:
             raise Exception(f"計測の開始に失敗しました。 計測を終了します({port})")
 
-        # 外部拡張端子から出力(level:8がLow，9がHigh)
-        set_voltage(ser, level=8) 
+        # 計測開始の合図として端子1をLow(8)に1秒間設定
+        set_voltage(ser, params=[8, 1, 10, 10]) 
+        time.sleep(1)
+        # 端子1をHigh(9)に戻す
+        set_voltage(ser, params=[9, 1, 10, 10])
 
         try:
             while not stop_event.is_set():  # 終了イベントがセットされるまで待機
@@ -480,7 +508,8 @@ def run_imu_on_port(port, barrier, start_queue):
             raise Exception
 
     except Exception:
-        set_voltage(ser, level=9)  #計測終了時にhigh出力に戻す
+        # 終了時に端子1をHighに戻す
+        set_voltage(ser, params=[9, 1, 10, 10])
         stop_measurement(ser, port)
         start_queue.put((port, start_time))
         ser.close()
@@ -490,7 +519,6 @@ def read_save_memory(port, port_dict, start_time_dict, save_path):
     ser.port = port
     ser.timeout = 1.0
     ser.baudrate = 115200
-    # ser.open()
 
     i = 1
     while not ser.is_open:
@@ -508,10 +536,10 @@ def read_save_memory(port, port_dict, start_time_dict, save_path):
     # 最新の計測記録を取得し、CSVに保存
     entry_count = get_entry_count(ser, port)
     if entry_count > 0:
-        accel_gyro_data, geomagnetic_data = read_entry(ser, entry_count, port)
+        accel_gyro_data, geomagnetic_data, extension_data = read_entry(ser, entry_count, port)
         # CSVに保存
-        save_to_csv(accel_gyro_data, geomagnetic_data, save_path)
-        del accel_gyro_data, geomagnetic_data
+        save_to_csv(accel_gyro_data, geomagnetic_data, extension_data, save_path)
+        del accel_gyro_data, geomagnetic_data, extension_data
         # print(f"計測データをCSVに保存しました。 ({port})")
 
     # # 計測データの記録をクリア
@@ -541,8 +569,6 @@ def main(ports, port_dict, save_dir):
         for thread in threads:
             thread.start()
 
-        # start = time.time()
-
        # スレッドが実行中はメインスレッドはそのまま継続する
         while any(thread.is_alive() for thread in threads):
             time.sleep(0.00001)  # 少し待機しながらスレッドの終了を待つ
@@ -551,10 +577,6 @@ def main(ports, port_dict, save_dir):
 
         for thread in threads:  #全てのスレッドが終了するまで待機
             thread.join()
-
-        # end = time.time()
-        # print(f"計測時間: {end - start}秒")
-        # print("計測を終了しました")
 
         while not start_queue.empty():
             port, start_time = start_queue.get()
@@ -565,6 +587,10 @@ def main(ports, port_dict, save_dir):
     print("メモリの書き出しを5台分行います 少々お待ちください")
     start = time.time()
     for i, port in enumerate(ports):
+        # start_time_dictにportが存在しない場合のエラーを回避
+        if port not in start_time_dict:
+            print(f'{i+1}/{len(ports)} 計測開始時刻が不明なため、データを保存できませんでした {port}')
+            continue
         save_path = save_dir / f'{port_dict[port]}_{start_time_dict[port]}.csv'
         flag = read_save_memory(port, port_dict, start_time_dict, save_path)
         if flag:
@@ -605,18 +631,12 @@ if __name__ == "__main__":
                     thera_port = ports[2]
                     thera_rhand_port = ports[3]
                     thera_lhand_port = ports[4]
-                except json.decoder.JSONDecodeError:
+                except (FileNotFoundError, json.decoder.JSONDecodeError):
                     print("前回のポート番号が正常に読み込めませんでした。nを選択してポート番号を入力してください")
+                    reuse_port_flag = "n" #
                     pass
 
-            elif reuse_port_flag == "n":  #新たにポート番号を入力
-                # # tkzkの場合
-                # sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
-                # sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
-                # thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
-                # thera_rhand_port_num = input("療法士右手用IMU AP09182461 のポート番号を入力:COM")
-                # thera_lhand_port_num = input("療法士左手用IMU AP09182462 のポート番号を入力:COM")
-
+            if reuse_port_flag == "n":  #新たにポート番号を入力
                 # otの場合
                 sync_port_num = input("同期用IMU AP09181497 のポート番号を入力:COM")
                 sub_port_num = input("患者腰用IMU AP09181498 のポート番号を入力:COM")
@@ -633,24 +653,9 @@ if __name__ == "__main__":
                 ports = [sync_port, sub_port, thera_port, thera_rhand_port, thera_lhand_port]
                 ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
                 port_dict = dict(zip(ports, ports_name))
-
-            else:
-                print("yまたはnを入力してください")
-                pass
-
-
+        
         check_port = "a"
         while check_port != "y":
-# #tkrzk
-#             check_port = input(f"""ポート番号の確認
-#     同期用IMU AP09181356 : {sync_port}
-#     患者腰用IMU AP09182459 : {sub_port}
-#     療法士腰用IMU AP09182460 : {thera_port}
-#     療法士右手用IMU AP09182461 : {thera_rhand_port}
-#     療法士左手用IMU AP09182462 : {thera_lhand_port}
-# 上記のポート番号で正しいですか？(y:/n): """)
-
-# #ota
             check_port = input(f"""ポート番号の確認
     同期用IMU AP09181497 : {sync_port}
     患者腰用IMU AP09181498 : {sub_port}
@@ -662,13 +667,6 @@ if __name__ == "__main__":
             if check_port == "y":
                 pass
             elif check_port == "n":
-                # tkzkの場合
-                # sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
-                # sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
-                # thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
-                # thera_rhand_port_num = input("療法士右手用IMU AP09182461 のポート番号を入力:COM")
-                # thera_lhand_port_num = input("療法士左手用IMU AP09182462 のポート番号を入力:COM")
-
                 # otの場合
                 sync_port_num = input("同期用IMU AP09181497 のポート番号を入力:COM")
                 sub_port_num = input("患者腰用IMU AP09181498 のポート番号を入力:COM")
@@ -691,7 +689,7 @@ if __name__ == "__main__":
         #ポート番号を再利用するためjsonファイルに保存
         port_dict_file = root_dir / "port_dict.json"
         with open(port_dict_file, "w") as file:
-            json.dump(port_dict, file, indent=4, ensure_ascii=False)  # indentはインデントの際のスペースの数、ensure_ascii=Falseで日本語をそのまま保存
+            json.dump(port_dict, file, indent=4, ensure_ascii=False)
 
         # 計測条件の入力、保存先のディレクトリを作成
         current_date = datetime.now().strftime('%Y%m%d')
@@ -715,24 +713,17 @@ if __name__ == "__main__":
         gopro_fr_path = new_save_dir / "fr"
         gopro_front_path = new_save_dir / "front"
         gopro_sagi_path = new_save_dir / "sagi"
-        if not gopro_fl_path.exists():
-            gopro_fl_path.mkdir(parents=True, exist_ok=True)
-        if not gopro_fr_path.exists():
-            gopro_fr_path.mkdir(parents=True, exist_ok=True)
-        if not gopro_front_path.exists():
-            gopro_front_path.mkdir(parents=True, exist_ok=True)
-        if not gopro_sagi_path.exists():
-            gopro_sagi_path.mkdir(parents=True, exist_ok=True)
+        gopro_fl_path.mkdir(parents=True, exist_ok=True)
+        gopro_fr_path.mkdir(parents=True, exist_ok=True)
+        gopro_front_path.mkdir(parents=True, exist_ok=True)
+        gopro_sagi_path.mkdir(parents=True, exist_ok=True)
 
         imu_save_foldr = new_save_dir / "IMU"
-        if not imu_save_foldr.exists():
-            imu_save_foldr.mkdir(parents=True, exist_ok=True)
+        imu_save_foldr.mkdir(parents=True, exist_ok=True)
 
         # アプリで書き出したIMUデータとの照合のために出力
         port_dict_file2 = imu_save_foldr / f"port_dict_check.json"
         with open(port_dict_file2, "w") as file:
-            json.dump(port_dict, file, indent=4, ensure_ascii=False)  # indentはインデントの際のスペースの数、ensure_ascii=Falseで日本語をそのまま保存
+            json.dump(port_dict, file, indent=4, ensure_ascii=False)
 
-
-
-    main(ports, port_dict, imu_save_foldr)
+        main(ports, port_dict, imu_save_foldr)

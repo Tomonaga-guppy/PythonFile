@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['C:\\Users\\zutom\\PythonCode\\gait\\IMU\\LED\\ota\\Using_control_imu_five.py'],
+    ['C:\\Users\\zutom\\PythonFile\\Stroke\\IMU\\ota\\Using_control_imu_five.py'],
     pathex=[],
     binaries=[],
     datas=[],
