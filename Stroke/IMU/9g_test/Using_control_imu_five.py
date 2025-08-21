@@ -337,7 +337,6 @@ def read_entry(ser, entry_number, port):
                     geo_z = parse_3byte_signed(response[i + 12:i + 15])
                     geomagnetic_data.append([timestamp, geo_x, geo_y, geo_z])
                     i += 15
-                # ★★★ ここから修正 ★★★
                 # 外部拡張端子データのコマンドコードを 0x84 に修正
                 elif response[i + 1] == 0x84 and i + 11 <= len(response):
                     # 外部拡張端子データ
@@ -352,7 +351,6 @@ def read_entry(ser, entry_number, port):
                     ad1 = struct.unpack('<H', response[i + 9:i + 11])[0]
                     extension_data.append([timestamp, port0, port1, port2, port3, ad0, ad1])
                     i += 11
-                # ★★★ ここまで修正 ★★★
                 else:
                     # 予期しないデータブロックの場合は次に進む
                     i += 1
