@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-root_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5_35")
+root_dir = Path(r"G:\gait_pattern\int_cali\tkrzk")
 # directions = ["fl", "fr"]
 directions = ["sagi"]
 
@@ -80,15 +80,15 @@ for direction in directions:
     print(f"=== {direction} ディレクトリの処理開始 ===")
 
     # 動画ファイルのパス
-    video1_path = root_dir / direction / "cali.MP4"
+    # video1_path = root_dir / direction / "cali_blackfill.MP4"
     video2_path = root_dir / direction / "near.MP4"
 
     # 出力ディレクトリ
     output_dir = root_dir / direction / "cali_imgs"
 
     # video1から40枚抽出
-    print(f"video1 (cali.MP4) から40枚抽出中...")
-    extract_frames(video1_path, output_dir, 40, "cali")
+    # print(f"video1 (cali.MP4) から40枚抽出中...")
+    # extract_frames(video1_path, output_dir, 40, "cali")
 
     # video2から20枚抽出
     print(f"video2 (near.MP4) から20枚抽出中...")
