@@ -64,18 +64,17 @@ def detect_chessboard_corners_sb(image, checker_pattern, square_size):
 
 def main():
     # --- パラメータ設定 ---
-    root_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5_49d5")
-    # directions = ['fr']
-    directions = ['fl', 'fr']
+    root_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5_35")
+    directions = ['sagi']
+    # directions = ['fl', 'fr']
     checker_pattern = (5, 4)  # (width, height) - 期待するパターン
-    square_size = 49.5  # mm単位
+    square_size = 35  # mm単位
 
-    print(f"チェッカーボードの期待パターン: {checker_pattern[0]}x{checker_pattern[1]}, 正方形のサイズ: {square_size} mm")
-    print("注意: SBWithMetaメソッドでは実際に検出されたパターンサイズが自動調整されます")
+    print(f"チェッカーボードのパターン: {checker_pattern[0]}x{checker_pattern[1]}, 正方形のサイズ: {square_size} mm")
 
     for direction in directions:
         print(f"\n{'='*80}")
-        print(f"カメラ: '{direction}' の高精度キャリブレーションを開始します (SB方式)")
+        print(f"カメラ: '{direction}' のキャリブレーションを開始します")
         print(f"{'='*80}")
 
         cali_img_folder = root_dir / direction / "cali_imgs"
@@ -299,7 +298,7 @@ def main():
             print(f"  d{i+1} = {coeff:.6f}")
 
         # 結果をJSONファイルに保存
-        result_file = root_dir / direction / "camera_params_sb.json"
+        result_file = root_dir / direction / "camera_params.json"
         result_data = {
             "calibration_method": "SBWithMeta",
             "model_type": "rational" if calib_flags == cv2.CALIB_RATIONAL_MODEL else "standard",

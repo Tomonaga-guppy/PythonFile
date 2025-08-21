@@ -15,11 +15,11 @@ for direction in directions:
     print(f"{'='*60}")
 
     work_dir = video_dir / direction
-    video_path = work_dir / "trim.mp4"
+    video_path = work_dir / "trim.mp4"  #歪み補正する元動画のパス
 
     # 歪み補正後の動画と画像の保存先
-    output_video_path = work_dir / "undistorted_35_sb.mp4"
-    output_img_dir = work_dir / "undistorted_35_sb"
+    output_video_path = work_dir / "undistorted.mp4"
+    output_img_dir = work_dir / "undistorted"
 
     # 歪みパラメータのパス
     camera_params_path = root_dir / "int_cali" / "9g_20250807_6x5_35" / direction / "camera_params.json"

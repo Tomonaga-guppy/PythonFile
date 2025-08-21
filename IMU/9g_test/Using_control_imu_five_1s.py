@@ -436,7 +436,7 @@ def run_imu_on_port(port, barrier, start_queue):
     ser.timeout = 1.0
     ser.baudrate = 115200
     start_time = ""
-    
+
     i = 1
     while not ser.is_open:
         if i == 10:
@@ -667,7 +667,7 @@ if __name__ == "__main__":
     療法士右手用IMU AP0421540 : {thera_rhand_port}
     療法士左手用IMU AP0421541 : {thera_lhand_port}
 上記のポート番号で正しいですか？(y:/n): """)
-            
+
             if check_port == "y":
                 pass
             elif check_port == "n":
