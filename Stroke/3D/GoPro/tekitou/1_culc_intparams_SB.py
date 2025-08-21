@@ -64,7 +64,7 @@ def detect_chessboard_corners_sb(image, checker_pattern, square_size):
 
 def main():
     # --- パラメータ設定 ---
-    root_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5_35")
+    root_dir = Path(r"G:\gait_pattern\int_cali\tkrzk")
     directions = ['sagi']
     # directions = ['fl', 'fr']
     checker_pattern = (5, 4)  # (width, height) - 期待するパターン
@@ -231,14 +231,14 @@ def main():
             for i in all_excluded:
                 path_to_exclude_original = error_data[i][1]
                 path_to_exclude_success = success_folder / path_to_exclude_original.name
-
-                # 元の画像をリネーム
                 new_name = f"excluded_{path_to_exclude_original.name}"
-                new_path_original = path_to_exclude_original.with_name(new_name)
-                if path_to_exclude_original.exists() and not new_path_original.exists():
-                    path_to_exclude_original.rename(new_path_original)
-                    exclude_reason = "ERROR" if i in auto_excluded else "USER"
-                    print(f"  - [{exclude_reason}] {path_to_exclude_original.name} -> {new_name}")
+
+                # # 元の画像をリネーム
+                # new_path_original = path_to_exclude_original.with_name(new_name)
+                # if path_to_exclude_original.exists() and not new_path_original.exists():
+                #     path_to_exclude_original.rename(new_path_original)
+                #     exclude_reason = "ERROR" if i in auto_excluded else "USER"
+                #     print(f"  - [{exclude_reason}] {path_to_exclude_original.name} -> {new_name}")
 
                 # successフォルダ内の画像をリネーム
                 new_path_success = path_to_exclude_success.with_name(new_name)
