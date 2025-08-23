@@ -24,8 +24,7 @@ for subject_dir in subject_dir_list:  # 各被験者ディレクトリに対し�
             max_people = 2
         directions = ["fl", "fr", "sagi"]
         for direction in directions:  # 各方向に対して
-            if i != 1:
-                time.sleep(60)  #少しでもPC負荷を減らすために1分待つ
+
             ori_img_dir = thera_dir / direction / "undistorted"
             print(f"{i}/{len(subject_dir_list) * len(therapist_dir_list) * len(directions)}: {ori_img_dir}の処理を開始します")
             
@@ -35,6 +34,9 @@ for subject_dir in subject_dir_list:  # 各被験者ディレクトリに対し�
                 i += 1
                 continue
 
+            if i != 1:
+                time.sleep(60)  #少しでもPC負荷を減らすために1分待つ
+                
             ######OpenPoseへの命令作成 windowsの場合
             program= r".\build\x64\Release\OpenPoseDemo.exe"
             pre_img_dir = f" --image_dir " + str(ori_img_dir)  #画像の場所
