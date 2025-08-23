@@ -16,7 +16,7 @@ for subject_dir in subject_dir_list:  # 各被験者ディレクトリに対し�
     print(f"対象のPTディレクトリ: {[d.name for d in therapist_dir_list]}")
     for thera_dir in therapist_dir_list:  # 各PTディレクトリに対して
         if thera_dir.name == "thera0-15":
-            print(f"Mocap課題用の動画で今は使用しないのでスキップ: {thera_dir.name}")
+            print(f"Mocap課題用の動画で今は使用しないもしくは黒塗りが必要なのでスキップ: {thera_dir.name}")
             continue
         if thera_dir.name.startswith("thera0"):
             max_people = 1
@@ -26,7 +26,11 @@ for subject_dir in subject_dir_list:  # 各被験者ディレクトリに対し�
         for direction in directions:  # 各方向に対して
 
             ori_img_dir = thera_dir / direction / "undistorted"
-            print(f"{i}/{len(subject_dir_list) * len(therapist_dir_list) * len(directions)}: {ori_img_dir}の処理を開始します")
+
+            # if ori_img_dir != Path(r"G:\gait_pattern\20250811_br\sub1\thera1-0\fl\undistorted") and ori_img_dir != Path(r"G:\gait_pattern\20250811_br\sub1\thera1-1\fl\undistorted"):
+            #     continue
+            
+            print(f"{ori_img_dir}の処理を開始します")
             
             stem_name = f"openpose"  # 出力ファイルの名前のベース
             if Path(ori_img_dir.with_name(stem_name+'.avi')).exists():

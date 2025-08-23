@@ -290,7 +290,7 @@ def main():
         selected_solution, all_solutions = result
         
         # 結果を保存
-        output_file = ext_dir / direction / "camera_params_with_extrinsics.json"
+        output_file = ext_dir / direction / "camera_params_with_ext_OC.json"
         
         # 完全なカメラパラメータを作成
         complete_params = {
@@ -331,15 +331,7 @@ def main():
         
         print(f"並進ベクトル: {selected_solution['translation']}")
         print(f"オイラー角: {selected_solution['rotation_EulerAngles']}")
-        
-        all_results[direction] = complete_params
     
-    # 全体の結果をまとめて保存
-    summary_file = ext_dir / "all_camera_parameters.json"
-    with open(summary_file, 'w') as f:
-        json.dump(all_results, f, indent=4)
-    
-    print(f"\n全カメラのパラメータをまとめて保存: {summary_file}")
     print("\n外部パラメータキャリブレーション完了！")
 
 if __name__ == '__main__':

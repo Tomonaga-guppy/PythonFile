@@ -65,10 +65,10 @@ def detect_chessboard_corners(image, checker_pattern, square_size):
 def main():
     # --- パラメータ設定 ---
     root_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5")
-    # directions = ['fl', 'fr', 'sagi']
-    directions = ['fr', 'sagi']
+    directions = ['fl', 'fr', 'sagi']
+    # directions = ['fr', 'sagi']
     checker_pattern = (5, 4)  # (width, height) - 期待するパターン
-    square_size = 30  # mm単位
+    square_size = 35  # mm単位
 
     print(f"チェッカーボードの期待パターン: {checker_pattern[0]}x{checker_pattern[1]}, 正方形のサイズ: {square_size} mm")
     print("注意: SBWithMetaメソッドでは実際に検出されたパターンサイズが自動調整されます")
