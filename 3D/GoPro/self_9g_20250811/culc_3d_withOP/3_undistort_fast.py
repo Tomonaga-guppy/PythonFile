@@ -14,7 +14,7 @@ for subject_dir in subject_dir_list:
     print(f"対象のPTディレクトリ: {[d.name for d in therapist_dir_list]}")
     for thera_dir in therapist_dir_list:
         ##################################################
-        if thera_dir.name == "thera0-15":
+        if thera_dir.name != "thera1-0" and thera_dir.name != "thera1-1":
             print(f"Mocap課題用の動画で今は使用しないのでスキップ: {thera_dir.name}")
             continue
         ###################################################

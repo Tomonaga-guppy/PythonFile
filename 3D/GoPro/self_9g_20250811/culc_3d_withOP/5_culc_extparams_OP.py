@@ -180,7 +180,7 @@ def main():
         # 出力先ディレクトリを作成
         output_dir = ext_cali_dir / direction
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_file = output_dir / "camera_params_with_extrinsics_op.json"
+        output_file = output_dir / "camera_params_with_ext_OP.json"
 
         with open(output_file, 'w') as f:
             json.dump(camera_params_with_extrinsics, f, indent=4)
@@ -190,22 +190,7 @@ def main():
     # --- 3. 全体の結果をまとめて保存 ---
     print(f"\n{'='*80}")
     print("全カメラの外部パラメータ計算が完了しました。")
-    
-    all_camera_params = {}
-    for direction in camera_directions:
-        params_file = ext_cali_dir / direction / "camera_params_with_extrinsics.json"
-        if params_file.exists():
-            with open(params_file, 'r') as f:
-                all_camera_params[direction] = json.load(f)
 
-    if all_camera_params:
-        summary_file = ext_cali_dir / "all_camera_parameters.json"
-        with open(summary_file, 'w') as f:
-            json.dump(all_camera_params, f, indent=4)
-        
-        print(f"全カメラのパラメータをまとめて保存: {summary_file}")
-
-    print("\n後続の3D復元処理 (6_3d_reconstruction.py) でこれらのファイルを使用します。")
     print("\n処理が完了しました。")
 
 
