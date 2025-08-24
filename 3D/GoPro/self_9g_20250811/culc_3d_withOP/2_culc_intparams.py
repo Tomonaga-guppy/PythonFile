@@ -20,9 +20,9 @@ def generate3Dgrid(CheckerBoardParams):
 
     return objp
 
-def detect_chessboard_corners_sb(image, checker_pattern, square_size):
+def detect_chessboard_corners(image, checker_pattern, square_size):
     """
-    cv2.findChessboardCornersSBWithMeta を使用した高精度コーナー検出
+    cv2.findChessboardCornersSBWithMeta を使用したコーナー検出
 
     Args:
         image: 入力画像
@@ -37,7 +37,7 @@ def detect_chessboard_corners_sb(image, checker_pattern, square_size):
     """
     gray_color = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # SBWithMetaを使用した高精度検出
+    # SBWithMetaを使用したコーナー検出
     ret, corners, meta = cv2.findChessboardCornersSBWithMeta(
         gray_color,
         checker_pattern,
@@ -64,13 +64,14 @@ def detect_chessboard_corners_sb(image, checker_pattern, square_size):
 
 def main():
     # --- パラメータ設定 ---
-    root_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5_35")
-    directions = ['sagi']
-    # directions = ['fl', 'fr']
+    root_dir = Path(r"G:\gait_pattern\int_cali\9g_20250807_6x5")
+    directions = ['fl', 'fr', 'sagi']
+    # directions = ['fr', 'sagi']
     checker_pattern = (5, 4)  # (width, height) - 期待するパターン
     square_size = 35  # mm単位
 
-    print(f"チェッカーボードのパターン: {checker_pattern[0]}x{checker_pattern[1]}, 正方形のサイズ: {square_size} mm")
+    print(f"チェッカーボードの期待パターン: {checker_pattern[0]}x{checker_pattern[1]}, 正方形のサイズ: {square_size} mm")
+    print("注意: SBWithMetaメソッドでは実際に検出されたパターンサイズが自動調整されます")
 
     for direction in directions:
         print(f"\n{'='*80}")
@@ -94,17 +95,17 @@ def main():
         img_paths_used = []
         pattern_info = []  # 検出されたパターン情報を保存
 
-        print("ステップ1: 全画像からチェッカーボードのコーナーを検出します (SB方式)...")
+        print("ステップ1: 全画像からチェッカーボードのコーナーを検出します...")
         successful_detections = 0
 
-        for cali_img_path in tqdm(cali_imgs, desc=f"[{direction}] SBコーナー検出中"):
+        for cali_img_path in tqdm(cali_imgs, desc=f"[{direction}] コーナー検出中"):
             img = cv2.imread(str(cali_img_path))
             if img is None:
                 print(f"警告: 画像を読み込めません: {cali_img_path}")
                 continue
 
             # SBWithMetaを使用した検出
-            ret, corners2, objp, meta, actual_pattern = detect_chessboard_corners_sb(
+            ret, corners2, objp, meta, actual_pattern = detect_chessboard_corners(
                 img, checker_pattern, square_size
             )
 
@@ -182,7 +183,7 @@ def main():
                            key=lambda x: x[1].name)
 
         # グラフの生成
-        graph_path = root_dir / direction / f"reprojection_errors_sb_{direction}.png"
+        graph_path = root_dir / direction / f"reprojection_errors_{direction}.png"
         graph_labels = [f"[{i}] {item[1].name}\n({item[2][0]}x{item[2][1]})"
                        for i, item in enumerate(error_data)]
         graph_errors = [item[0] if item[0] != float('inf') else 0 for item in error_data]
@@ -192,14 +193,15 @@ def main():
         plt.bar(range(len(error_data)), graph_errors, color=colors)
         plt.ylabel("Reprojection Error (pixels)")
         plt.xlabel("Image Files ([index] filename + pattern size)")
-        plt.title(f"Per-Image Reprojection Errors for Camera '{direction}' (SB Method)")
+        plt.title(f"Per-Image Reprojection Errors for Camera '{direction}'")
         plt.xticks(range(len(error_data)), graph_labels, rotation=90)
+        plt.ylim(0, 7.5)  #再投影誤差はグラフ上では7.5 pixelsまで表示
         plt.tight_layout()
         plt.savefig(graph_path, dpi=150, bbox_inches='tight')
         plt.close()
         print(f"\n判断材料として、誤差のグラフを保存しました: {graph_path}")
 
-        print("\n--- 画像除外リスト (SB方式) ---")
+        print("\n--- 画像除外リスト ---")
         for i, (error, path, pattern) in enumerate(error_data):
             error_str = f"{error:.4f}" if error != float('inf') else "ERROR"
             print(f"  [{i:2d}] {path.name} (誤差: {error_str} pixels, パターン: {pattern[0]}x{pattern[1]})")
@@ -234,11 +236,11 @@ def main():
 
                 # 元の画像をリネーム
                 new_name = f"excluded_{path_to_exclude_original.name}"
-                new_path_original = path_to_exclude_original.with_name(new_name)
-                if path_to_exclude_original.exists() and not new_path_original.exists():
-                    path_to_exclude_original.rename(new_path_original)
-                    exclude_reason = "ERROR" if i in auto_excluded else "USER"
-                    print(f"  - [{exclude_reason}] {path_to_exclude_original.name} -> {new_name}")
+                # new_path_original = path_to_exclude_original.with_name(new_name)
+                # if path_to_exclude_original.exists() and not new_path_original.exists():
+                #     path_to_exclude_original.rename(new_path_original)
+                #     exclude_reason = "ERROR" if i in auto_excluded else "USER"
+                #     print(f"  - [{exclude_reason}] {path_to_exclude_original.name} -> {new_name}")
 
                 # successフォルダ内の画像をリネーム
                 new_path_success = path_to_exclude_success.with_name(new_name)
@@ -266,7 +268,7 @@ def main():
                 continue
 
         # ステップ4: 最終キャリブレーション
-        print(f"\nステップ4: {len(objpoints_clean)}枚の画像で最終キャリブレーション (SB方式) を実行します...")
+        print(f"\nステップ4: {len(objpoints_clean)}枚の画像で最終キャリブレーションを実行します...")
 
         try:
             ret_final, final_mtx, final_dist, _, _ = cv2.calibrateCamera(
@@ -282,7 +284,7 @@ def main():
 
         # 最終結果の表示と保存
         print("\n" + "="*60)
-        print("【最終的なキャリブレーション結果 (SB方式)】")
+        print("【最終的なキャリブレーション結果】")
         print("="*60)
         print(f"再投影誤差(RMS): {ret_final:.4f} pixels")
         print(f"使用画像数: {len(objpoints_clean)}枚")
@@ -321,7 +323,7 @@ def main():
         with open(result_file, 'w') as f:
             json.dump(result_data, f, indent=4)
 
-        print(f"\nSB方式による高精度パラメータを保存しました: {result_file}")
+        print(f"\n内部パラメータを保存しました: {result_file}")
         print("="*60)
 
 if __name__ == '__main__':
