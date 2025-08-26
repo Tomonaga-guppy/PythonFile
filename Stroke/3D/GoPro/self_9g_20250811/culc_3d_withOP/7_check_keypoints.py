@@ -393,7 +393,7 @@ def plot_3d_stick_figure(points_3d, keypoint_indices, keypoint_names, metadata,
 
 def create_3d_animation(animation_data, global_bounds, 
                        show_keypoint_labels=False, show_keypoint_numbers=False,
-                       save_path=None, figsize=(12, 9)):
+                       save_path=None, figsize=(12, 9), view_name="sagittal", elev=0, azim=90):
     """
     3Dスティックフィギュアのアニメーションを作成（歩行向け座標系）
     
@@ -404,6 +404,9 @@ def create_3d_animation(animation_data, global_bounds,
         show_keypoint_numbers: キーポイント番号を表示するか
         save_path: 保存パス（Noneの場合は表示のみ）
         figsize: 図のサイズ
+        view_name: 視点の名前
+        elev: elevation角度
+        azim: azimuth角度
     
     Returns:
         ani: アニメーションオブジェクト
@@ -456,9 +459,9 @@ def create_3d_animation(animation_data, global_bounds,
     ax.plot([0, 0], [y_plane_start, y_plane_end], [ground_z, ground_z],
             color='red', linewidth=3, alpha=0.8, label='X-axis (sideways)', zorder=2)
     
-    # ビューアングルを歩行観察に適した角度に設定
-    ax.view_init(elev=10, azim=45)
-    
+    # ビューアングルを設定
+    ax.view_init(elev=elev, azim=azim)
+
     # 軸ラベルを設定
     ax.set_xlabel('Z coordinate (mm)', fontsize=12)
     ax.set_ylabel('X coordinate (mm)', fontsize=12)
@@ -557,7 +560,7 @@ def create_3d_animation(animation_data, global_bounds,
                 line.set_data_3d([], [], [])
         
         # タイトル更新
-        title = f"3D Walking Animation - {metadata.get('subject', 'Unknown')}/{metadata.get('therapist', 'Unknown')}"
+        title = f"3D Walking Animation ({view_name}) - {metadata.get('subject', 'Unknown')}/{metadata.get('therapist', 'Unknown')}"
         if 'triangulation_method' in metadata:
             title += f" ({metadata['triangulation_method']})"
         title_text.set_text(title)
@@ -591,7 +594,7 @@ def create_3d_animation(animation_data, global_bounds,
     fps = 60
     interval = 1000 / fps  # ミリ秒
     
-    print(f"歩行アニメーション作成中... ({total_frames} フレーム)")
+    print(f"歩行アニメーション作成中... ({total_frames} フレーム, {view_name}視点)")
     
     ani = animation.FuncAnimation(
         fig, update_frame, frames=total_frames,
@@ -604,7 +607,7 @@ def create_3d_animation(animation_data, global_bounds,
         # MP4で保存（ffmpegが必要）
         try:
             writer = animation.FFMpegWriter(fps=fps, metadata=dict(artist='3D Walking Animation'), bitrate=1800)
-            ani.save(save_path, writer=writer, progress_callback=lambda i, n: print(f'保存進捗: {i}/{n}'))
+            ani.save(save_path, writer=writer, progress_callback=lambda i, n: print(f'保存進捗 ({view_name}): {i}/{n}'))
             print(f"アニメーション保存完了: {save_path}")
         except Exception as e:
             print(f"MP4保存エラー: {e}")
@@ -723,10 +726,6 @@ def interactive_animation_creator():
     print(f"使用フレーム数: {len(files_to_use)}")
     
     # アニメーション設定
-    # show_labels = input("キーポイント名を表示しますか？ (y/n): ").lower() == 'y'
-    # show_numbers = input("キーポイント番号を表示しますか？ (y/n): ").lower() == 'y'
-    # save_animation = input("アニメーションを保存しますか？ (y/n): ").lower() == 'y'
-    
     print("キーポイント名は表示しません")
     print("キーポイント番号は表示しません")
     print("アニメーションは保存します")
@@ -735,17 +734,65 @@ def interactive_animation_creator():
     show_numbers = False
     save_animation = True
     
+    # 視点選択
+    view_options = {
+        1: {"name": "sagittal", "elev": 0, "azim": 90, "description": "矢状面（横から）"},
+        2: {"name": "frontal", "elev": 0, "azim": 0, "description": "前額面（正面から）"},
+        3: {"name": "oblique", "elev": 10, "azim": 45, "description": "斜め視点（デフォルト）"}
+    }
+    
+    print("\n視点選択:")
+    for key, view in view_options.items():
+        print(f"  {key}. {view['description']}")
+    print("  4. 全ての視点（1,2,3すべて）")
+    
+    while True:
+        try:
+            view_input = input("\n視点を選択してください（複数選択の場合はカンマ区切り、例: 1,3）: ")
+            if view_input.strip() == "4":
+                selected_views = [1, 2, 3]
+                break
+            else:
+                selected_views = [int(x.strip()) for x in view_input.split(',')]
+                if all(1 <= v <= 3 for v in selected_views):
+                    break
+                else:
+                    print("無効な選択です。1-4の数字を入力してください。")
+        except ValueError:
+            print("無効な入力です。数字をカンマ区切りで入力してください。")
+    
+    print(f"選択された視点: {[view_options[v]['description'] for v in selected_views]}")
+    
     # 保存設定
-    save_path = None
+    save_paths = []
     if save_animation:
-        save_dir = root_dir / "3d_walking_animations"
+        # JSONファイルがあるthera○○フォルダに保存
+        first_file_path = files_to_use[0]
+        # パスからthera○○フォルダを見つける
+        thera_folder = None
+        for part in first_file_path.parts:
+            if part.startswith('thera'):
+                # thera○○フォルダまでのパスを構築
+                thera_index = first_file_path.parts.index(part)
+                thera_folder = Path(*first_file_path.parts[:thera_index+1])
+                break
+        
+        if thera_folder:
+            save_dir = thera_folder
+        else:
+            # fallback: 元の保存先
+            save_dir = root_dir / "3d_walking_animations"
+        
         save_dir.mkdir(exist_ok=True)
         
-        # ファイル名生成
+        # ファイル名生成（視点ごと）
         safe_group_name = selected_group.replace('/', '_')
-        filename = f"3d_walking_animation_{safe_group_name}_frames{len(files_to_use)}.mp4"
-        save_path = save_dir / filename
-        print(f"保存先: {save_path}")
+        for view_id in selected_views:
+            view_name = view_options[view_id]['name']
+            filename = f"3d_walking_animation_{safe_group_name}_{view_name}_frames{len(files_to_use)}.mp4"
+            save_path = save_dir / filename
+            save_paths.append((save_path, view_id))
+            print(f"保存先 ({view_options[view_id]['description']}): {save_path}")
     
     # アニメーションデータを読み込み
     animation_data, global_bounds = load_animation_sequence(files_to_use)
@@ -754,22 +801,659 @@ def interactive_animation_creator():
         print("有効なアニメーションデータがありません。")
         return
     
-    # アニメーション作成
-    print("\n歩行アニメーション作成中...")
-    ani = create_3d_animation(
-        animation_data, global_bounds,
-        show_keypoint_labels=show_labels,
-        show_keypoint_numbers=show_numbers,
-        save_path=save_path,
-    )
+    # 各視点でアニメーション作成
+    animations = []
+    print(f"\n歩行アニメーション作成中... ({len(selected_views)} 視点)")
     
-    if ani:
-        print("歩行アニメーション作成完了！")
-        if not save_animation:
-            print("アニメーションを表示します...")
-            plt.show()
-    else:
-        print("アニメーション作成に失敗しました。")
+    for i, view_id in enumerate(selected_views):
+        view_config = view_options[view_id]
+        save_path = save_paths[i][0] if save_paths else None
+        
+        print(f"\n{i+1}/{len(selected_views)}: {view_config['description']} を作成中...")
+        
+        ani = create_3d_animation(
+            animation_data, global_bounds,
+            show_keypoint_labels=show_labels,
+            show_keypoint_numbers=show_numbers,
+            save_path=save_path,
+            view_name=view_config['name'],
+            elev=view_config['elev'],
+            azim=view_config['azim']
+        )
+        
+        if ani:
+            animations.append(ani)
+    
+    print(f"\n歩行アニメーション作成完了！ ({len(animations)} 視点)")
+    if not save_animation and animations:
+        print("最後のアニメーションを表示します...")
+        plt.show()
+    
+    return animations
+def find_3d_pose_files(search_dir, pattern="3d_pose_results_weighted_linear_OC"):
+    """
+    指定ディレクトリから3Dポーズ結果ファイルを検索
+    
+    Args:
+        search_dir: 検索ディレクトリ
+        pattern: 検索パターン
+    
+    Returns:
+        pose_files: 見つかったJSONファイルのリスト
+    """
+    search_path = Path(search_dir)
+    pose_files = []
+    
+    # 指定パターンのディレクトリを再帰的に検索
+    for pose_dir in search_path.rglob(pattern):
+        json_files = list(pose_dir.glob("3d_pose_*.json"))
+        pose_files.extend(json_files)
+    
+    return sorted(pose_files)
+
+def extract_frame_number(file_path):
+    """
+    ファイル名からフレーム番号を抽出
+    """
+    import re
+    match = re.search(r'frame_(\d+)', file_path.name)
+    if match:
+        return int(match.group(1))
+    return 0
+
+def interactive_animation_creator():
+    """
+    インタラクティブにアニメーションを作成
+    """
+    # --- パラメータ設定 ---
+    root_dir = Path(r"G:\gait_pattern\20250811_br")
+    
+    print("3D歩行アニメーション作成プログラム")
+    print(f"検索ディレクトリ: {root_dir}")
+    print("=" * 60)
+    
+    # 3Dポーズファイルを検索
+    print("3Dポーズファイルを検索中...")
+    pose_files = find_3d_pose_files(root_dir)
+    
+    if not pose_files:
+        print("3Dポーズ結果ファイルが見つかりません。")
+        return
+    
+    print(f"見つかった3Dポーズファイル数: {len(pose_files)}")
+    
+    # ファイルをグループ化（被験者/セラピスト別）
+    file_groups = {}
+    for file_path in pose_files:
+        # パスから被験者とセラピスト情報を抽出
+        parts = file_path.parts
+        subject = None
+        therapist = None
+        
+        for part in parts:
+            if part.startswith('sub'):
+                subject = part
+            elif part.startswith('thera'):
+                therapist = part
+        
+        if subject and therapist:
+            group_key = f"{subject}/{therapist}"
+            if group_key not in file_groups:
+                file_groups[group_key] = []
+            file_groups[group_key].append(file_path)
+    
+    # 各グループ内でフレーム順にソート
+    for group_key in file_groups:
+        file_groups[group_key] = sorted(file_groups[group_key], key=extract_frame_number)
+    
+    # グループを表示
+    print("\n利用可能な被験者/セラピストの組み合わせ:")
+    for i, group_key in enumerate(sorted(file_groups.keys())):
+        file_count = len(file_groups[group_key])
+        print(f"  {i+1}. {group_key} ({file_count} フレーム)")
+    
+    # グループ選択
+    while True:
+        try:
+            group_choice = int(input(f"\n組み合わせを選択してください (1-{len(file_groups)}): ")) - 1
+            if 0 <= group_choice < len(file_groups):
+                break
+            else:
+                print("無効な選択です。")
+        except ValueError:
+            print("数字を入力してください。")
+    
+    selected_group = sorted(file_groups.keys())[group_choice]
+    selected_files = file_groups[selected_group]
+    
+    print(f"\n選択されたグループ: {selected_group}")
+    print(f"利用可能なフレーム数: {len(selected_files)}")
+
+    files_to_use = selected_files
+
+    print(f"使用フレーム数: {len(files_to_use)}")
+    
+    # アニメーション設定
+    print("キーポイント名は表示しません")
+    print("キーポイント番号は表示しません")
+    print("アニメーションは保存します")
+    
+    show_labels = False
+    show_numbers = False
+    save_animation = True
+    
+    # 視点選択
+    view_options = {
+        1: {"name": "sagittal", "elev": 0, "azim": 90, "description": "矢状面（横から）"},
+        2: {"name": "frontal", "elev": 0, "azim": 0, "description": "前額面（正面から）"},
+        3: {"name": "oblique", "elev": 10, "azim": 45, "description": "斜め視点（デフォルト）"}
+    }
+    
+    print("\n視点選択:")
+    for key, view in view_options.items():
+        print(f"  {key}. {view['description']}")
+    print("  4. 全ての視点（1,2,3すべて）")
+    
+    while True:
+        try:
+            view_input = input("\n視点を選択してください（複数選択の場合はカンマ区切り、例: 1,3）: ")
+            if view_input.strip() == "4":
+                selected_views = [1, 2, 3]
+                break
+            else:
+                selected_views = [int(x.strip()) for x in view_input.split(',')]
+                if all(1 <= v <= 3 for v in selected_views):
+                    break
+                else:
+                    print("無効な選択です。1-4の数字を入力してください。")
+        except ValueError:
+            print("無効な入力です。数字をカンマ区切りで入力してください。")
+    
+    print(f"選択された視点: {[view_options[v]['description'] for v in selected_views]}")
+    
+    # 保存設定
+    save_paths = []
+    if save_animation:
+        # JSONファイルがあるthera○○フォルダに保存
+        first_file_path = files_to_use[0]
+        # パスからthera○○フォルダを見つける
+        thera_folder = None
+        for part in first_file_path.parts:
+            if part.startswith('thera'):
+                # thera○○フォルダまでのパスを構築
+                thera_index = first_file_path.parts.index(part)
+                thera_folder = Path(*first_file_path.parts[:thera_index+1])
+                break
+        
+        if thera_folder:
+            save_dir = thera_folder
+        else:
+            # fallback: 元の保存先
+            save_dir = root_dir / "3d_walking_animations"
+        
+        save_dir.mkdir(exist_ok=True)
+        
+        # ファイル名生成（視点ごと）
+        safe_group_name = selected_group.replace('/', '_')
+        for view_id in selected_views:
+            view_name = view_options[view_id]['name']
+            filename = f"3d_walking_animation_{safe_group_name}_{view_name}_frames{len(files_to_use)}.mp4"
+            save_path = save_dir / filename
+            save_paths.append((save_path, view_id))
+            print(f"保存先 ({view_options[view_id]['description']}): {save_path}")
+    
+    # アニメーションデータを読み込み
+    animation_data, global_bounds = load_animation_sequence(files_to_use)
+    
+    if not animation_data:
+        print("有効なアニメーションデータがありません。")
+        return
+    
+    # 各視点でアニメーション作成
+    animations = []
+    print(f"\n歩行アニメーション作成中... ({len(selected_views)} 視点)")
+    
+    for i, view_id in enumerate(selected_views):
+        view_config = view_options[view_id]
+        save_path = save_paths[i][0] if save_paths else None
+        
+        print(f"\n{i+1}/{len(selected_views)}: {view_config['description']} を作成中...")
+        
+        ani = create_3d_animation(
+            animation_data, global_bounds,
+            show_keypoint_labels=show_labels,
+            show_keypoint_numbers=show_numbers,
+            save_path=save_path,
+            view_name=view_config['name'],
+            elev=view_config['elev'],
+            azim=view_config['azim']
+        )
+        
+        if ani:
+            animations.append(ani)
+    
+    print(f"\n歩行アニメーション作成完了！ ({len(animations)} 視点)")
+    if not save_animation and animations:
+        print("最後のアニメーションを表示します...")
+        plt.show()
+    
+    return animations
+def find_3d_pose_files(search_dir, pattern="3d_pose_results_weighted_linear_OC"):
+    """
+    指定ディレクトリから3Dポーズ結果ファイルを検索
+    
+    Args:
+        search_dir: 検索ディレクトリ
+        pattern: 検索パターン
+    
+    Returns:
+        pose_files: 見つかったJSONファイルのリスト
+    """
+    search_path = Path(search_dir)
+    pose_files = []
+    
+    # 指定パターンのディレクトリを再帰的に検索
+    for pose_dir in search_path.rglob(pattern):
+        json_files = list(pose_dir.glob("3d_pose_*.json"))
+        pose_files.extend(json_files)
+    
+    return sorted(pose_files)
+
+def extract_frame_number(file_path):
+    """
+    ファイル名からフレーム番号を抽出
+    """
+    import re
+    match = re.search(r'frame_(\d+)', file_path.name)
+    if match:
+        return int(match.group(1))
+    return 0
+
+def interactive_animation_creator():
+    """
+    インタラクティブにアニメーションを作成
+    """
+    # --- パラメータ設定 ---
+    root_dir = Path(r"G:\gait_pattern\20250811_br")
+    
+    print("3D歩行アニメーション作成プログラム")
+    print(f"検索ディレクトリ: {root_dir}")
+    print("=" * 60)
+    
+    # 3Dポーズファイルを検索
+    print("3Dポーズファイルを検索中...")
+    pose_files = find_3d_pose_files(root_dir)
+    
+    if not pose_files:
+        print("3Dポーズ結果ファイルが見つかりません。")
+        return
+    
+    print(f"見つかった3Dポーズファイル数: {len(pose_files)}")
+    
+    # ファイルをグループ化（被験者/セラピスト別）
+    file_groups = {}
+    for file_path in pose_files:
+        # パスから被験者とセラピスト情報を抽出
+        parts = file_path.parts
+        subject = None
+        therapist = None
+        
+        for part in parts:
+            if part.startswith('sub'):
+                subject = part
+            elif part.startswith('thera'):
+                therapist = part
+        
+        if subject and therapist:
+            group_key = f"{subject}/{therapist}"
+            if group_key not in file_groups:
+                file_groups[group_key] = []
+            file_groups[group_key].append(file_path)
+    
+    # 各グループ内でフレーム順にソート
+    for group_key in file_groups:
+        file_groups[group_key] = sorted(file_groups[group_key], key=extract_frame_number)
+    
+    # グループを表示
+    print("\n利用可能な被験者/セラピストの組み合わせ:")
+    for i, group_key in enumerate(sorted(file_groups.keys())):
+        file_count = len(file_groups[group_key])
+        print(f"  {i+1}. {group_key} ({file_count} フレーム)")
+    
+    # グループ選択
+    while True:
+        try:
+            group_choice = int(input(f"\n組み合わせを選択してください (1-{len(file_groups)}): ")) - 1
+            if 0 <= group_choice < len(file_groups):
+                break
+            else:
+                print("無効な選択です。")
+        except ValueError:
+            print("数字を入力してください。")
+    
+    selected_group = sorted(file_groups.keys())[group_choice]
+    selected_files = file_groups[selected_group]
+    
+    print(f"\n選択されたグループ: {selected_group}")
+    print(f"利用可能なフレーム数: {len(selected_files)}")
+
+    files_to_use = selected_files
+
+    print(f"使用フレーム数: {len(files_to_use)}")
+    
+    # アニメーション設定
+    print("キーポイント名は表示しません")
+    print("キーポイント番号は表示しません")
+    print("アニメーションは保存します")
+    
+    show_labels = False
+    show_numbers = False
+    save_animation = True
+    
+    # 視点選択
+    view_options = {
+        1: {"name": "sagittal", "elev": 0, "azim": 90, "description": "矢状面（横から）"},
+        2: {"name": "frontal", "elev": 0, "azim": 0, "description": "前額面（正面から）"},
+        3: {"name": "oblique", "elev": 10, "azim": 45, "description": "斜め視点（デフォルト）"}
+    }
+    
+    print("\n視点選択:")
+    for key, view in view_options.items():
+        print(f"  {key}. {view['description']}")
+    print("  4. 全ての視点（1,2,3すべて）")
+    
+    while True:
+        try:
+            view_input = input("\n視点を選択してください（複数選択の場合はカンマ区切り、例: 1,3）: ")
+            if view_input.strip() == "4":
+                selected_views = [1, 2, 3]
+                break
+            else:
+                selected_views = [int(x.strip()) for x in view_input.split(',')]
+                if all(1 <= v <= 3 for v in selected_views):
+                    break
+                else:
+                    print("無効な選択です。1-4の数字を入力してください。")
+        except ValueError:
+            print("無効な入力です。数字をカンマ区切りで入力してください。")
+    
+    print(f"選択された視点: {[view_options[v]['description'] for v in selected_views]}")
+    
+    # 保存設定
+    save_paths = []
+    if save_animation:
+        # JSONファイルがあるthera○○フォルダに保存
+        first_file_path = files_to_use[0]
+        # パスからthera○○フォルダを見つける
+        thera_folder = None
+        for part in first_file_path.parts:
+            if part.startswith('thera'):
+                # thera○○フォルダまでのパスを構築
+                thera_index = first_file_path.parts.index(part)
+                thera_folder = Path(*first_file_path.parts[:thera_index+1])
+                break
+        
+        if thera_folder:
+            save_dir = thera_folder
+        else:
+            # fallback: 元の保存先
+            save_dir = root_dir / "3d_walking_animations"
+        
+        save_dir.mkdir(exist_ok=True)
+        
+        # ファイル名生成（視点ごと）
+        safe_group_name = selected_group.replace('/', '_')
+        for view_id in selected_views:
+            view_name = view_options[view_id]['name']
+            filename = f"3d_walking_animation_{safe_group_name}_{view_name}_frames{len(files_to_use)}.mp4"
+            save_path = save_dir / filename
+            save_paths.append((save_path, view_id))
+            print(f"保存先 ({view_options[view_id]['description']}): {save_path}")
+    
+    # アニメーションデータを読み込み
+    animation_data, global_bounds = load_animation_sequence(files_to_use)
+    
+    if not animation_data:
+        print("有効なアニメーションデータがありません。")
+        return
+    
+    # 各視点でアニメーション作成
+    animations = []
+    print(f"\n歩行アニメーション作成中... ({len(selected_views)} 視点)")
+    
+    for i, view_id in enumerate(selected_views):
+        view_config = view_options[view_id]
+        save_path = save_paths[i][0] if save_paths else None
+        
+        print(f"\n{i+1}/{len(selected_views)}: {view_config['description']} を作成中...")
+        
+        ani = create_3d_animation(
+            animation_data, global_bounds,
+            show_keypoint_labels=show_labels,
+            show_keypoint_numbers=show_numbers,
+            save_path=save_path,
+            view_name=view_config['name'],
+            elev=view_config['elev'],
+            azim=view_config['azim']
+        )
+        
+        if ani:
+            animations.append(ani)
+    
+    print(f"\n歩行アニメーション作成完了！ ({len(animations)} 視点)")
+    if not save_animation and animations:
+        print("最後のアニメーションを表示します...")
+        plt.show()
+    
+    return animations
+def find_3d_pose_files(search_dir, pattern="3d_pose_results_weighted_linear_OC"):
+    """
+    指定ディレクトリから3Dポーズ結果ファイルを検索
+    
+    Args:
+        search_dir: 検索ディレクトリ
+        pattern: 検索パターン
+    
+    Returns:
+        pose_files: 見つかったJSONファイルのリスト
+    """
+    search_path = Path(search_dir)
+    pose_files = []
+    
+    # 指定パターンのディレクトリを再帰的に検索
+    for pose_dir in search_path.rglob(pattern):
+        json_files = list(pose_dir.glob("3d_pose_*.json"))
+        pose_files.extend(json_files)
+    
+    return sorted(pose_files)
+
+def extract_frame_number(file_path):
+    """
+    ファイル名からフレーム番号を抽出
+    """
+    import re
+    match = re.search(r'frame_(\d+)', file_path.name)
+    if match:
+        return int(match.group(1))
+    return 0
+
+def interactive_animation_creator():
+    """
+    インタラクティブにアニメーションを作成
+    """
+    # --- パラメータ設定 ---
+    root_dir = Path(r"G:\gait_pattern\20250811_br")
+    
+    print("3D歩行アニメーション作成プログラム")
+    print(f"検索ディレクトリ: {root_dir}")
+    print("=" * 60)
+    
+    # 3Dポーズファイルを検索
+    print("3Dポーズファイルを検索中...")
+    pose_files = find_3d_pose_files(root_dir)
+    
+    if not pose_files:
+        print("3Dポーズ結果ファイルが見つかりません。")
+        return
+    
+    print(f"見つかった3Dポーズファイル数: {len(pose_files)}")
+    
+    # ファイルをグループ化（被験者/セラピスト別）
+    file_groups = {}
+    for file_path in pose_files:
+        # パスから被験者とセラピスト情報を抽出
+        parts = file_path.parts
+        subject = None
+        therapist = None
+        
+        for part in parts:
+            if part.startswith('sub'):
+                subject = part
+            elif part.startswith('thera'):
+                therapist = part
+        
+        if subject and therapist:
+            group_key = f"{subject}/{therapist}"
+            if group_key not in file_groups:
+                file_groups[group_key] = []
+            file_groups[group_key].append(file_path)
+    
+    # 各グループ内でフレーム順にソート
+    for group_key in file_groups:
+        file_groups[group_key] = sorted(file_groups[group_key], key=extract_frame_number)
+    
+    # グループを表示
+    print("\n利用可能な被験者/セラピストの組み合わせ:")
+    for i, group_key in enumerate(sorted(file_groups.keys())):
+        file_count = len(file_groups[group_key])
+        print(f"  {i+1}. {group_key} ({file_count} フレーム)")
+    
+    # グループ選択
+    while True:
+        try:
+            group_choice = int(input(f"\n組み合わせを選択してください (1-{len(file_groups)}): ")) - 1
+            if 0 <= group_choice < len(file_groups):
+                break
+            else:
+                print("無効な選択です。")
+        except ValueError:
+            print("数字を入力してください。")
+    
+    selected_group = sorted(file_groups.keys())[group_choice]
+    selected_files = file_groups[selected_group]
+    
+    print(f"\n選択されたグループ: {selected_group}")
+    print(f"利用可能なフレーム数: {len(selected_files)}")
+
+    files_to_use = selected_files
+
+    print(f"使用フレーム数: {len(files_to_use)}")
+    
+    # アニメーション設定
+    print("キーポイント名は表示しません")
+    print("キーポイント番号は表示しません")
+    print("アニメーションは保存します")
+    
+    show_labels = False
+    show_numbers = False
+    save_animation = True
+    
+    # 視点選択
+    view_options = {
+        1: {"name": "sagittal", "elev": 0, "azim": 90, "description": "矢状面（横から）"},
+        2: {"name": "frontal", "elev": 0, "azim": 0, "description": "前額面（正面から）"},
+        3: {"name": "oblique", "elev": 10, "azim": 45, "description": "斜め視点（デフォルト）"}
+    }
+    
+    print("\n視点選択:")
+    for key, view in view_options.items():
+        print(f"  {key}. {view['description']}")
+    print("  4. 全ての視点（1,2,3すべて）")
+    
+    while True:
+        try:
+            view_input = input("\n視点を選択してください（複数選択の場合はカンマ区切り、例: 1,3）: ")
+            if view_input.strip() == "4":
+                selected_views = [1, 2, 3]
+                break
+            else:
+                selected_views = [int(x.strip()) for x in view_input.split(',')]
+                if all(1 <= v <= 3 for v in selected_views):
+                    break
+                else:
+                    print("無効な選択です。1-4の数字を入力してください。")
+        except ValueError:
+            print("無効な入力です。数字をカンマ区切りで入力してください。")
+    
+    print(f"選択された視点: {[view_options[v]['description'] for v in selected_views]}")
+    
+    # 保存設定
+    save_paths = []
+    if save_animation:
+        # JSONファイルがあるthera○○フォルダに保存
+        first_file_path = files_to_use[0]
+        # パスからthera○○フォルダを見つける
+        thera_folder = None
+        for part in first_file_path.parts:
+            if part.startswith('thera'):
+                # thera○○フォルダまでのパスを構築
+                thera_index = first_file_path.parts.index(part)
+                thera_folder = Path(*first_file_path.parts[:thera_index+1])
+                break
+        
+        if thera_folder:
+            save_dir = thera_folder
+        else:
+            # fallback: 元の保存先
+            save_dir = root_dir / "3d_walking_animations"
+        
+        save_dir.mkdir(exist_ok=True)
+        
+        # ファイル名生成（視点ごと）
+        safe_group_name = selected_group.replace('/', '_')
+        for view_id in selected_views:
+            view_name = view_options[view_id]['name']
+            filename = f"3d_walking_animation_{safe_group_name}_{view_name}_frames{len(files_to_use)}.mp4"
+            save_path = save_dir / filename
+            save_paths.append((save_path, view_id))
+            print(f"保存先 ({view_options[view_id]['description']}): {save_path}")
+    
+    # アニメーションデータを読み込み
+    animation_data, global_bounds = load_animation_sequence(files_to_use)
+    
+    if not animation_data:
+        print("有効なアニメーションデータがありません。")
+        return
+    
+    # 各視点でアニメーション作成
+    animations = []
+    print(f"\n歩行アニメーション作成中... ({len(selected_views)} 視点)")
+    
+    for i, view_id in enumerate(selected_views):
+        view_config = view_options[view_id]
+        save_path = save_paths[i][0] if save_paths else None
+        
+        print(f"\n{i+1}/{len(selected_views)}: {view_config['description']} を作成中...")
+        
+        ani = create_3d_animation(
+            animation_data, global_bounds,
+            show_keypoint_labels=show_labels,
+            show_keypoint_numbers=show_numbers,
+            save_path=save_path,
+            view_name=view_config['name'],
+            elev=view_config['elev'],
+            azim=view_config['azim']
+        )
+        
+        if ani:
+            animations.append(ani)
+    
+    print(f"\n歩行アニメーション作成完了！ ({len(animations)} 視点)")
+    if not save_animation and animations:
+        print("最後のアニメーションを表示します...")
+        plt.show()
+    
+    return animations
 
 def interactive_frame_selector():
     """
@@ -972,11 +1656,11 @@ def main():
     #         print("数字を入力してください。")
     
     if mode == 1:
-        # 静止画モードで実行
+        # 静止画モード
         interactive_frame_selector()
     else:
-        # アニメーションモードで実行
+        # アニメーションモード
         interactive_animation_creator()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
