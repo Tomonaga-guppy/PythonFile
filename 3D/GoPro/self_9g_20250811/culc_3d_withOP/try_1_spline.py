@@ -594,6 +594,7 @@ def plot_method_trajectory_comparison(all_person_results, frames, right_idx, lef
         plt.tight_layout()
         graph_path = output_dir / f"{file_prefix}_{joint_name}_method_trajectory_comparison.png"
         plt.savefig(str(graph_path), dpi=200, bbox_inches='tight')
+        # plt.show()
         plt.close()
         print(f"      ✓ {joint_name}手法軌道比較グラフ保存: {graph_path.name}")
 
@@ -638,6 +639,7 @@ def plot_method_acceleration_comparison(all_person_results, frames, right_idx, l
         plt.tight_layout()
         graph_path = output_dir / f"{file_prefix}_{joint_name}_method_acceleration_comparison.png"
         plt.savefig(str(graph_path), dpi=200, bbox_inches='tight')
+        # plt.show()
         plt.close()
         print(f"      ✓ {joint_name}手法加速度比較グラフ保存: {graph_path.name}")
 
@@ -692,6 +694,7 @@ def plot_bilateral_trajectory(all_person_results, frames, right_idx, left_idx, j
         plt.tight_layout()
         graph_path = output_dir / f"{file_prefix}_{joint_name}_bilateral_comparison.png"
         plt.savefig(str(graph_path), dpi=200, bbox_inches='tight')
+        # plt.show()
         plt.close()
         print(f"      ✓ {joint_name}両側比較グラフ保存: {graph_path.name}")
 
@@ -744,6 +747,7 @@ def plot_bilateral_acceleration(all_person_results, frames, right_idx, left_idx,
         plt.tight_layout()
         graph_path = output_dir / f"{file_prefix}_{joint_name}_bilateral_acceleration_comparison.png"
         plt.savefig(str(graph_path), dpi=200, bbox_inches='tight')
+        plt.show()
         plt.close()
         print(f"      ✓ {joint_name}両側加速度比較グラフ保存: {graph_path.name}")
 
