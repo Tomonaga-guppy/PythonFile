@@ -131,31 +131,29 @@ def calculate_acceleration(p_prev2, p_prev1, p_curr):
     return np.linalg.norm(acceleration_vec)
 
 def calculate_average_acceleration(history, current_points, eval_indices=[14]):
-    """特定キーポイントの平均加速度を計算（有効な履歴のみ使用）"""
+    """履歴不足対策を追加した加速度計算"""
+    # ★★★ 修正: 履歴不足の場合は0を返す（infではなく） ★★★
     if len(history) < 2:
-        return 0.0
+        return 0.0  # infの代わりに0を返す
 
-    # ★★★ 修正点: 有効な履歴のみを使用する ★★★
-    # 最新から遡って、有効な2つの履歴を見つける
+    # 有効な履歴を探す（最大5フレーム遡る）
     valid_history = []
-    for i in range(len(history) - 1, -1, -1):
-        # 評価対象のキーポイントが全て有効かチェック
+    for i in range(len(history) - 1, max(-1, len(history) - 6), -1):
         frame_valid = True
         for idx in eval_indices:
             if np.isnan(history[i][idx]).any():
                 frame_valid = False
                 break
-
         if frame_valid:
             valid_history.append(history[i])
             if len(valid_history) == 2:
                 break
 
-    # 有効な履歴が2つ未満の場合は加速度計算不可
+    # ★★★ 修正: 履歴不足時の対処 ★★★
     if len(valid_history) < 2:
-        return np.inf
+        return 0.0  # 履歴不足時は0を返す
 
-    # 現在のフレームも有効かチェック
+    # 現在のフレームの有効性チェック
     current_valid = True
     for idx in eval_indices:
         if np.isnan(current_points[idx]).any():
@@ -163,17 +161,18 @@ def calculate_average_acceleration(history, current_points, eval_indices=[14]):
             break
 
     if not current_valid:
-        return np.inf
+        return 0.0  # 現在フレーム無効時は0を返す
 
-    # 有効な履歴を使用して加速度計算（時系列順に並び替え）
-    p_prev2, p_prev1 = valid_history[1], valid_history[0]  # 古い順に並び替え
+    # 加速度計算
+    p_prev2, p_prev1 = valid_history[1], valid_history[0]
     total_accel, count = 0, 0
     for idx in eval_indices:
         accel = calculate_acceleration(p_prev2[idx], p_prev1[idx], current_points[idx])
         if accel != np.inf:
             total_accel += accel
             count += 1
-    return total_accel / count if count > 0 else np.inf
+
+    return total_accel / count if count > 0 else 0.0
 
 def swap_left_right_keypoints(keypoints):
     """キーポイント配列の左右の部位を入れ替える"""
@@ -182,6 +181,12 @@ def swap_left_right_keypoints(keypoints):
     r_indices = [2, 3, 4,  9, 10, 11, 15, 17, 22, 23, 24]
     swapped[l_indices + r_indices] = swapped[r_indices + l_indices]
     return swapped
+
+def calculate_left_right_acceleration(history, current_points, left_indices=[14], right_indices=[11]):
+    """左右キーポイントの平均加速度を個別に計算"""
+    left_accel = calculate_average_acceleration(history, current_points, left_indices)
+    right_accel = calculate_average_acceleration(history, current_points, right_indices)
+    return left_accel, right_accel
 
 def butter_lowpass_filter(data, cutoff, fs, order=4):
     """時系列データにバターワースローパスフィルタ（ゼロ位相）を適用する"""
@@ -196,11 +201,12 @@ def butter_lowpass_filter(data, cutoff, fs, order=4):
 
 def process_single_person_4patterns(kp1, cf1, kp2, cf2, P1, P2, history, threshold, frame_idx_for_debug=None):
     """
-    4パターンのスイッチングを試し、最適なものを採用し、加速度も返す。
-    元の組み合わせで異常がない場合はスイッチングなしでそのまま使用する。
+    左右キーポイントの加速度チェックに基づく4パターンスイッチング。
+    両方が閾値を超えた場合→スイッチング、片方が閾値を超える場合→欠損値として扱う
     """
     patterns_3d = []
     accelerations = []
+    left_right_accels = []
 
     kp_combinations = [
         (kp1, cf1, kp2, cf2),  # Normal (N)
@@ -212,42 +218,61 @@ def process_single_person_4patterns(kp1, cf1, kp2, cf2, P1, P2, history, thresho
 
     for kp1_trial, cf1_trial, kp2_trial, cf2_trial in kp_combinations:
         points_3d = triangulate_and_rotate(P1, P2, kp1_trial, kp2_trial, cf1_trial, cf2_trial)
-        accel = calculate_average_acceleration(history, points_3d)
+        # 左右の加速度を個別に計算
+        left_accel, right_accel = calculate_left_right_acceleration(history, points_3d)
+        total_accel = calculate_average_acceleration(history, points_3d)
+
         patterns_3d.append(points_3d)
-        accelerations.append(accel)
+        accelerations.append(total_accel)
+        left_right_accels.append((left_accel, right_accel))
 
-    # ★★★ 修正点: 元の組み合わせ（Normal）が閾値以下なら、それを優先使用 ★★★
-    normal_accel = accelerations[0]  # Normal (N) パターンの加速度
+    # ★★★ 新しいロジック: 左右キーポイントの加速度チェック ★★★
+    normal_left_accel, normal_right_accel = left_right_accels[0]
 
-    if normal_accel < threshold:
-        # 元の組み合わせが正常なら、スイッチングせずにそのまま使用
+    # 両方とも閾値以下 → そのまま使用
+    if normal_left_accel < threshold and normal_right_accel < threshold:
         best_pattern_idx = 0
-        min_accel = normal_accel
+        min_accel = accelerations[0]
         corrected_points_3d = patterns_3d[0]
-    else:
-        # 元の組み合わせが異常な場合のみ、他のパターンから最適なものを選択
-        min_accel = np.inf
+        status_reason = "Both sides OK"
+
+    # 片方のみ閾値を超える → 欠損値として扱う
+    elif (normal_left_accel >= threshold) != (normal_right_accel >= threshold):
         best_pattern_idx = -1
-        valid_accels = np.array([a if a != np.inf else np.nan for a in accelerations])
+        min_accel = np.inf
+        corrected_points_3d = np.full((25, 3), np.nan)
+        status_reason = f"One side error (L:{normal_left_accel:.1f}, R:{normal_right_accel:.1f})"
 
-        if not np.all(np.isnan(valid_accels)):
-            best_pattern_idx = np.nanargmin(valid_accels)
-            min_accel = accelerations[best_pattern_idx]
+    # 両方とも閾値を超える → スイッチング試行
+    else:
+        best_pattern_idx = -1
+        min_accel = np.inf
+        best_left_accel, best_right_accel = np.inf, np.inf
 
-        if best_pattern_idx != -1 and min_accel < threshold:
+        # 全パターンで左右両方が閾値以下のものを探す
+        for i, (left_acc, right_acc) in enumerate(left_right_accels):
+            if left_acc < threshold and right_acc < threshold:
+                if accelerations[i] < min_accel:
+                    best_pattern_idx = i
+                    min_accel = accelerations[i]
+                    best_left_accel, best_right_accel = left_acc, right_acc
+
+        if best_pattern_idx != -1:
             corrected_points_3d = patterns_3d[best_pattern_idx]
+            status_reason = f"Switched to pattern {best_pattern_idx} (L:{best_left_accel:.1f}, R:{best_right_accel:.1f})"
         else:
             corrected_points_3d = np.full((25, 3), np.nan)
+            status_reason = "All patterns failed"
 
     if frame_idx_for_debug is not None:
         accel_str = ", ".join([f"{a:8.2f}" if a != np.inf else "   inf" for a in accelerations])
-        status = "Normal used" if best_pattern_idx == 0 and normal_accel < threshold else f"Best: Idx={best_pattern_idx}"
-        # ★★★ 履歴の状態も表示 ★★★
+        lr_str = ", ".join([f"L:{l:.1f}/R:{r:.1f}" if l != np.inf and r != np.inf else "L:inf/R:inf"
+                           for l, r in left_right_accels])
         history_info = f"History: {len(history)} frames"
         if len(history) > 0:
             last_valid = not np.isnan(history[-1]).all()
             history_info += f", last valid: {last_valid}"
-        print(f"Frame {frame_idx_for_debug:04d} | Accels(N,S1,S2,S12): [{accel_str}] | {status}, Accel={min_accel:.2f} | {history_info}")
+        print(f"Frame {frame_idx_for_debug:04d} | Accels(N,S1,S2,S12): [{accel_str}] | LR: [{lr_str}] | {status_reason} | {history_info}")
 
     raw_points_3d = patterns_3d[0]  # 常に元の組み合わせ（Normal）をrawとして記録
 
@@ -386,15 +411,30 @@ def main():
                 raw_points_arr = np.array(all_raw_points[p_idx])
                 corrected_points_arr = np.array(all_corrected_points[p_idx])
 
-                # ★★★ 変更点: ここでまとめてスプライン補間を実行 ★★★
-                print("    - ステップ2: 3次スプライン補間で欠損値を補間...")
+                # ★★★ 新規追加: Rawデータに直接スプライン補間とフィルタを適用 ★★★
+                print("    - ステップ2a: Rawデータに3次スプライン補間を適用...")
+                raw_spline_points_arr = np.full_like(raw_points_arr, np.nan)
+                for kp_idx in range(raw_points_arr.shape[1]):
+                    for axis_idx in range(raw_points_arr.shape[2]):
+                        sequence = raw_points_arr[:, kp_idx, axis_idx]
+                        raw_spline_points_arr[:, kp_idx, axis_idx] = apply_spline_interpolation(sequence)
+
+                print("    - ステップ2b: Rawスプライン補間データにバターワースフィルタを適用...")
+                raw_final_points_arr = np.full_like(raw_spline_points_arr, np.nan)
+                for kp_idx in range(raw_spline_points_arr.shape[1]):
+                    for axis_idx in range(raw_spline_points_arr.shape[2]):
+                        sequence = raw_spline_points_arr[:, kp_idx, axis_idx]
+                        raw_final_points_arr[:, kp_idx, axis_idx] = butter_lowpass_filter(sequence, BUTTERWORTH_CUTOFF, FRAME_RATE)
+
+                # ★★★ 既存処理: スイッチング後データのスプライン補間 ★★★
+                print("    - ステップ3: スイッチング後データに3次スプライン補間で欠損値を補間...")
                 spline_points_arr = np.full_like(corrected_points_arr, np.nan)
                 for kp_idx in range(corrected_points_arr.shape[1]):
                     for axis_idx in range(corrected_points_arr.shape[2]):
                         sequence = corrected_points_arr[:, kp_idx, axis_idx]
                         spline_points_arr[:, kp_idx, axis_idx] = apply_spline_interpolation(sequence)
 
-                print("    - ステップ3: バターワースフィルタを適用...")
+                print("    - ステップ4: バターワースフィルタを適用...")
                 final_points_arr = np.full_like(spline_points_arr, np.nan)
                 for kp_idx in range(spline_points_arr.shape[1]):
                     for axis_idx in range(spline_points_arr.shape[2]):
@@ -403,12 +443,13 @@ def main():
 
                 all_person_results.append({
                     'raw': raw_points_arr,
+                    'raw_processed': raw_final_points_arr,  # ★★★ 新規追加 ★★★
                     'corrected_with_nan': corrected_points_arr,
                     'spline': spline_points_arr,
                     'final': final_points_arr
                 })
 
-            print("  - ステップ4: 結果をJSONファイルに保存...")
+            print("  - ステップ5: 結果をJSONファイルに保存...")
             analysis_results = []
             for t, frame_name in enumerate(common_frames):
                 frame_result = {"frame_name": frame_name}
@@ -416,6 +457,7 @@ def main():
                     person_data = all_person_results[p_idx]
                     frame_result[f"person_{p_idx + 1}"] = {
                         "points_3d_raw": person_data['raw'][t].tolist(),
+                        "points_3d_raw_processed": person_data['raw_processed'][t].tolist(),  # ★★★ 新規追加 ★★★
                         "points_3d_spline": person_data['spline'][t].tolist(),
                         "points_3d_final": person_data['final'][t].tolist(),
                     }
@@ -425,12 +467,312 @@ def main():
                 json.dump(analysis_results, f, indent=4)
             print(f"  ✓ 処理完了。結果を {output_file.relative_to(root_dir)} に保存しました。")
 
-            print("  - ステップ5: RAnkleのY座標変化をグラフ化...")
-            plot_joint_trajectory_graph(all_person_results, common_frames, 14, 1, "RAnkle_Y", output_dir, thera_dir.name)
+            # ★★★ フォルダ分けでグラフを整理 ★★★
+            graphs_dir = output_dir / "graphs"
+            graphs_dir.mkdir(exist_ok=True)
 
-            print("  - ステップ6: 全フレームの加速度をグラフ化...")
-            plot_acceleration_graph(all_accelerations_data, common_frames, ACCELERATION_THRESHOLD, output_dir, thera_dir.name)
+            bilateral_dir = graphs_dir / "bilateral_comparison"
+            bilateral_dir.mkdir(exist_ok=True)
 
+            method_comparison_dir = graphs_dir / "method_comparison"
+            method_comparison_dir.mkdir(exist_ok=True)
+
+            acceleration_dir = graphs_dir / "acceleration_analysis"
+            acceleration_dir.mkdir(exist_ok=True)
+
+            print("  - ステップ6: 主要関節ペアの軌道と加速度をグラフ化...")
+            plot_bilateral_joint_analysis(all_person_results, all_accelerations_data, common_frames, bilateral_dir, thera_dir.name)
+
+            print("  - ステップ7: Raw処理 vs スイッチング処理の比較グラフ化...")
+            plot_method_comparison_analysis(all_person_results, common_frames, method_comparison_dir, thera_dir.name)
+
+            print("  - ステップ8: 全フレームの加速度をグラフ化...")
+            plot_acceleration_graph(all_accelerations_data, common_frames, ACCELERATION_THRESHOLD, acceleration_dir, thera_dir.name)
+
+
+def plot_bilateral_joint_analysis(all_person_results, all_accelerations_data, frames, output_dir, file_prefix):
+    """左右対応関節ペアの軌道と加速度をまとめて分析・プロット"""
+
+    # 関節ペアの定義 (右, 左, 名前)
+    joint_pairs = [
+        (11, 14, "Ankle"),    # RAnkle, LAnkle
+        (9, 12, "Hip"),       # RHip, LHip
+        (10, 13, "Knee"),     # RKnee, LKnee
+        (23, 20, "SmallToe"), # RSmallToe, LSmallToe
+        (22, 19, "BigToe"),   # RBigToe, LBigToe
+        (24, 21, "Heel")      # RHeel, LHeel
+    ]
+
+    try:
+        max_people = len(all_person_results)
+        if max_people == 0:
+            return
+
+        # 各関節ペアについて分析とプロット
+        for right_idx, left_idx, joint_name in joint_pairs:
+            print(f"    - {joint_name}の分析...")
+
+            # 1. 位置軌道のプロット (X, Y, Z軸別)
+            plot_bilateral_trajectory(all_person_results, frames, right_idx, left_idx, joint_name, output_dir, file_prefix)
+
+            # 2. 加速度比較のプロット
+            plot_bilateral_acceleration(all_person_results, frames, right_idx, left_idx, joint_name, output_dir, file_prefix)
+
+    except Exception as e:
+        print(f"  ✗ 両側関節分析エラー: {e}")
+        traceback.print_exc()
+
+def plot_method_comparison_analysis(all_person_results, frames, output_dir, file_prefix):
+    """Raw処理 vs スイッチング処理の比較分析"""
+
+    # 関節ペアの定義 (右, 左, 名前)
+    joint_pairs = [
+        (11, 14, "Ankle"),    # RAnkle, LAnkle
+        (9, 12, "Hip"),       # RHip, LHip
+        (10, 13, "Knee"),     # RKnee, LKnee
+        (23, 20, "SmallToe"), # RSmallToe, LSmallToe
+        (22, 19, "BigToe"),   # RBigToe, LBigToe
+        (24, 21, "Heel")      # RHeel, LHeel
+    ]
+
+    try:
+        max_people = len(all_person_results)
+        if max_people == 0:
+            return
+
+        # 各関節ペアについて比較分析
+        for right_idx, left_idx, joint_name in joint_pairs:
+            print(f"    - {joint_name}の手法比較分析...")
+
+            # 1. 位置軌道の手法比較（Raw処理 vs スイッチング処理）
+            plot_method_trajectory_comparison(all_person_results, frames, right_idx, left_idx, joint_name, output_dir, file_prefix)
+
+            # 2. 加速度の手法比較
+            plot_method_acceleration_comparison(all_person_results, frames, right_idx, left_idx, joint_name, output_dir, file_prefix)
+
+    except Exception as e:
+        print(f"  ✗ 手法比較分析エラー: {e}")
+        traceback.print_exc()
+
+def plot_method_trajectory_comparison(all_person_results, frames, right_idx, left_idx, joint_name, output_dir, file_prefix):
+    """Raw処理 vs スイッチング処理の軌道比較"""
+    try:
+        max_people = len(all_person_results)
+        if max_people == 0: return
+
+        fig, axes = plt.subplots(3, max_people, figsize=(14 * max_people, 16))
+        if max_people == 1:
+            axes = axes.reshape(-1, 1)
+
+        time_axis = np.arange(len(frames))
+        axis_names = ['X', 'Y', 'Z']
+
+        for p_idx, person_data in enumerate(all_person_results):
+            for axis_idx in range(3):
+                ax = axes[axis_idx, p_idx]
+
+                # ★★★ Raw処理結果（Raw → スプライン → フィルタ）★★★
+                right_raw_processed = person_data['raw_processed'][:, right_idx, axis_idx]
+                left_raw_processed = person_data['raw_processed'][:, left_idx, axis_idx]
+
+                # ★★★ スイッチング処理結果（Raw → スイッチング → スプライン → フィルタ）★★★
+                right_switching_processed = person_data['final'][:, right_idx, axis_idx]
+                left_switching_processed = person_data['final'][:, left_idx, axis_idx]
+
+                # プロット
+                ax.plot(time_axis, right_raw_processed, '--', color='orange', linewidth=2, alpha=0.8, label=f'R{joint_name} Raw→Processed')
+                ax.plot(time_axis, left_raw_processed, '--', color='cyan', linewidth=2, alpha=0.8, label=f'L{joint_name} Raw→Processed')
+                ax.plot(time_axis, right_switching_processed, color='darkred', linewidth=2, label=f'R{joint_name} Switching→Processed')
+                ax.plot(time_axis, left_switching_processed, color='darkblue', linewidth=2, label=f'L{joint_name} Switching→Processed')
+
+                ax.set_title(f'Person {p_idx + 1}: {joint_name} {axis_names[axis_idx]}-axis\n(Raw Processing vs Switching Processing)')
+                ax.set_xlabel('Frame Number')
+                ax.set_ylabel(f'{axis_names[axis_idx]} Coordinate (mm)')
+                ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                ax.grid(True, linestyle='--', alpha=0.6)
+
+        plt.tight_layout()
+        graph_path = output_dir / f"{file_prefix}_{joint_name}_method_trajectory_comparison.png"
+        plt.savefig(str(graph_path), dpi=200, bbox_inches='tight')
+        # plt.show()
+        plt.close()
+        print(f"      ✓ {joint_name}手法軌道比較グラフ保存: {graph_path.name}")
+
+    except Exception as e:
+        print(f"      ✗ {joint_name}手法軌道比較エラー: {e}")
+
+def plot_method_acceleration_comparison(all_person_results, frames, right_idx, left_idx, joint_name, output_dir, file_prefix):
+    """Raw処理 vs スイッチング処理の加速度比較"""
+    try:
+        max_people = len(all_person_results)
+        if max_people == 0: return
+
+        fig, axes = plt.subplots(max_people, 1, figsize=(18, 8 * max_people))
+        if max_people == 1:
+            axes = [axes]
+
+        time_axis = np.arange(len(frames))
+
+        for p_idx, person_data in enumerate(all_person_results):
+            ax = axes[p_idx]
+
+            # ★★★ Raw処理結果の加速度計算 ★★★
+            right_raw_processed_accel = calculate_joint_acceleration_series(person_data['raw_processed'][:, right_idx, :])
+            left_raw_processed_accel = calculate_joint_acceleration_series(person_data['raw_processed'][:, left_idx, :])
+
+            # ★★★ スイッチング処理結果の加速度計算 ★★★
+            right_switching_accel = calculate_joint_acceleration_series(person_data['final'][:, right_idx, :])
+            left_switching_accel = calculate_joint_acceleration_series(person_data['final'][:, left_idx, :])
+
+            # プロット
+            ax.plot(time_axis[2:], right_raw_processed_accel, '--', color='orange', linewidth=2, alpha=0.8, label=f'R{joint_name} Raw→Processed Accel')
+            ax.plot(time_axis[2:], left_raw_processed_accel, '--', color='cyan', linewidth=2, alpha=0.8, label=f'L{joint_name} Raw→Processed Accel')
+            ax.plot(time_axis[2:], right_switching_accel, color='darkred', linewidth=2, label=f'R{joint_name} Switching→Processed Accel')
+            ax.plot(time_axis[2:], left_switching_accel, color='darkblue', linewidth=2, label=f'L{joint_name} Switching→Processed Accel')
+
+            ax.set_title(f'Person {p_idx + 1}: {joint_name} Acceleration Method Comparison\n(Raw Processing vs Switching Processing)')
+            ax.set_xlabel('Frame Number')
+            ax.set_ylabel('Acceleration (mm/frame²)')
+            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            ax.grid(True, linestyle='--', alpha=0.6)
+
+        plt.tight_layout()
+        graph_path = output_dir / f"{file_prefix}_{joint_name}_method_acceleration_comparison.png"
+        plt.savefig(str(graph_path), dpi=200, bbox_inches='tight')
+        # plt.show()
+        plt.close()
+        print(f"      ✓ {joint_name}手法加速度比較グラフ保存: {graph_path.name}")
+
+    except Exception as e:
+        print(f"      ✗ {joint_name}手法加速度比較エラー: {e}")
+
+def plot_bilateral_trajectory(all_person_results, frames, right_idx, left_idx, joint_name, output_dir, file_prefix):
+    """左右関節の3軸軌道比較プロット（生データ vs 処理後データ）"""
+    try:
+        max_people = len(all_person_results)
+        if max_people == 0: return
+
+        fig, axes = plt.subplots(3, max_people, figsize=(12 * max_people, 14))
+        if max_people == 1:
+            axes = axes.reshape(-1, 1)
+
+        time_axis = np.arange(len(frames))
+        axis_names = ['X', 'Y', 'Z']
+
+        for p_idx, person_data in enumerate(all_person_results):
+            for axis_idx in range(3):
+                ax = axes[axis_idx, p_idx]
+
+                # ★★★ 生データ（Raw）★★★
+                right_raw = person_data['raw'][:, right_idx, axis_idx]
+                left_raw = person_data['raw'][:, left_idx, axis_idx]
+
+                # ★★★ スイッチング処理後（Corrected）★★★
+                right_corrected = person_data['corrected_with_nan'][:, right_idx, axis_idx]
+                left_corrected = person_data['corrected_with_nan'][:, left_idx, axis_idx]
+
+                # ★★★ 最終処理後（Final: スプライン+フィルタ）★★★
+                right_final = person_data['final'][:, right_idx, axis_idx]
+                left_final = person_data['final'][:, left_idx, axis_idx]
+
+                # 右側関節のプロット
+                ax.plot(time_axis, right_raw, 'o', color='lightcoral', markersize=2, alpha=0.6, label=f'R{joint_name} Raw')
+                ax.plot(time_axis, right_corrected, 'x', color='red', markersize=3, alpha=0.7, label=f'R{joint_name} Corrected')
+                ax.plot(time_axis, right_final, color='darkred', linewidth=2, label=f'R{joint_name} Final')
+
+                # 左側関節のプロット
+                ax.plot(time_axis, left_raw, 'o', color='lightblue', markersize=2, alpha=0.6, label=f'L{joint_name} Raw')
+                ax.plot(time_axis, left_corrected, 'x', color='blue', markersize=3, alpha=0.7, label=f'L{joint_name} Corrected')
+                ax.plot(time_axis, left_final, color='darkblue', linewidth=2, label=f'L{joint_name} Final')
+
+                ax.set_title(f'Person {p_idx + 1}: {joint_name} {axis_names[axis_idx]}-axis (Raw vs Processed)')
+                ax.set_xlabel('Frame Number')
+                ax.set_ylabel(f'{axis_names[axis_idx]} Coordinate (mm)')
+                ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                ax.grid(True, linestyle='--', alpha=0.6)
+
+        plt.tight_layout()
+        graph_path = output_dir / f"{file_prefix}_{joint_name}_bilateral_comparison.png"
+        plt.savefig(str(graph_path), dpi=200, bbox_inches='tight')
+        # plt.show()
+        plt.close()
+        print(f"      ✓ {joint_name}両側比較グラフ保存: {graph_path.name}")
+
+    except Exception as e:
+        print(f"      ✗ {joint_name}軌道グラフエラー: {e}")
+
+def plot_bilateral_acceleration(all_person_results, frames, right_idx, left_idx, joint_name, output_dir, file_prefix):
+    """左右関節の加速度比較プロット（生データ vs 処理後データ）"""
+    try:
+        max_people = len(all_person_results)
+        if max_people == 0: return
+
+        fig, axes = plt.subplots(max_people, 1, figsize=(18, 8 * max_people))
+        if max_people == 1:
+            axes = [axes]
+
+        time_axis = np.arange(len(frames))
+
+        for p_idx, person_data in enumerate(all_person_results):
+            ax = axes[p_idx]
+
+            # ★★★ 生データの加速度計算 ★★★
+            right_raw_accel = calculate_joint_acceleration_series(person_data['raw'][:, right_idx, :])
+            left_raw_accel = calculate_joint_acceleration_series(person_data['raw'][:, left_idx, :])
+
+            # ★★★ スイッチング処理後の加速度計算 ★★★
+            right_corrected_accel = calculate_joint_acceleration_series(person_data['corrected_with_nan'][:, right_idx, :])
+            left_corrected_accel = calculate_joint_acceleration_series(person_data['corrected_with_nan'][:, left_idx, :])
+
+            # ★★★ 最終処理後の加速度計算 ★★★
+            right_final_accel = calculate_joint_acceleration_series(person_data['final'][:, right_idx, :])
+            left_final_accel = calculate_joint_acceleration_series(person_data['final'][:, left_idx, :])
+
+            # 右側関節
+            ax.plot(time_axis[2:], right_raw_accel, 'o', color='lightcoral', markersize=3, alpha=0.6, label=f'R{joint_name} Raw Accel')
+            ax.plot(time_axis[2:], right_corrected_accel, '--', color='red', linewidth=1.5, alpha=0.8, label=f'R{joint_name} Corrected Accel')
+            ax.plot(time_axis[2:], right_final_accel, color='darkred', linewidth=2, label=f'R{joint_name} Final Accel')
+
+            # 左側関節
+            ax.plot(time_axis[2:], left_raw_accel, 'o', color='lightblue', markersize=3, alpha=0.6, label=f'L{joint_name} Raw Accel')
+            ax.plot(time_axis[2:], left_corrected_accel, '--', color='blue', linewidth=1.5, alpha=0.8, label=f'L{joint_name} Corrected Accel')
+            ax.plot(time_axis[2:], left_final_accel, color='darkblue', linewidth=2, label=f'L{joint_name} Final Accel')
+
+            ax.set_title(f'Person {p_idx + 1}: {joint_name} Bilateral Acceleration Comparison (Raw vs Processed)')
+            ax.set_xlabel('Frame Number')
+            ax.set_ylabel('Acceleration (mm/frame²)')
+            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            ax.grid(True, linestyle='--', alpha=0.6)
+
+        plt.tight_layout()
+        graph_path = output_dir / f"{file_prefix}_{joint_name}_bilateral_acceleration_comparison.png"
+        plt.savefig(str(graph_path), dpi=200, bbox_inches='tight')
+        plt.show()
+        plt.close()
+        print(f"      ✓ {joint_name}両側加速度比較グラフ保存: {graph_path.name}")
+
+    except Exception as e:
+        print(f"      ✗ {joint_name}加速度グラフエラー: {e}")
+
+def calculate_joint_acceleration_series(joint_trajectory):
+    """関節軌道から加速度時系列を計算"""
+    if len(joint_trajectory) < 3:
+        return np.array([])
+
+    accelerations = []
+    for i in range(2, len(joint_trajectory)):
+        p_prev2 = joint_trajectory[i-2]
+        p_prev1 = joint_trajectory[i-1]
+        p_current = joint_trajectory[i]
+
+        # 有効なポイントかチェック
+        if np.isnan(p_prev2).any() or np.isnan(p_prev1).any() or np.isnan(p_current).any():
+            accelerations.append(np.nan)
+        else:
+            accel = calculate_acceleration(p_prev2, p_prev1, p_current)
+            accelerations.append(accel if accel != np.inf else np.nan)
+
+    return np.array(accelerations)
 
 def plot_joint_trajectory_graph(all_person_results, frames, joint_idx, axis_idx, joint_name, output_dir, file_prefix):
     """指定された関節の軌道をプロットし、グラフを保存する"""
@@ -510,20 +852,35 @@ def plot_acceleration_graph(all_accelerations_data, frames, threshold, output_di
             plt.xlim(0, len(frames) - 1)
 
         plt.tight_layout()
-        safe_file_prefix = file_prefix.replace('-', '_')  # ハイフンをアンダースコアに変更
+        # ★★★ 修正: ファイル名をより安全な形式に変更 ★★★
+        safe_file_prefix = file_prefix.replace('-', '_').replace(':', '_')  # 無効な文字を置換
         graph_filename = f"{safe_file_prefix}_acceleration_analysis.png"
         graph_path = output_dir / graph_filename
 
+        # ★★★ 修正: ディレクトリの存在確認と作成 ★★★
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        # ★★★ 修正: 絶対パスでの保存を試行 ★★★
         plt.savefig(str(graph_path), dpi=200, bbox_inches='tight')
         plt.close()
         print(f"  ✓ 加速度の分析グラフを保存しました: {graph_path}")
 
-
     except Exception as e:
         print(f"  ✗ 加速度グラフ作成エラー: {e}")
         traceback.print_exc()
+
+        # ★★★ 追加: エラー時のデバッグ情報 ★★★
+        print(f"  デバッグ情報:")
+        print(f"    - output_dir: {output_dir}")
+        print(f"    - file_prefix: {file_prefix}")
+        if output_dir.exists():
+            print(f"    - output_dir exists: True")
+        else:
+            print(f"    - output_dir exists: False")
+        if output_dir.is_dir():
+            print(f"    - output_dir is_dir: True")
+        else:
+            print(f"    - output_dir is_dir: False")
 
 if __name__ == '__main__':
     main()

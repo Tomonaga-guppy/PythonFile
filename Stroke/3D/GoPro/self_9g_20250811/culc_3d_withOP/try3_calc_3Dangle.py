@@ -18,24 +18,24 @@ KEYPOINTS_MAP = {
 def load_3d_data_from_json(json_path, person_key='person_1'):
     """
     指定されたJSONファイルから、特定の人物の3Dキーポイントデータを読み込む。
-    'raw'と'raw_filt'の両方のデータを読み込む。
+    'raw_processed'と'final'の両方のデータを読み込む。
 
     Args:
         json_path (Path): 3D結果が含まれるJSONファイルのパス。
         person_key (str): 読み込む人物のキー (例: 'person_1')。
 
     Returns:
-        dict: 'raw'と'raw_filt'のデータをNumPy配列で格納した辞書。
+        dict: 'raw_processed'と'final'のデータをNumPy配列で格納した辞書。
               データが見つからない場合はNoneを返す。
     """
     try:
         with open(json_path, 'r') as f:
             all_frames_data = json.load(f)
 
-        data_sets = {'raw': [], 'raw_filt': []}
+        data_sets = {'raw_processed': [], 'final': []}
         data_keys = {
-            'raw': 'points_3d_raw',
-            'raw_filt': 'points_3d_raw_filt'
+            'raw_processed': 'points_3d_raw_processed',
+            'final': 'points_3d_final'
         }
 
         for frame_data in all_frames_data:
@@ -49,13 +49,13 @@ def load_3d_data_from_json(json_path, person_key='person_1'):
                         data_sets[set_name].append(np.full((25, 3), np.nan))
 
         # リストが空でないことを確認
-        if not data_sets['raw'] or not data_sets['raw_filt']:
+        if not data_sets['raw_processed'] or not data_sets['final']:
             print(f"警告: {person_key} のデータが見つかりませんでした。")
             return None
 
         return {
-            'raw': np.array(data_sets['raw']),
-            'raw_filt': np.array(data_sets['raw_filt'])
+            'raw_processed': np.array(data_sets['raw_processed']),
+            'final': np.array(data_sets['final'])
         }
 
     except FileNotFoundError:
@@ -285,29 +285,48 @@ def calc_joint_angles_3d(points_3d):
     return pd.DataFrame(angles_dict)
 
 
-def plot_gait_angles(angles_df, ic_frames, start_frame, end_frame, title, save_path):
+def plot_gait_angles_comparison(angles_dict, ic_frames_dict, start_frame, end_frame, title, save_path):
     """
-    歩行角度をプロットする
+    raw_processedとfinalの歩行角度を同じグラフで比較プロットする
+
+    Args:
+        angles_dict: {'raw_processed': angles_df1, 'final': angles_df2}
+        ic_frames_dict: {'raw_processed': ic_frames1, 'final': ic_frames2}
+        start_frame, end_frame: 表示範囲
+        title: グラフタイトル
+        save_path: 保存パス
+    """
+
+def plot_gait_angles_comparison(angles_dict, ic_frames_dict, start_frame, end_frame, title, save_path):
+    """
+    raw_processedとfinalの歩行角度を同じグラフで比較プロットする
+
+    Args:
+        angles_dict: {'raw_processed': angles_df1, 'final': angles_df2}
+        ic_frames_dict: {'raw_processed': ic_frames1, 'final': ic_frames2}
+        start_frame, end_frame: 表示範囲
+        title: グラフタイトル
+        save_path: 保存パス
     """
     # デバッグ: 利用可能なカラムを確認
-    print(f"Available columns: {list(angles_df.columns)}")
-
-    # ic_framesをstart_frameとend_frameの範囲内に制限
-    filtered_ic_frames = {}
-    for side, frames in ic_frames.items():
-        # start_frame以上、end_frame以下のフレームのみを抽出
-        filtered_frames = [frame for frame in frames if start_frame <= frame <= end_frame]
-        filtered_ic_frames[side] = filtered_frames
-
-    # フィルター後のIC情報を表示
-    print(f"Original IC frames: {ic_frames}")
-    print(f"Filtered IC frames (範囲: {start_frame}-{end_frame}): {filtered_ic_frames}")
-
-    # フィルターされたic_framesを使用
-    ic_frames = filtered_ic_frames
+    for data_type, angles_df in angles_dict.items():
+        print(f"Available columns for {data_type}: {list(angles_df.columns)}")
 
     joint_names = ['Hip', 'Knee', 'Ankle']
-    colors = {'L': 'blue', 'R': 'red'}
+    sides = ['L', 'R']
+
+    # 色設定: raw_processedは薄い色、finalは濃い色
+    colors = {
+        'raw_processed': {'L': 'lightblue', 'R': 'lightcoral'},
+        'final': {'L': 'blue', 'R': 'red'}
+    }
+
+    # ラインスタイル設定
+    line_styles = {
+        'raw_processed': '--',  # 破線
+        'final': '-'           # 実線
+    }
+
     ic_colors = {'L': 'lightblue', 'R': 'lightcoral'}
 
     fig, axes = plt.subplots(len(joint_names), 1, figsize=(15, 12), sharex=True)
@@ -317,40 +336,53 @@ def plot_gait_angles(angles_df, ic_frames, start_frame, end_frame, title, save_p
     for i, joint in enumerate(joint_names):
         ax = axes[i]
 
-        # 正しい大文字でsideを定義
-        sides = ['L', 'R']  # 大文字に修正
+        # 各データタイプ（raw_processed, final）をプロット
+        for data_type, angles_df in angles_dict.items():
+            for side in sides:
+                # 正しい列名の形式に修正
+                if joint == 'Hip':
+                    col_name = f"{side}_Hip_Flexion"
+                elif joint == 'Knee':
+                    col_name = f"{side}_Knee_Flexion"
+                elif joint == 'Ankle':
+                    col_name = f"{side}_Ankle_Dorsiflexion"
+                else:
+                    col_name = f"{side}_{joint}"
 
-        for side in sides:
-            # 正しい列名の形式に修正（Side_Joint_Type → Side_Joint_Flexion/Dorsiflexion）
-            if joint == 'Hip':
-                col_name = f"{side}_Hip_Flexion"
-            elif joint == 'Knee':
-                col_name = f"{side}_Knee_Flexion"
-            elif joint == 'Ankle':
-                col_name = f"{side}_Ankle_Dorsiflexion"
-            else:
-                col_name = f"{side}_{joint}"
+                # カラムが存在するかチェック
+                if col_name in angles_df.columns:
+                    label = f"{col_name}_{data_type}"
+                    ax.plot(angles_df.index, angles_df[col_name],
+                           label=label,
+                           color=colors[data_type][side],
+                           linestyle=line_styles[data_type],
+                           alpha=0.7 if data_type == 'raw_processed' else 1.0,
+                           lw=2)
+                else:
+                    print(f"Warning: Column '{col_name}' not found in {data_type} DataFrame")
 
-            # カラムが存在するかチェック
-            if col_name in angles_df.columns:
-                ax.plot(angles_df.index, angles_df[col_name], label=col_name, color=colors[side], lw=2)
-            else:
-                print(f"Warning: Column '{col_name}' not found in DataFrame")
+        # IC（初期接触）の縦線を描画（finalデータのICを使用）
+        if 'final' in ic_frames_dict:
+            ic_frames = ic_frames_dict['final']
+            # ic_framesをstart_frameとend_frameの範囲内に制限
+            filtered_ic_frames = {}
+            for side, frames in ic_frames.items():
+                filtered_frames = [frame for frame in frames if start_frame <= frame <= end_frame]
+                filtered_ic_frames[side] = filtered_frames
 
-        # IC（初期接触）の縦線を描画（フィルターされたもののみ）
-        for side_ic, frames in ic_frames.items():
-            for frame in frames:
-                ax.axvline(x=frame, color=ic_colors[side_ic], linestyle='--', alpha=0.7,
-                          label=f'IC_{side_ic}' if frame == frames[0] else "")
+            for side_ic, frames in filtered_ic_frames.items():
+                for frame in frames:
+                    ax.axvline(x=frame, color=ic_colors[side_ic], linestyle=':', alpha=0.7,
+                              label=f'IC_{side_ic}' if frame == frames[0] else "")
 
         ax.set_ylabel('Angle (degrees)')
-        ax.set_title(f'{joint} Angle')
+        ax.set_title(f'{joint} Angle (Comparison)')
         ax.grid(True, linestyle=':', alpha=0.6)
 
         # 凡例の重複を除去
         handles, labels = ax.get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
-        ax.legend(by_label.values(), by_label.keys())
+        ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=8)
 
     # X軸ラベルは最下段のみ
     axes[-1].set_xlabel('Frame Number')
@@ -361,83 +393,6 @@ def plot_gait_angles(angles_df, ic_frames, start_frame, end_frame, title, save_p
     plt.show()
     plt.close()
 
-def plot_gait_angles_comparison(angles_spline_df, angles_final_df, ic_frames, title, save_path):
-    """
-    フィルターありなしの角度を同時にプロットする関数（関節別に分離）
-    """
-    joint_names = ['Hip', 'Knee', 'Ankle']
-    joint_config = {
-        'Hip': {'ylim': (-30, 60), 'color_spline': 'lightblue', 'color_filter': 'blue'},
-        'Knee': {'ylim': (-10, 80), 'color_spline': 'lightcoral', 'color_filter': 'red'},
-        'Ankle': {'ylim': (-40, 30), 'color_spline': 'lightgreen', 'color_filter': 'green'}
-    }
-
-    # 関節別に3つの個別グラフを作成
-    for joint in joint_names:
-        fig, ax = plt.subplots(1, 1, figsize=(15, 8))
-        fig.suptitle(f'{title} - {joint} Joint', fontsize=16, fontweight='bold')
-
-        sides = ['L', 'R']  # 大文字に修正
-        side_styles = {'L': '-', 'R': '--'}  # 左は実線、右は破線
-        frames = np.arange(len(angles_spline_df))
-
-        for side in sides:
-            # スプライン補間のみのデータをプロット
-            if joint == 'Hip':
-                spline_col = f'{side}_Hip_Flexion'
-                filter_col = f'{side}_Hip_Flexion'
-            elif joint == 'Knee':
-                spline_col = f'{side}_Knee_Flexion'
-                filter_col = f'{side}_Knee_Flexion'
-            elif joint == 'Ankle':
-                spline_col = f'{side}_Ankle_Dorsiflexion'
-                filter_col = f'{side}_Ankle_Dorsiflexion'
-            else:
-                spline_col = f'{side}_{joint}'
-                filter_col = f'{side}_{joint}'
-
-            if spline_col in angles_spline_df.columns:
-                ax.plot(angles_spline_df.index, angles_spline_df[spline_col],
-                       linestyle=side_styles[side], color=joint_config[joint]['color_spline'],
-                       linewidth=2, alpha=0.7, label=f'{side}_spline')
-
-            # フィルター適用後のデータをプロット
-            if filter_col in angles_final_df.columns:
-                ax.plot(angles_final_df.index, angles_final_df[filter_col],
-                       linestyle=side_styles[side], color=joint_config[joint]['color_filter'],
-                       linewidth=2.5, label=f'{side}_filtered')
-
-        # IC（初期接触）の縦線を描画
-        ic_colors = {'L': 'purple', 'R': 'orange'}
-        for side_ic, frames in ic_frames.items():
-            for frame in frames:
-                ax.axvline(x=frame, color=ic_colors[side_ic], linestyle=':',
-                          alpha=0.8, linewidth=2,
-                          label=f'IC_{side_ic}' if frame == frames[0] else "")
-
-        # 軸の設定
-        ax.set_ylabel('Angle (degrees)', fontsize=12)
-        ax.set_xlabel('Frame Number', fontsize=12)
-        ax.set_title(f'{joint} Joint Angle (Spline vs Filtered)', fontsize=14)
-        ax.grid(True, linestyle=':', alpha=0.6)
-
-        # Y軸の範囲を関節別に設定
-        ax.set_ylim(joint_config[joint]['ylim'])
-
-        # 凡例の重複を除去
-        handles, labels = ax.get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        ax.legend(by_label.values(), by_label.keys(), loc='upper right')
-
-        plt.tight_layout()
-
-        # 関節別にファイルを保存
-        joint_save_path = save_path.parent / f"{save_path.stem}_{joint}_comparison.png"
-        plt.savefig(joint_save_path, dpi=300, bbox_inches='tight')
-        plt.close()
-
-        print(f"  ✓ {joint}関節の比較グラフを保存: {joint_save_path}")
-
 def main():
     """メイン処理"""
     # --- 設定 ---
@@ -445,7 +400,7 @@ def main():
     base_dir = Path(r"G:\gait_pattern\20250811_br\sub1\thera0-2")
 
     # try_1_spline.pyが出力したJSONファイルを指定
-    json_file = base_dir / "3d_gait_analysis" / "thera0-2_3d_results.json"
+    json_file = base_dir / "3d_gait_analysis_spline_v1" / "thera0-2_3d_results_spline.json"
     subject_name = base_dir.parent.name
     thera_name = base_dir.name
 
@@ -459,7 +414,7 @@ def main():
     if base_dir.parent.name == "sub1" and base_dir.name == "thera0-2":
         analysis_start_frame = 0
         analysis_end_frame = 400  # 必要に応じて終了フレームを設定
-    if base_dir.parent.name == "sub1" and base_dir.name == "thera1-1":
+    elif base_dir.parent.name == "sub1" and base_dir.name == "thera1-1":
         analysis_start_frame = 0
         analysis_end_frame = 400  # 必要に応じて終了フレームを設定
     else:
@@ -475,7 +430,10 @@ def main():
         print("データが読み込めなかったため、処理を終了します。")
         return
 
-    # 'raw'と'raw_filt'の両方のデータセットに対して処理を実行
+    # 'raw_processed'と'final'の両方のデータセットに対して処理を実行
+    angles_dict = {}
+    ic_frames_dict = {}
+
     for data_type, points_3d in points_data_dict.items():
         print(f"\n--- '{data_type}' データの解析 ---")
 
@@ -489,15 +447,15 @@ def main():
         print(f"  - 右足 (R): {ic_frames['R']}")
         print(f"  - 左足 (L): {ic_frames['L']}")
 
-        plt.plot(relative_dist_dict['R'], label='R')
-        plt.plot(relative_dist_dict['L'], label='L')
-        plt.xlabel('Frame')
-        plt.ylabel('Relative Distance')
-        plt.title('Relative Distance over Time')
-        plt.legend()
-        # plt.show()
-        plt.savefig(base_dir / "relative_distance_plot.png")
-        plt.close()
+        if data_type == 'raw_processed':  # 1回だけ保存
+            plt.plot(relative_dist_dict['R'], label='R')
+            plt.plot(relative_dist_dict['L'], label='L')
+            plt.xlabel('Frame')
+            plt.ylabel('Relative Distance')
+            plt.title('Relative Distance over Time')
+            plt.legend()
+            plt.savefig(base_dir / "relative_distance_plot.png")
+            plt.close()
 
         if subject_name == "sub1" and thera_name == "thera0-2":
             start_frame = ic_frames['R'][3]
@@ -513,77 +471,31 @@ def main():
         print("関節角度を計算しました。")
         angles_df = angles_df.loc[start_frame:end_frame]
 
-        mocap_dir =  base_dir / "mocap"
-        mocap_path = mocap_dir.glob("*.csv")[0]
+        # データを保存
+        angles_dict[data_type] = angles_df
+        ic_frames_dict[data_type] = ic_frames
 
+    # 両方のデータが揃ったら比較プロットを作成
+    if len(angles_dict) == 2:
+        mocap_dir = base_dir / "mocap"
+        if mocap_dir.exists():
+            mocap_files = list(mocap_dir.glob("*.csv"))
+            if mocap_files:
+                mocap_path = mocap_files[0]
+                print(f"MOCAPファイルを発見: {mocap_path}")
+            else:
+                print(f"警告: MOCAPディレクトリにCSVファイルが見つかりません: {mocap_dir}")
+                mocap_path = None
+        else:
+            print(f"警告: MOCAPディレクトリが存在しません: {mocap_dir}")
+            mocap_path = None
 
-        # 4. グラフの描画と保存
-        plot_title = f"Joint Angles and Gait Cycle - {base_dir.name} ({person_key}, {data_type})"
-        save_path = output_dir / f"{base_dir.name}_{person_key}_{data_type}_angles.png"
-        plot_gait_angles(angles_df, ic_frames, start_frame, end_frame, plot_title, save_path)
+        # 4. 比較グラフの描画と保存
+        plot_title = f"Joint Angles Comparison (raw_processed vs final) - {base_dir.name} ({person_key})"
+        save_path = output_dir / f"{base_dir.name}_{person_key}_angles_comparison.png"
+        plot_gait_angles_comparison(angles_dict, ic_frames_dict, start_frame, end_frame, plot_title, save_path)
 
     print("\n全ての処理が完了しました。")
-
-    # # --- 比較グラフの処理 ---
-    # # スプライン補間とフィルター適用後のデータを比較するグラフを作成
-    # for subject_dir in base_dir.glob("sub*"):
-    #     if not subject_dir.is_dir():
-    #         continue
-
-    #     thera_dirs = sorted([d for d in subject_dir.iterdir() if d.is_dir() and d.name.startswith("thera")])
-
-    #     for thera_dir in thera_dirs:
-    #         if subject_dir.name != "sub1" and thera_dir.name != "thera0-2":
-    #             continue
-
-    #         print(f"\n処理開始: {thera_dir}")
-
-    #         # 出力ディレクトリの作成（parents=Trueを追加）
-    #         output_dir = thera_dir / "gait_angle_analysis_from_3d"
-    #         output_dir.mkdir(parents=True, exist_ok=True)  # ← parents=True を追加
-
-    #         # 各人物のデータに対して処理
-    #         data = {}
-    #         for person_json in (thera_dir / "3d_gait_analysis").glob("*_3d_results.json"):
-    #             person_key = person_json.stem.split("_")[0]
-    #             person_data = load_3d_data_from_json(person_json, person_key)
-    #             if person_data:
-    #                 data[person_key] = person_data
-
-    #         # 各人物のスプライン補間+フィルターと最適化（組み換え）＋フィルター適用後の角度データを計算
-    #         for person_key, person_data in data.items():
-    #             if person_key.startswith('person_'):
-    #                 person_output_dir = output_dir / person_key
-    #                 person_output_dir.mkdir(parents=True, exist_ok=True)  # ← parents=True を追加
-
-    #                 # rawデータを処理（スプライン補間のみに相当）
-    #                 if 'raw' in person_data:
-    #                     raw_points = person_data['raw']
-    #                     angles_spline_df = calc_joint_angles_3d(raw_points)
-    #                     ic_frames_spline, _ = find_initial_contact_3d(raw_points)
-    #                     spline_save_path = person_output_dir / f"{person_key}_raw_angles.csv"
-    #                     angles_spline_df.to_csv(spline_save_path, index=False)
-
-    #                 # フィルター適用後のデータを処理
-    #                 if 'raw_filt' in person_data:
-    #                     filt_points = person_data['raw_filt']
-    #                     angles_final_df = calc_joint_angles_3d(filt_points)
-    #                     ic_frames_final, _ = find_initial_contact_3d(filt_points)
-    #                     final_save_path = person_output_dir / f"{person_key}_filt_angles.csv"
-    #                     angles_final_df.to_csv(final_save_path, index=False)
-
-    #                 # 両方のデータがある場合は比較グラフを作成
-    #                 if 'raw' in person_data and 'raw_filt' in person_data:
-    #                     # 比較グラフの作成
-    #                     plot_title = f"Joint Angles Comparison - {thera_dir.name} ({person_key})"
-    #                     plot_save_path = person_output_dir / f"{person_key}_angles_comparison"
-
-    #                     plot_gait_angles_comparison(
-    #                         angles_spline_df, angles_final_df, ic_frames_final,
-    #                         plot_title, plot_save_path
-    #                     )
-
-    #                 print(f"  ✓ {person_key}の処理完了")
 
 if __name__ == '__main__':
     main()
