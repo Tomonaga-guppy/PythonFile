@@ -3,16 +3,440 @@ import numpy as np
 import json
 from pathlib import Path
 from scipy.signal import butter, filtfilt
-from scipy.interpolate import CubicSpline # 3次スプライン補間のためにインポート
+from scipy.optimize import minimize
 import traceback
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import warnings
+
+# 数値計算の警告を抑制（オーバーフロー、無効値など）
+warnings.filterwarnings('ignore', category=RuntimeWarning)
+warnings.filterwarnings('ignore', category=UserWarning)
+
+# MATLABカルマンフィルタの完全再現版をインポート
+from try_1_kalman_matlab_exact import (
+    kalman2_matlab_exact,
+    double_difference_kalman_filter_matlab,
+    apply_kalman_filter_individual_keypoints
+)
 
 
 """
-スプライン補間では一度nanがでてしまうとその後の加速度が算出できない
-nanではない有効なフレームの加速度をつかうとしても正しい判定ができていない
+★★★ カルマンフィルタベースの異常値検出・補正システム ★★★
+MATLABのSecond_Order_Difference_Kalman_Filter.mを参考に実装
+
+特徴:
+- ローカルトレンドモデル（速度ベース）
+- 最尤推定によるノイズパラメータ推定
+- 加速度閾値による異常値検出と補正
 """
+
+
+def estimate_noise_parameters_ml(positions, indices, dt, max_iter=50, tol=1e-3):
+    """
+    ニュートン・ラフソン法を用いて拡散対数尤度を最大化し、
+    σ²_u (プロセスノイズ分散) と σ²_w (観測ノイズ分散) を推定
+
+    Args:
+        positions: 有効な位置データ
+        indices: 有効な位置データのインデックス
+        dt: 時間間隔
+        max_iter: 最大反復回数
+        tol: 収束判定閾値
+
+    Returns:
+        sigma_u_sq: プロセスノイズ分散
+        sigma_w_sq: 観測ノイズ分散
+    """
+    n = len(positions)
+    if n < 3:
+        # デフォルト値を返す
+        return 1.0, 1.0
+
+    # 時間ベクトル
+    t = np.array(indices) * dt
+    y = np.array(positions)
+
+    # 初期推定値（データ分散ベース）
+    data_var = np.var(y)
+    sigma_u_sq = data_var * 0.01  # プロセスノイズ（小さめ）
+    sigma_w_sq = data_var * 0.1   # 観測ノイズ
+
+    # ニュートン・ラフソン法による最適化
+    for iteration in range(max_iter):
+        # 状態空間モデルの構築
+        F = np.array([[1.0, dt], [0.0, 1.0]])  # 状態遷移行列
+        H = np.array([[1.0, 0.0]])             # 観測行列
+
+        # ノイズ共分散行列
+        Q = np.array([[sigma_u_sq * dt**3 / 3, sigma_u_sq * dt**2 / 2],
+                      [sigma_u_sq * dt**2 / 2, sigma_u_sq * dt]])
+        R = sigma_w_sq
+
+        # カルマンフィルタによる対数尤度計算
+        try:
+            log_likelihood, grad_u, grad_w = compute_log_likelihood_and_gradients(
+                y, F, H, Q, R, sigma_u_sq, sigma_w_sq, dt)
+        except:
+            # 数値的問題が発生した場合は現在の値を返す
+            break
+
+        # ヘッシアン行列の近似（対角近似）
+        hess_uu = -abs(grad_u) / max(sigma_u_sq, 1e-6)  # 安定化
+        hess_ww = -abs(grad_w) / max(sigma_w_sq, 1e-6)  # 安定化
+
+        # ニュートン・ラフソン更新
+        # 学習率を導入して安定化
+        learning_rate = 0.1
+        delta_u = learning_rate * grad_u / max(abs(hess_uu), 1e-6)
+        delta_w = learning_rate * grad_w / max(abs(hess_ww), 1e-6)
+
+        # パラメータ更新（正値制約）
+        sigma_u_sq_new = max(sigma_u_sq + delta_u, 1e-6)
+        sigma_w_sq_new = max(sigma_w_sq + delta_w, 1e-6)
+
+        # 収束判定
+        if abs(sigma_u_sq_new - sigma_u_sq) < tol and abs(sigma_w_sq_new - sigma_w_sq) < tol:
+            sigma_u_sq, sigma_w_sq = sigma_u_sq_new, sigma_w_sq_new
+            break
+
+        sigma_u_sq, sigma_w_sq = sigma_u_sq_new, sigma_w_sq_new
+
+        # 発散防止
+        if sigma_u_sq > 1e6 or sigma_w_sq > 1e6:
+            break
+
+    # 最終的な範囲制限
+    sigma_u_sq = np.clip(sigma_u_sq, 0.1, 1000.0)
+    sigma_w_sq = np.clip(sigma_w_sq, 0.1, 1000.0)
+
+    return sigma_u_sq, sigma_w_sq
+
+
+def compute_log_likelihood_and_gradients(y, F, H, Q, R, sigma_u_sq, sigma_w_sq, dt):
+    """
+    対数尤度とその勾配を計算
+    """
+    n = len(y)
+
+    # 初期状態（最小二乗推定）
+    if n >= 2:
+        x0 = y[0]
+        v0 = (y[1] - y[0]) / dt if n > 1 else 0.0
+    else:
+        x0, v0 = y[0], 0.0
+
+    x = np.array([x0, v0])
+    P = np.eye(2) * 100.0
+
+    log_likelihood = 0.0
+    grad_u = 0.0
+    grad_w = 0.0
+
+    for k in range(n):
+        # 予測ステップ
+        x_pred = F @ x
+        P_pred = F @ P @ F.T + Q
+
+        # 観測更新
+        innovation = y[k] - H @ x_pred
+        S = H @ P_pred @ H.T + R
+
+        # 数値安定性チェック
+        if S <= 1e-10:
+            S = 1e-6
+
+        # 対数尤度への寄与
+        log_likelihood += -0.5 * (np.log(2 * np.pi * S) + innovation**2 / S)
+
+        # 勾配計算（簡易近似）
+        grad_u += -0.5 * (1.0/S - innovation**2 / (S**2)) * dt
+        grad_w += -0.5 * (1.0/S - innovation**2 / (S**2))
+
+        # カルマンゲインと状態更新
+        if S > 1e-10:
+            K = P_pred @ H.T / S
+            x = x_pred + K * innovation
+            P = P_pred - K @ H @ P_pred
+        else:
+            x = x_pred
+            P = P_pred
+
+    return log_likelihood, grad_u, grad_w
+
+
+def double_difference_kalman_filter(position_data, threshold=100.0, plot_name="", frame_rate=30.0):
+    """
+    MATLABのSecond_Order_Difference_Kalman_Filter.mベースの実装（安定性改善版）
+
+    ローカルトレンドモデル（速度ベース）カルマンフィルタによる異常値検出・補正
+
+    Args:
+        position_data: 1次元位置データ (NaN含む可能性あり)
+        threshold: 加速度閾値 [mm/s²]
+        plot_name: プロット名（デバッグ用）
+        frame_rate: フレームレート [fps]
+
+    Returns:
+        corrected_data: 補正済み位置データ
+        acceleration: 算出された加速度
+        outlier_flags: 異常値フラグ
+    """
+
+    n = len(position_data)
+    dt = 1.0 / frame_rate
+
+    # 状態ベクトル [position, velocity]
+    # 状態遷移行列 (Local trend model)
+    F = np.array([[1.0, dt],
+                  [0.0, 1.0]])
+
+    # 観測行列 (位置のみ観測)
+    H = np.array([[1.0, 0.0]])
+
+    # 初期値設定の改善
+    first_valid_idx = None
+    valid_positions = []
+    valid_indices = []
+
+    # 有効なデータを収集
+    for i in range(n):
+        if not np.isnan(position_data[i]):
+            valid_positions.append(position_data[i])
+            valid_indices.append(i)
+            if first_valid_idx is None:
+                first_valid_idx = i
+
+    if len(valid_positions) < 2:
+        # 有効なデータが少なすぎる場合
+        return np.full(n, np.nan), np.full(n, np.nan), np.full(n, False)
+
+    # 初期状態推定の改善（複数点から最小二乗法で推定）
+    if len(valid_positions) >= 3:
+        # 最初の3つの有効点から初期速度を推定
+        t_vals = np.array(valid_indices[:3]) * dt
+        pos_vals = np.array(valid_positions[:3])
+
+        # 線形回帰で初期速度を推定
+        A = np.vstack([t_vals, np.ones(len(t_vals))]).T
+        slope, intercept = np.linalg.lstsq(A, pos_vals, rcond=None)[0]
+        initial_velocity = slope
+        initial_position = valid_positions[0]
+    else:
+        # 2点のみの場合
+        initial_velocity = (valid_positions[1] - valid_positions[0]) / \
+                         ((valid_indices[1] - valid_indices[0]) * dt)
+        initial_position = valid_positions[0]
+
+    x = np.array([initial_position, initial_velocity])
+
+    # ニュートン・ラフソン法による最尤推定でノイズパラメータを決定
+    sigma_u_sq, sigma_w_sq = estimate_noise_parameters_ml(valid_positions, valid_indices, dt)
+
+    # プロセスノイズ共分散行列（最尤推定結果を使用）
+    Q = np.array([[sigma_u_sq * dt**3 / 3, sigma_u_sq * dt**2 / 2],
+                  [sigma_u_sq * dt**2 / 2, sigma_u_sq * dt]])
+
+    # 観測ノイズ共分散
+    R = np.array([[sigma_w_sq]])
+
+    # 初期共分散行列（より小さく設定）
+    P = np.eye(2) * 100.0
+
+    # 結果格納用
+    corrected_data = np.full(n, np.nan)
+    velocities = np.full(n, np.nan)
+    accelerations = np.full(n, np.nan)
+    outlier_flags = np.full(n, False)
+
+    # カルマンフィルタ処理（安定性改善）
+    consecutive_nan_count = 0
+    max_consecutive_nan = 10  # 連続NaN数制限
+
+    for k in range(n):
+        # 予測ステップ
+        x_pred = F @ x
+        P_pred = F @ P @ F.T + Q
+
+        # 共分散行列の発散防止
+        P_pred = np.clip(P_pred, -1e6, 1e6)
+
+        # 観測がある場合の更新
+        if not np.isnan(position_data[k]):
+            consecutive_nan_count = 0  # NaNカウントリセット
+
+            # 観測残差
+            y = position_data[k] - H @ x_pred
+
+            # 残差共分散
+            S = H @ P_pred @ H.T + R
+
+            # 加速度による異常値検出（より安定した方法）
+            is_outlier = False
+            if k >= 2:
+                # 予測値ベースでの加速度計算（より安定）
+                if not np.isnan(corrected_data[k-1]) and not np.isnan(corrected_data[k-2]):
+                    predicted_acceleration = (x_pred[0] - 2*corrected_data[k-1] + corrected_data[k-2]) / (dt**2)
+
+                    # 閾値判定（絶対値で判定）
+                    if abs(predicted_acceleration) > threshold:
+                        is_outlier = True
+
+            if is_outlier:
+                outlier_flags[k] = True
+                # 異常値の場合は観測を使わず予測値を使用
+                x = x_pred.flatten()  # 形状を確保
+                P = P_pred
+            else:
+                # 正常値として更新
+                if S[0, 0] > 1e-10:  # 数値安定性チェック
+                    K = P_pred @ H.T / S[0, 0]
+                    K = K.flatten()  # 形状を確保
+                    x = x_pred.flatten() + K * float(y)  # スカラー乗算を確保
+                    I_KH = np.eye(2) - np.outer(K, H.flatten())
+                    P = I_KH @ P_pred @ I_KH.T + np.outer(K, K) * float(R[0, 0])  # Joseph form for stability
+                else:
+                    x = x_pred.flatten()
+                    P = P_pred
+        else:
+            # 観測がない場合
+            consecutive_nan_count += 1
+
+            # 連続NaNが続く場合は速度を減衰させる
+            if consecutive_nan_count > max_consecutive_nan:
+                x[1] *= 0.95  # 速度を減衰
+                P *= 1.1  # 不確実性を増加
+
+            x = x_pred
+            P = P_pred
+
+        # 共分散行列の安定性確保
+        P = np.clip(P, -1e6, 1e6)
+        eigenvals = np.linalg.eigvals(P)
+        if np.any(eigenvals <= 0):
+            P = np.eye(2) * 100.0  # リセット
+
+        # 状態ベクトルの形状を確保して安全に処理
+        x_array = np.asarray(x).flatten()
+        if len(x_array) == 0:
+            x_array = np.array([0.0, 0.0])
+        elif len(x_array) == 1:
+            x_array = np.array([float(x_array[0]), 0.0])
+        elif len(x_array) >= 2:
+            x_array = np.array([float(x_array[0]), float(x_array[1])])
+
+        # 結果を保存（スカラー値を確保）
+        corrected_data[k] = x_array[0]
+        velocities[k] = x_array[1]
+
+        # 加速度計算（安定化）
+        if k >= 2 and not np.isnan(corrected_data[k-1]) and not np.isnan(corrected_data[k-2]):
+            accelerations[k] = (corrected_data[k] - 2*corrected_data[k-1] + corrected_data[k-2]) / (dt**2)
+            # 加速度の異常値をクリップ
+            accelerations[k] = np.clip(accelerations[k], -threshold, threshold)
+
+    return corrected_data, accelerations, outlier_flags
+def estimate_noise_parameters_mle(position_data, F, H, dt, threshold):
+    """
+    最尤推定によるノイズパラメータの推定
+
+    Args:
+        position_data: 位置データ
+        F: 状態遷移行列
+        H: 観測行列
+        dt: 時間刻み
+        threshold: 加速度閾値
+
+    Returns:
+        process_noise_var: プロセスノイズ分散
+        observation_noise_var: 観測ノイズ分散
+    """
+
+    # 有効なデータのみ抽出
+    valid_data = position_data[~np.isnan(position_data)]
+
+    if len(valid_data) < 10:
+        # データが少ない場合はデフォルト値
+        return 1000.0, 100.0
+
+    def negative_log_likelihood(params):
+        """負の対数尤度関数"""
+        if len(params) == 1:
+            process_var = params[0]
+            obs_var = np.var(valid_data) * 0.1  # 観測ノイズは小さめに設定
+        else:
+            process_var, obs_var = params
+
+        if process_var <= 0 or obs_var <= 0:
+            return 1e10
+
+        # 簡易的な尤度計算
+        # 実際のMATLABコードではより詳細な実装が必要
+
+        # 差分の分散を計算
+        diffs = np.diff(valid_data)
+        if len(diffs) > 1:
+            diff_var = np.var(diffs)
+            # プロセスノイズとの適合度
+            process_fit = abs(diff_var - process_var * dt**2)
+
+            # 観測ノイズとの適合度
+            obs_fit = abs(np.var(valid_data) - obs_var)
+
+            return process_fit + obs_fit
+        else:
+            return 1e10
+
+    # 最適化
+    try:
+        # プロセスノイズのみ最適化（簡易版）
+        from scipy.optimize import minimize_scalar
+        result = minimize_scalar(lambda x: negative_log_likelihood([x]),
+                               bounds=(1.0, 10000.0), method='bounded')
+
+        process_noise_var = result.x
+        observation_noise_var = np.var(valid_data) * 0.1
+
+    except:
+        # 最適化に失敗した場合はデフォルト値
+        process_noise_var = 1000.0
+        observation_noise_var = 100.0
+
+    return process_noise_var, observation_noise_var
+
+
+def calculate_joint_acceleration_kalman(sequence, threshold=100.0, plot_name="", frame_rate=30.0):
+    """
+    カルマンフィルタベースの加速度計算
+
+    Args:
+        sequence: 3D座標シーケンス [frames, 3]
+        threshold: 加速度閾値
+        plot_name: プロット名
+        frame_rate: フレームレート
+
+    Returns:
+        corrected_sequence: 補正済み座標
+        accelerations: 加速度 [frames, 3]
+        outlier_flags: 異常値フラグ [frames, 3]
+    """
+
+    frames, dims = sequence.shape
+    corrected_sequence = np.full_like(sequence, np.nan)
+    accelerations = np.full_like(sequence, np.nan)
+    outlier_flags = np.full((frames, dims), False)
+
+    # 各次元に対してカルマンフィルタを適用
+    for dim in range(dims):
+        corrected_sequence[:, dim], accelerations[:, dim], outlier_flags[:, dim] = \
+            double_difference_kalman_filter(
+                sequence[:, dim],
+                threshold=threshold,
+                plot_name=f"{plot_name}_dim{dim}",
+                frame_rate=frame_rate
+            )
+
+    return corrected_sequence, accelerations, outlier_flags
 
 
 
@@ -128,6 +552,25 @@ def triangulate_and_rotate(P1, P2, points1, points2, confidences1, confidences2)
     full_points_3d = np.full((25, 3), np.nan)
     full_points_3d[valid_indices] = points_3d_rotated
     return full_points_3d
+
+from scipy.interpolate import CubicSpline
+
+def cubic_spline_interpolate_nan(sequence):
+    """
+    欠損値(NaN)を3次スプライン補間で埋める
+    """
+    sequence = np.array(sequence, dtype=float)
+    n = len(sequence)
+    x = np.arange(n)
+    mask = ~np.isnan(sequence)
+    if np.sum(mask) < 2:
+        # 有効値が2点未満なら補間不可
+        return sequence.copy()
+    # 3次スプライン補間
+    cs = CubicSpline(x[mask], sequence[mask])
+    filled = sequence.copy()
+    filled[~mask] = cs(x[~mask])
+    return filled
 
 def calculate_acceleration_matlab_style(position_series):
     """
@@ -356,12 +799,28 @@ def butter_lowpass_filter(data, cutoff, fs, order=4):
         filtered_data[not_nan] = filtfilt(b, a, data[not_nan])
     return filtered_data
 
-def process_single_person_individual_keypoint_switching(kp1, cf1, kp2, cf2, P1, P2, history, threshold, frame_idx_for_debug=None):
+def process_single_person_individual_keypoint_switching_kalman_matlab(kp1, cf1, kp2, cf2, P1, P2, history, threshold, kalman_states, frame_idx_for_debug=None):
     """
-    ★★★ 真の個別キーポイント処理: 各キーポイントが独立して最適なパターンを選択 ★★★
-    各キーポイント（膝、足首、つま先など）がそれぞれの加速度で個別に判定・スイッチング
+    MATLABカルマンフィルタの完全再現版
+    ローカルレベルモデル + 準ニュートン法による散漫対数尤度最大化 + 左右足入れ替わり検出
+
+    Args:
+        kp1, cf1: カメラ1のキーポイント座標と信頼度
+        kp2, cf2: カメラ2のキーポイント座標と信頼度
+        P1, P2: 投影行列
+        history: 履歴データ
+        threshold: 加速度閾値
+        kalman_states: 未使用（MATLABでは状態保持しない）
+        frame_idx_for_debug: デバッグ用フレームインデックス
+
+    Returns:
+        raw_3d: 生の3D座標
+        corrected_3d: MATLABカルマンフィルタで補正済み3D座標
+        accelerations: 加速度データ
+        min_acceleration: 最小加速度
     """
-    # 4つのパターンをすべて計算
+
+    # 4つのパターンで重み付き三角測量を実行
     patterns_3d = []
     keypoint_accelerations = []
 
@@ -373,250 +832,330 @@ def process_single_person_individual_keypoint_switching(kp1, cf1, kp2, cf2, P1, 
          swap_left_right_keypoints(kp2), swap_left_right_keypoints(cf2))  # Swap Both (S12)
     ]
 
-    # 全パターンの3D座標と各キーポイント加速度を計算
+    # 全パターンで重み付き三角測量を実行
     for kp1_trial, cf1_trial, kp2_trial, cf2_trial in kp_combinations:
+        # 重み付き三角測量を使用
         points_3d = triangulate_and_rotate(P1, P2, kp1_trial, kp2_trial, cf1_trial, cf2_trial)
         keypoint_accels = calculate_all_keypoints_acceleration(history, points_3d)
 
         patterns_3d.append(points_3d)
         keypoint_accelerations.append(keypoint_accels)
 
-    # ★★★ 各キーポイントごとに最適パターンを選択 ★★★
-    normal_points_3d = patterns_3d[0].copy()  # ベースはNormalパターン
-    selective_points_3d = normal_points_3d.copy()
-    switching_log = {}
+    # 生の3D座標として最初のパターンを使用
+    raw_3d = patterns_3d[0].copy()
 
-    # 主要キーポイントリスト
-    important_keypoints = [11, 14, 9, 12, 10, 13, 23, 20, 22, 19, 24, 21]
+    # MATLABのkalman2アルゴリズムを適用
+    corrected_3d = np.full((25, 3), np.nan)
+    all_accelerations = []
 
-    for kp_idx in important_keypoints:
-        # Normalパターンでの加速度をチェック
-        normal_accel = keypoint_accelerations[0].get(kp_idx, np.inf)
-
-        if normal_accel >= threshold:
-            # 閾値を超えている場合、他のパターンから閾値以下のものを探す
-            best_pattern_idx = -1
-            best_accel = np.inf
-
-            for pattern_idx in range(1, 4):  # S1, S2, S12パターンを確認
-                pattern_accel = keypoint_accelerations[pattern_idx].get(kp_idx, np.inf)
-                # ★★★ 重要: 閾値以下かつより良い加速度の場合のみ選択 ★★★
-                if pattern_accel < threshold and pattern_accel < best_accel:
-                    best_pattern_idx = pattern_idx
-                    best_accel = pattern_accel
-
-            # 閾値以下のパターンが見つかった場合のみ置き換え
-            if best_pattern_idx != -1:
-                selective_points_3d[kp_idx] = patterns_3d[best_pattern_idx][kp_idx]
-                switching_log[kp_idx] = {
-                    'from_pattern': 0,
-                    'to_pattern': best_pattern_idx,
-                    'from_accel': normal_accel,
-                    'to_accel': best_accel
-                }
-            else:
-                # ★★★ すべてのパターンで閾値を超える場合はNaNに設定 ★★★
-                selective_points_3d[kp_idx] = np.full(3, np.nan)
-                switching_log[kp_idx] = {
-                    'from_pattern': 0,
-                    'to_pattern': -1,  # -1はNaNを意味
-                    'from_accel': normal_accel,
-                    'to_accel': np.nan
-                }    # 全パターンの平均加速度計算（デバッグ用）
-    pattern_avg_accels = []
-    for kp_accels in keypoint_accelerations:
-        avg_accel = np.mean([acc for acc in kp_accels.values() if acc != np.inf])
-        pattern_avg_accels.append(avg_accel if not np.isnan(avg_accel) else np.inf)
-
-    # 最終的な各キーポイント加速度を計算
-    final_keypoint_accels = calculate_all_keypoints_acceleration(history, selective_points_3d)
-
-    # ステータス作成
-    num_switched = len([log for log in switching_log.values() if log['to_pattern'] != -1])
-    num_nan_set = len([log for log in switching_log.values() if log['to_pattern'] == -1])
-
-    if len(switching_log) == 0:
-        status_reason = "All keypoints OK (Normal)"
-    else:
-        switched_kps = [kp for kp, log in switching_log.items() if log['to_pattern'] != -1]
-        nan_set_kps = [kp for kp, log in switching_log.items() if log['to_pattern'] == -1]
-
-        keypoint_names = {11: "RAnkle", 14: "LAnkle", 9: "RHip", 12: "LHip",
-                         10: "RKnee", 13: "LKnee", 23: "RSmallToe", 20: "LSmallToe",
-                         22: "RBigToe", 19: "LBigToe", 24: "RHeel", 21: "LHeel"}
-
-        status_parts = []
-        if switched_kps:
-            switched_names = [keypoint_names.get(kp, f"KP{kp}") for kp in switched_kps]
-            status_parts.append(f"Switched: {switched_names}")
-        if nan_set_kps:
-            nan_names = [keypoint_names.get(kp, f"KP{kp}") for kp in nan_set_kps]
-            status_parts.append(f"NaN_set: {nan_names}")
-
-        status_reason = " | ".join(status_parts)    # デバッグ出力
-    if frame_idx_for_debug is not None:
-        accel_str = ", ".join([f"{a:8.2f}" if a != np.inf else "   inf" for a in pattern_avg_accels])
-
-        # Normalパターンの加速度表示
-        normal_kp_accels = keypoint_accelerations[0]
-        kp_items = [f"{kp}:{acc:.1f}" if acc != np.inf else f"{kp}:inf"
-                   for kp, acc in normal_kp_accels.items()]
-        kp_str = f"Normal_KP_Accels: [{', '.join(kp_items)}]"
-
-        # 最終的な加速度表示
-        final_kp_items = [f"{kp}:{acc:.1f}" if acc != np.inf else f"{kp}:inf"
-                         for kp, acc in final_keypoint_accels.items()]
-        final_kp_str = f"Final_KP_Accels: [{', '.join(final_kp_items)}]"
-
-        # スイッチング詳細
-        switch_str = ""
-        if switching_log:
-            switch_details = []
-            for kp, info in switching_log.items():
-                if info['to_pattern'] == -1:
-                    switch_details.append(f"KP{kp}:P{info['from_pattern']}→NaN({info['from_accel']:.1f})")
-                else:
-                    switch_details.append(f"KP{kp}:P{info['from_pattern']}→P{info['to_pattern']}({info['from_accel']:.1f}→{info['to_accel']:.1f})")
-            switch_str = f"Switches: [{', '.join(switch_details)}]"
-
-        history_info = f"History: {len(history)} frames"
-        if len(history) > 0:
-            last_valid = not np.isnan(history[-1]).all()
-            history_info += f", last valid: {last_valid}"
-
-        print(f"Frame {frame_idx_for_debug:04d} | AvgAccels(N,S1,S2,S12): [{accel_str}]")
-        print(f"                      | {kp_str}")
-        print(f"                      | {final_kp_str}")
-        if switch_str:
-            print(f"                      | {switch_str}")
-        print(f"                      | {status_reason} | {history_info}")
-
-    return normal_points_3d, selective_points_3d, pattern_avg_accels, pattern_avg_accels[0]
-
-def process_single_person_4patterns(kp1, cf1, kp2, cf2, P1, P2, history, threshold, frame_idx_for_debug=None):
-    """
-    左右キーポイントの加速度チェックに基づく4パターンスイッチング。
-    両方が閾値を超えた場合→スイッチング、片方が閾値を超える場合→欠損値として扱う
-    """
-    patterns_3d = []
-    accelerations = []
-    left_right_accels = []
-
-    kp_combinations = [
-        (kp1, cf1, kp2, cf2),  # Normal (N)
-        (swap_left_right_keypoints(kp1), swap_left_right_keypoints(cf1), kp2, cf2),  # Swap Cam1 (S1)
-        (kp1, cf1, swap_left_right_keypoints(kp2), swap_left_right_keypoints(cf2)),  # Swap Cam2 (S2)
-        (swap_left_right_keypoints(kp1), swap_left_right_keypoints(cf1),
-         swap_left_right_keypoints(kp2), swap_left_right_keypoints(cf2))  # Swap Both (S12)
+    # 主要な左右ペアのキーポイント
+    keypoint_pairs = [
+        (11, 14),  # RAnkle, LAnkle
+        (10, 13),  # RKnee, LKnee
+        (9, 12),   # RHip, LHip
+        (22, 19),  # RBigToe, LBigToe
+        (24, 21),  # RHeel, LHeel
+        (23, 20)   # RSmallToe, LSmallToe
     ]
 
-    for kp1_trial, cf1_trial, kp2_trial, cf2_trial in kp_combinations:
-        points_3d = triangulate_and_rotate(P1, P2, kp1_trial, kp2_trial, cf1_trial, cf2_trial)
-        # 左右の加速度を個別に計算
-        left_accel, right_accel = calculate_left_right_acceleration(history, points_3d)
-        total_accel = calculate_average_acceleration(history, points_3d)
-
-        patterns_3d.append(points_3d)
-        accelerations.append(total_accel)
-        left_right_accels.append((left_accel, right_accel))
-
-    # ★★★ 新しいロジック: 左右キーポイントの加速度チェック ★★★
-    normal_left_accel, normal_right_accel = left_right_accels[0]
-
-    # 両方とも閾値以下 → そのまま使用
-    if normal_left_accel < threshold and normal_right_accel < threshold:
-        best_pattern_idx = 0
-        min_accel = accelerations[0]
-        corrected_points_3d = patterns_3d[0]
-        status_reason = "Both sides OK"
-
-    # 片方のみ閾値を超える → 欠損値として扱う
-    elif (normal_left_accel >= threshold) != (normal_right_accel >= threshold):
-        best_pattern_idx = -1
-        min_accel = np.inf
-        corrected_points_3d = np.full((25, 3), np.nan)
-        status_reason = f"One side error (L:{normal_left_accel:.1f}, R:{normal_right_accel:.1f})"
-
-    # 両方とも閾値を超える → スイッチング試行
+    # 履歴に現在のフレームを追加
+    if len(history) == 0:
+        history_with_current = raw_3d[np.newaxis, ...]
     else:
-        best_pattern_idx = -1
-        min_accel = np.inf
-        best_left_accel, best_right_accel = np.inf, np.inf
+        history_with_current = np.vstack([history, raw_3d[np.newaxis, ...]])
 
-        # 全パターンで左右両方が閾値以下のものを探す
-        for i, (left_acc, right_acc) in enumerate(left_right_accels):
-            if left_acc < threshold and right_acc < threshold:
-                if accelerations[i] < min_accel:
-                    best_pattern_idx = i
-                    min_accel = accelerations[i]
-                    best_left_accel, best_right_accel = left_acc, right_acc
+    # 履歴が十分にある場合のみMATLABカルマンフィルタを適用
+    if len(history_with_current) >= 5:
+        for right_kp, left_kp in keypoint_pairs:
+            for axis in range(3):  # X, Y, Z軸
+                try:
+                    # 左右の座標データを取得
+                    left_data = history_with_current[:, left_kp, axis]
+                    right_data = history_with_current[:, right_kp, axis]
 
-        if best_pattern_idx != -1:
-            corrected_points_3d = patterns_3d[best_pattern_idx]
-            status_reason = f"Switched to pattern {best_pattern_idx} (L:{best_left_accel:.1f}, R:{best_right_accel:.1f})"
-        else:
-            corrected_points_3d = np.full((25, 3), np.nan)
-            status_reason = "All patterns failed"
+                    # NaNでない部分のみ抽出
+                    valid_mask = ~(np.isnan(left_data) | np.isnan(right_data))
+                    if np.sum(valid_mask) >= 3:
+                        valid_left = left_data[valid_mask]
+                        valid_right = right_data[valid_mask]
 
-    if frame_idx_for_debug is not None:
-        accel_str = ", ".join([f"{a:8.2f}" if a != np.inf else "   inf" for a in accelerations])
-        lr_str = ", ".join([f"L:{l:.1f}/R:{r:.1f}" if l != np.inf and r != np.inf else "L:inf/R:inf"
-                           for l, r in left_right_accels])
-        history_info = f"History: {len(history)} frames"
-        if len(history) > 0:
-            last_valid = not np.isnan(history[-1]).all()
-            history_info += f", last valid: {last_valid}"
-        print(f"Frame {frame_idx_for_debug:04d} | Accels(N,S1,S2,S12): [{accel_str}] | LR: [{lr_str}] | {status_reason} | {history_info}")
+                        # MATLABのkalman2関数を適用（完全再現版）
+                        corrected_left, corrected_right, miss_point = kalman2_matlab_exact(
+                            valid_left, valid_right, th=threshold, initial_value=0.0005)
 
-    raw_points_3d = patterns_3d[0]  # 常に元の組み合わせ（Normal）をrawとして記録
+                        # 結果を元の位置に戻す
+                        corrected_3d[left_kp, axis] = corrected_left[-1]  # 最新の値
+                        corrected_3d[right_kp, axis] = corrected_right[-1]  # 最新の値
 
-    return raw_points_3d, corrected_points_3d, accelerations, min_accel
+                        # 加速度計算（MATLABと同じ二階差分）
+                        if len(corrected_left) >= 3:
+                            dt_sq = (1.0/60.0)**2  # フレームレート60fpsを想定
+                            accel_left = (corrected_left[-1] - 2*corrected_left[-2] + corrected_left[-3]) / dt_sq
+                            accel_right = (corrected_right[-1] - 2*corrected_right[-2] + corrected_right[-3]) / dt_sq
+                            all_accelerations.extend([abs(accel_left), abs(accel_right)])
 
-def apply_spline_interpolation(sequence):
-    """★★★ 新設: NaNを含む1次元の時系列データに3次スプライン補間を適用する関数 ★★★"""
-    frames = np.arange(len(sequence))
-    is_valid = ~np.isnan(sequence)
+                except Exception as e:
+                    # エラーの場合は生データを使用（デバッグメッセージは制限）
+                    if frame_idx_for_debug is not None and frame_idx_for_debug < 5:  # 最初の5フレームのみ表示
+                        print(f"MATLABカルマンフィルタエラー (フレーム{frame_idx_for_debug}, KP{left_kp}-{right_kp}, 軸{axis}): {e}")
+                    corrected_3d[left_kp, axis] = raw_3d[left_kp, axis]
+                    corrected_3d[right_kp, axis] = raw_3d[right_kp, axis]
+    else:
+        # 履歴が不十分な場合は生データを使用（デバッグメッセージは制限）
+        corrected_3d = raw_3d.copy()
+        if frame_idx_for_debug is not None and frame_idx_for_debug < 5:  # 最初の5フレームのみ表示
+            print(f"フレーム{frame_idx_for_debug}: 履歴不足のため生データを使用 (履歴数: {len(history_with_current)})")
 
-    # 補間には最低4つの有効な点が必要
-    if np.sum(is_valid) < 4:
-        return sequence # 補間不可能なのでそのまま返す
+    # その他のキーポイントは生データを使用
+    other_keypoints = [i for i in range(25) if i not in [kp for pair in keypoint_pairs for kp in pair]]
+    for kp in other_keypoints:
+        corrected_3d[kp] = raw_3d[kp]
 
-    spline = CubicSpline(frames[is_valid], sequence[is_valid], extrapolate=False)
-    interpolated_sequence = spline(frames)
+    # 加速度の最小値
+    min_acceleration = min(all_accelerations) if all_accelerations else np.inf
 
-    # スプライン補間が届かない始点と終点のNaNを最近傍の値で埋める（パディング）
-    first_valid_idx = np.where(is_valid)[0][0]
-    last_valid_idx = np.where(is_valid)[0][-1]
+    return raw_3d, corrected_3d, all_accelerations, min_acceleration
 
-    # 先頭のNaNを埋める
-    interpolated_sequence[:first_valid_idx] = sequence[first_valid_idx]
-    # 末尾のNaNを埋める
-    interpolated_sequence[last_valid_idx+1:] = sequence[last_valid_idx]
 
-    # それでも内部にNaNが残っていた場合（非常に稀）、線形補間で最終的に埋める
-    is_still_nan = np.isnan(interpolated_sequence)
-    if np.any(is_still_nan):
-        interpolated_sequence[is_still_nan] = np.interp(frames[is_still_nan], frames[~is_still_nan], interpolated_sequence[~is_still_nan])
+# def process_single_person_individual_keypoint_switching_kalman(kp1, cf1, kp2, cf2, P1, P2, history, threshold, kalman_states, frame_idx_for_debug=None):
+#     """
+#     ★★★ カルマンフィルタ統合版: 各キーポイントが独立して最適なパターンを選択し、必要時にカルマンフィルタ補間 ★★★
+#     各キーポイント（膝、足首、つま先など）がそれぞれの加速度で個別に判定・スイッチング
+#     すべてのパターンで閾値を超える場合はカルマンフィルタによる補間を適用
+#     """
+#     # 4つのパターンをすべて計算
+#     patterns_3d = []
+#     keypoint_accelerations = []
 
-    return interpolated_sequence
+#     kp_combinations = [
+#         (kp1, cf1, kp2, cf2),  # Normal (N)
+#         (swap_left_right_keypoints(kp1), swap_left_right_keypoints(cf1), kp2, cf2),  # Swap Cam1 (S1)
+#         (kp1, cf1, swap_left_right_keypoints(kp2), swap_left_right_keypoints(cf2)),  # Swap Cam2 (S2)
+#         (swap_left_right_keypoints(kp1), swap_left_right_keypoints(cf1),
+#          swap_left_right_keypoints(kp2), swap_left_right_keypoints(cf2))  # Swap Both (S12)
+#     ]
 
-# --- メイン処理 ---
+#     # 全パターンの3D座標と各キーポイント加速度を計算
+#     for kp1_trial, cf1_trial, kp2_trial, cf2_trial in kp_combinations:
+#         points_3d = triangulate_and_rotate(P1, P2, kp1_trial, kp2_trial, cf1_trial, cf2_trial)
+#         keypoint_accels = calculate_all_keypoints_acceleration(history, points_3d)
+
+#         patterns_3d.append(points_3d)
+#         keypoint_accelerations.append(keypoint_accels)
+
+#     # ★★★ 各キーポイントごとに最適パターンを選択またはカルマンフィルタ適用 ★★★
+#     normal_points_3d = patterns_3d[0].copy()  # ベースはNormalパターン
+#     selective_points_3d = normal_points_3d.copy()
+#     switching_log = {}
+#     kalman_applied = {}
+
+#     # 主要キーポイントリスト
+#     important_keypoints = [11, 14, 9, 12, 10, 13, 23, 20, 22, 19, 24, 21]
+
+#     for kp_idx in important_keypoints:
+#         # Normalパターンでの加速度をチェック
+#         normal_accel = keypoint_accelerations[0].get(kp_idx, np.inf)
+
+#         if normal_accel >= threshold:
+#             # 閾値を超えている場合、他のパターンから閾値以下のものを探す
+#             best_pattern_idx = -1
+#             best_accel = np.inf
+
+#             for pattern_idx in range(1, 4):  # S1, S2, S12パターンを確認
+#                 pattern_accel = keypoint_accelerations[pattern_idx].get(kp_idx, np.inf)
+#                 # ★★★ 重要: 閾値以下かつより良い加速度の場合のみ選択 ★★★
+#                 if pattern_accel < threshold and pattern_accel < best_accel:
+#                     best_pattern_idx = pattern_idx
+#                     best_accel = pattern_accel
+
+#             # 閾値以下のパターンが見つかった場合のみ置き換え
+#             if best_pattern_idx != -1:
+#                 selective_points_3d[kp_idx] = patterns_3d[best_pattern_idx][kp_idx]
+#                 switching_log[kp_idx] = {
+#                     'from_pattern': 0,
+#                     'to_pattern': best_pattern_idx,
+#                     'from_accel': normal_accel,
+#                     'to_accel': best_accel,
+#                     'kalman_applied': False
+#                 }
+#             else:
+#                 # ★★★ すべてのパターンで閾値を超える場合はカルマンフィルタ適用（安定性改善版） ★★★
+#                 kalman_applied[kp_idx] = True
+
+#                 # カルマンフィルタ状態の初期化（初回のみ）
+#                 if kp_idx not in kalman_states:
+#                     kalman_states[kp_idx] = {
+#                         'x': np.zeros(2),  # [position, velocity]
+#                         'P': np.eye(2) * 100.0,  # 共分散行列（小さく初期化）
+#                         'history': [],  # 位置履歴
+#                         'initialized': False
+#                     }
+
+#                 # 現在の観測値を履歴に追加（安定性のため有効な値のみ）
+#                 current_pos = normal_points_3d[kp_idx]
+#                 if not np.any(np.isnan(current_pos)):
+#                     kalman_states[kp_idx]['history'].append(current_pos)
+
+#                     # 履歴サイズを制限（最大20フレーム）
+#                     if len(kalman_states[kp_idx]['history']) > 20:
+#                         kalman_states[kp_idx]['history'] = kalman_states[kp_idx]['history'][-20:]
+
+#                 # カルマンフィルタで補正された位置を計算（安定性改善）
+#                 if len(kalman_states[kp_idx]['history']) >= 5:  # より多くの履歴を要求
+#                     # 各軸に対してカルマンフィルタを適用
+#                     corrected_pos = np.full(3, np.nan)
+#                     history_array = np.array(kalman_states[kp_idx]['history'])
+
+#                     for axis in range(3):
+#                         axis_data = history_array[:, axis]
+#                         if not np.all(np.isnan(axis_data)) and len(axis_data) >= 5:
+#                             try:
+#                                 # より保守的な閾値でカルマンフィルタを適用
+#                                 conservative_threshold = threshold * 2  # 閾値を2倍に緩和
+#                                 corrected_axis, _, _ = double_difference_kalman_filter(
+#                                     axis_data, threshold=conservative_threshold,
+#                                     plot_name=f"KP{kp_idx}_axis{axis}"
+#                                 )
+#                                 if not np.isnan(corrected_axis[-1]):
+#                                     corrected_pos[axis] = corrected_axis[-1]  # 最新の補正値
+#                                 else:
+#                                     # カルマンフィルタが失敗した場合は履歴の平均値を使用
+#                                     valid_history = axis_data[~np.isnan(axis_data)]
+#                                     if len(valid_history) > 0:
+#                                         corrected_pos[axis] = np.mean(valid_history[-3:])  # 最新3点の平均
+#                             except Exception as e:
+#                                 # カルマンフィルタでエラーが発生した場合の fallback
+#                                 valid_history = axis_data[~np.isnan(axis_data)]
+#                                 if len(valid_history) > 0:
+#                                     corrected_pos[axis] = valid_history[-1]  # 最新の有効値
+
+#                     # 補正結果が有効かチェック
+#                     if not np.all(np.isnan(corrected_pos)):
+#                         selective_points_3d[kp_idx] = corrected_pos
+#                     else:
+#                         # カルマンフィルタが完全に失敗した場合は履歴の最新値を使用
+#                         if len(kalman_states[kp_idx]['history']) > 0:
+#                             selective_points_3d[kp_idx] = kalman_states[kp_idx]['history'][-1]
+#                         else:
+#                             selective_points_3d[kp_idx] = current_pos
+#                 else:
+#                     # 履歴が不足している場合は元の値を使用
+#                     selective_points_3d[kp_idx] = current_pos
+
+#                 switching_log[kp_idx] = {
+#                     'from_pattern': 0,
+#                     'to_pattern': -2,  # -2はカルマンフィルタ適用を意味
+#                     'from_accel': normal_accel,
+#                     'to_accel': np.nan,
+#                     'kalman_applied': True,
+#                     'history_length': len(kalman_states[kp_idx]['history'])
+#                 }    # 全パターンの平均加速度計算（デバッグ用）
+#     pattern_avg_accels = []
+#     for kp_accels in keypoint_accelerations:
+#         avg_accel = np.mean([acc for acc in kp_accels.values() if acc != np.inf])
+#         pattern_avg_accels.append(avg_accel if not np.isnan(avg_accel) else np.inf)
+
+#     # 最終的な各キーポイント加速度を計算
+#     final_keypoint_accels = calculate_all_keypoints_acceleration(history, selective_points_3d)
+
+#     # ステータス作成
+#     num_switched = len([log for log in switching_log.values() if log['to_pattern'] not in [-1, -2]])
+#     num_kalman = len([log for log in switching_log.values() if log['to_pattern'] == -2])
+#     num_nan_set = len([log for log in switching_log.values() if log['to_pattern'] == -1])
+
+#     if len(switching_log) == 0:
+#         status_reason = "All keypoints OK (Normal)"
+#     else:
+#         switched_kps = [kp for kp, log in switching_log.items() if log['to_pattern'] not in [-1, -2]]
+#         kalman_kps = [kp for kp, log in switching_log.items() if log['to_pattern'] == -2]
+#         nan_set_kps = [kp for kp, log in switching_log.items() if log['to_pattern'] == -1]
+
+#         keypoint_names = {11: "RAnkle", 14: "LAnkle", 9: "RHip", 12: "LHip",
+#                          10: "RKnee", 13: "LKnee", 23: "RSmallToe", 20: "LSmallToe",
+#                          22: "RBigToe", 19: "LBigToe", 24: "RHeel", 21: "LHeel"}
+
+#         status_parts = []
+#         if switched_kps:
+#             switched_names = [keypoint_names.get(kp, f"KP{kp}") for kp in switched_kps]
+#             status_parts.append(f"Switched: {switched_names}")
+#         if kalman_kps:
+#             kalman_names = [keypoint_names.get(kp, f"KP{kp}") for kp in kalman_kps]
+#             status_parts.append(f"Kalman: {kalman_names}")
+#         if nan_set_kps:
+#             nan_names = [keypoint_names.get(kp, f"KP{kp}") for kp in nan_set_kps]
+#             status_parts.append(f"NaN_set: {nan_names}")
+
+#         status_reason = " | ".join(status_parts)
+
+#     # デバッグ出力
+#     if frame_idx_for_debug is not None:
+#         accel_str = ", ".join([f"{a:8.2f}" if a != np.inf else "   inf" for a in pattern_avg_accels])
+
+#         # Normalパターンの加速度表示
+#         normal_kp_accels = keypoint_accelerations[0]
+#         kp_items = [f"{kp}:{acc:.1f}" if acc != np.inf else f"{kp}:inf"
+#                    for kp, acc in normal_kp_accels.items()]
+#         kp_str = f"Normal_KP_Accels: [{', '.join(kp_items)}]"
+
+#         # 最終的な加速度表示
+#         final_kp_items = [f"{kp}:{acc:.1f}" if acc != np.inf else f"{kp}:inf"
+#                          for kp, acc in final_keypoint_accels.items()]
+#         final_kp_str = f"Final_KP_Accels: [{', '.join(final_kp_items)}]"
+
+#         # スイッチング詳細
+#         switch_str = ""
+#         if switching_log:
+#             switch_details = []
+#             for kp, info in switching_log.items():
+#                 if info['to_pattern'] == -1:
+#                     switch_details.append(f"KP{kp}:P{info['from_pattern']}→NaN({info['from_accel']:.1f})")
+#                 elif info['to_pattern'] == -2:
+#                     hist_len = info.get('history_length', 0)
+#                     switch_details.append(f"KP{kp}:P{info['from_pattern']}→Kalman({info['from_accel']:.1f},H:{hist_len})")
+#                 else:
+#                     switch_details.append(f"KP{kp}:P{info['from_pattern']}→P{info['to_pattern']}({info['from_accel']:.1f}→{info['to_accel']:.1f})")
+#             switch_str = f"Switches: [{', '.join(switch_details)}]"
+
+#         history_info = f"History: {len(history)} frames"
+#         if len(history) > 0:
+#             last_valid = not np.isnan(history[-1]).all()
+#             history_info += f", last valid: {last_valid}"
+
+#         # ★★★ デバッグフレーム範囲を制限（200-400フレームのみ表示） ★★★
+#         if 200 <= frame_idx_for_debug <= 400:
+#             print(f"Frame {frame_idx_for_debug:04d} | AvgAccels(N,S1,S2,S12): [{accel_str}]")
+#             print(f"                      | {kp_str}")
+#             print(f"                      | {final_kp_str}")
+#             if switch_str:
+#                 print(f"                      | {switch_str}")
+#             print(f"                      | {status_reason} | {history_info}")
+
+#     return normal_points_3d, selective_points_3d, pattern_avg_accels, pattern_avg_accels[0]
+
+
 def main():
     root_dir = Path(r"G:\gait_pattern\20250811_br")
     stereo_cali_dir = Path(r"G:\gait_pattern\stereo_cali\9g_20250811")
 
     # ★★★ 個別キーポイント加速度判定のための閾値設定 ★★★
-    ACCELERATION_THRESHOLD = 100.0  # 個別キーポイント判定用の現実的な閾値
+    joint_acceleration_thresholds = {
+        "RAnkle": 100.0, "LAnkle": 100.0, "RHip": 100.0, "LHip": 100.0,
+        "RKnee": 100.0, "LKnee": 100.0, "RSmallToe": 100.0, "LSmallToe": 100.0,
+        "RBigToe": 100.0, "LBigToe": 100.0, "RHeel": 100.0, "LHeel": 100.0
+    }
+    ACCELERATION_THRESHOLD = 100.0  # デフォルト閾値
     BUTTERWORTH_CUTOFF = 12.0
     FRAME_RATE = 60
     DEBUG_ACCELERATION = True
 
-    print(f"★★★ 個別キーポイント加速度判定モード: 閾値を{ACCELERATION_THRESHOLD}に設定 ★★★")
-    print("    各キーポイント（膝、足首、つま先等）が独立してスイッチング判定を行います")
+    print(f"★★★ MATLABカルマンフィルタの完全再現版 ★★★")
+    print("    ローカルレベルモデル + 準ニュートン法による散漫対数尤度最大化")
+    print("    左右足入れ替わり検出機能付き二階差分カルマンフィルタ")
+    print("    MATLABのSecond_Order_Difference_Kalman_Filter.mの正確な実装")
 
     directions = ["fl", "fr"]
 
-    print("3次スプライン補間による3D歩行解析を開始します。")
+    print("カルマンフィルタベースの3D歩行解析を開始します。")
     try:
         params_cam1 = load_camera_parameters(stereo_cali_dir / directions[0] / "camera_params_with_ext_OC.json")
         params_cam2 = load_camera_parameters(stereo_cali_dir / directions[1] / "camera_params_with_ext_OC.json")
@@ -650,9 +1189,9 @@ def main():
             print(f"最初の5フレーム: {common_frames[:5]}")
             print(f"最後の5フレーム: {common_frames[-5:]}")
 
-            output_dir = thera_dir / "3d_gait_analysis_spline_v1"
+            output_dir = thera_dir / "3d_gait_analysis_kalman_v1"
             output_dir.mkdir(exist_ok=True)
-            output_file = output_dir / f"{thera_dir.name}_3d_results_spline.json"
+            output_file = output_dir / f"{thera_dir.name}_3d_results_kalman.json"
 
             max_people = 0
             for frame_file in common_frames:
@@ -665,8 +1204,18 @@ def main():
             all_accelerations_data = [[] for _ in range(max_people)]
             history_list = [np.empty((0, 25, 3)) for _ in range(max_people)]
 
-            print("  - ステップ1: 全フレームのエラー判定...")
-            for frame_idx, frame_name in enumerate(tqdm(common_frames, desc="  フレーム処理中")):
+            # ★★★ カルマンフィルタ状態を各人物について初期化 ★★★
+            kalman_states_list = [{} for _ in range(max_people)]
+
+            # ★★★ フレーム範囲を250～350に限定 ★★★
+            frame_start = 250
+            frame_end = 350  # 350まで処理
+            # selected_frames = common_frames
+            selected_frames = common_frames[frame_start:frame_end]
+
+            print("  - ステップ1: 全フレームのエラー判定（カルマンフィルタ統合版）...")
+
+            for frame_idx, frame_name in enumerate(tqdm(selected_frames, desc="  フレーム処理中")):
                 kp2d_cam1_list, conf_cam1_list = load_openpose_json(openpose_dir1 / frame_name)
                 kp2d_cam2_list, conf_cam2_list = load_openpose_json(openpose_dir2 / frame_name)
                 num_detected = max(len(kp2d_cam1_list), len(kp2d_cam2_list))
@@ -679,7 +1228,9 @@ def main():
                         cf2 = conf_cam2_list[p_idx] if p_idx < len(conf_cam2_list) else np.full((25,), np.nan)
 
                         debug_frame_idx = frame_idx if DEBUG_ACCELERATION else None
-                        raw_3d, corrected_3d, accels, min_accel = process_single_person_individual_keypoint_switching(kp1, cf1, kp2, cf2, P1, P2, history_list[p_idx], ACCELERATION_THRESHOLD, debug_frame_idx)
+                        raw_3d, corrected_3d, accels, min_accel = process_single_person_individual_keypoint_switching_kalman_matlab(
+                            kp1, cf1, kp2, cf2, P1, P2, history_list[p_idx], ACCELERATION_THRESHOLD,
+                            kalman_states_list[p_idx], debug_frame_idx)
 
                         all_accelerations_data[p_idx].append({'all': accels, 'min': min_accel})
 
@@ -694,14 +1245,6 @@ def main():
                             # 履歴サイズを制限（最大10フレーム）
                             if len(history_list[p_idx]) > 10:
                                 history_list[p_idx] = history_list[p_idx][-10:]
-                        # NaNの場合は履歴に追加しない
-                    else:
-                        nan_points = np.full((25, 3), np.nan)
-                        all_raw_points[p_idx].append(nan_points)
-                        all_corrected_points[p_idx].append(nan_points)
-                        # ★★★ 修正点: NaNデータは履歴に追加しない ★★★
-                        # history_list[p_idx] = np.vstack([history_list[p_idx], nan_points[np.newaxis, ...]])
-                        all_accelerations_data[p_idx].append({'all': [np.inf]*4, 'min': np.inf})
 
             all_person_results = []
             for p_idx in range(max_people):
@@ -715,7 +1258,7 @@ def main():
                 for kp_idx in range(raw_points_arr.shape[1]):
                     for axis_idx in range(raw_points_arr.shape[2]):
                         sequence = raw_points_arr[:, kp_idx, axis_idx]
-                        raw_spline_points_arr[:, kp_idx, axis_idx] = apply_spline_interpolation(sequence)
+                        raw_spline_points_arr[:, kp_idx, axis_idx] = cubic_spline_interpolate_nan(sequence)
 
                 print("    - ステップ2b: Rawスプライン補間データにバターワースフィルタを適用...")
                 raw_final_points_arr = np.full_like(raw_spline_points_arr, np.nan)
@@ -724,39 +1267,29 @@ def main():
                         sequence = raw_spline_points_arr[:, kp_idx, axis_idx]
                         raw_final_points_arr[:, kp_idx, axis_idx] = butter_lowpass_filter(sequence, BUTTERWORTH_CUTOFF, FRAME_RATE)
 
-                # ★★★ 既存処理: スイッチング後データのスプライン補間 ★★★
-                print("    - ステップ3: スイッチング後データに3次スプライン補間で欠損値を補間...")
-                spline_points_arr = np.full_like(corrected_points_arr, np.nan)
+                print("    - ステップ3: バターワースフィルタを適用...")
+                final_points_arr = np.full_like(corrected_points_arr, np.nan)
                 for kp_idx in range(corrected_points_arr.shape[1]):
                     for axis_idx in range(corrected_points_arr.shape[2]):
                         sequence = corrected_points_arr[:, kp_idx, axis_idx]
-                        spline_points_arr[:, kp_idx, axis_idx] = apply_spline_interpolation(sequence)
-
-                print("    - ステップ4: バターワースフィルタを適用...")
-                final_points_arr = np.full_like(spline_points_arr, np.nan)
-                for kp_idx in range(spline_points_arr.shape[1]):
-                    for axis_idx in range(spline_points_arr.shape[2]):
-                        sequence = spline_points_arr[:, kp_idx, axis_idx]
                         final_points_arr[:, kp_idx, axis_idx] = butter_lowpass_filter(sequence, BUTTERWORTH_CUTOFF, FRAME_RATE)
 
                 all_person_results.append({
                     'raw': raw_points_arr,
-                    'raw_processed': raw_final_points_arr,  # ★★★ 新規追加 ★★★
+                    'raw_processed': raw_final_points_arr,
                     'corrected_with_nan': corrected_points_arr,
-                    'spline': spline_points_arr,
                     'final': final_points_arr
                 })
 
             print("  - ステップ5: 結果をJSONファイルに保存...")
             analysis_results = []
-            for t, frame_name in enumerate(common_frames):
+            for t, frame_name in enumerate(selected_frames):
                 frame_result = {"frame_name": frame_name}
                 for p_idx in range(max_people):
                     person_data = all_person_results[p_idx]
                     frame_result[f"person_{p_idx + 1}"] = {
                         "points_3d_raw": person_data['raw'][t].tolist(),
-                        "points_3d_raw_processed": person_data['raw_processed'][t].tolist(),  # ★★★ 新規追加 ★★★
-                        "points_3d_spline": person_data['spline'][t].tolist(),
+                        "points_3d_raw_processed": person_data['raw_processed'][t].tolist(),
                         "points_3d_final": person_data['final'][t].tolist(),
                     }
                 analysis_results.append(frame_result)
@@ -779,13 +1312,13 @@ def main():
             acceleration_dir.mkdir(exist_ok=True)
 
             print("  - ステップ6: 主要関節ペアの軌道と加速度をグラフ化...")
-            plot_bilateral_joint_analysis(all_person_results, all_accelerations_data, common_frames, bilateral_dir, thera_dir.name)
+            plot_bilateral_joint_analysis(all_person_results, all_accelerations_data, selected_frames, bilateral_dir, thera_dir.name)
 
             print("  - ステップ7: Raw処理 vs スイッチング処理の比較グラフ化...")
-            plot_method_comparison_analysis(all_person_results, common_frames, method_comparison_dir, thera_dir.name)
+            plot_method_comparison_analysis(all_person_results, selected_frames, method_comparison_dir, thera_dir.name)
 
             print("  - ステップ8: 全フレームの加速度をグラフ化...")
-            plot_acceleration_graph(all_accelerations_data, common_frames, ACCELERATION_THRESHOLD, acceleration_dir, thera_dir.name)
+            plot_acceleration_graph(all_accelerations_data, selected_frames, ACCELERATION_THRESHOLD, acceleration_dir, thera_dir.name)
 
 
 def plot_bilateral_joint_analysis(all_person_results, all_accelerations_data, frames, output_dir, file_prefix):
@@ -985,14 +1518,14 @@ def plot_bilateral_trajectory(all_person_results, frames, right_idx, left_idx, j
                 left_final = person_data['final'][:, left_idx, axis_idx]
 
                 # 右側関節のプロット
-                ax.plot(time_axis, right_raw, 'o', color='lightcoral', markersize=2, alpha=0.6, label=f'R{joint_name} Raw')
-                ax.plot(time_axis, right_corrected, 'x', color='red', markersize=3, alpha=0.7, label=f'R{joint_name} Corrected')
-                ax.plot(time_axis, right_final, color='darkred', linewidth=2, label=f'R{joint_name} Final')
+                ax.plot(time_axis, right_raw, 'o', color='lightcoral', markersize=2, alpha=0.6, label='R{joint_name} Raw')
+                ax.plot(time_axis, right_corrected, 'x', color='red', markersize=3, alpha=0.7, label='R{joint_name} Corrected')
+                ax.plot(time_axis, right_final, color='darkred', linewidth=2, label='R{joint_name} Final')
 
                 # 左側関節のプロット
-                ax.plot(time_axis, left_raw, 'o', color='lightblue', markersize=2, alpha=0.6, label=f'L{joint_name} Raw')
-                ax.plot(time_axis, left_corrected, 'x', color='blue', markersize=3, alpha=0.7, label=f'L{joint_name} Corrected')
-                ax.plot(time_axis, left_final, color='darkblue', linewidth=2, label=f'L{joint_name} Final')
+                ax.plot(time_axis, left_raw, 'o', color='lightblue', markersize=2, alpha=0.6, label='L{joint_name} Raw')
+                ax.plot(time_axis, left_corrected, 'x', color='blue', markersize=3, alpha=0.7, label='L{joint_name} Corrected')
+                ax.plot(time_axis, left_final, color='darkblue', linewidth=2, label='L{joint_name} Final')
 
                 ax.set_title(f'Person {p_idx + 1}: {joint_name} {axis_names[axis_idx]}-axis (Raw vs Processed)')
                 ax.set_xlabel('Frame Number')
@@ -1158,11 +1691,12 @@ def plot_acceleration_graph(all_accelerations_data, frames, threshold, output_di
         time_axis = np.arange(len(frames))
 
         for p_idx, person_accel_data in enumerate(all_accelerations_data):
-            accel_n = np.array([d['all'][0] for d in person_accel_data], dtype=float)
-            accel_s1 = np.array([d['all'][1] for d in person_accel_data], dtype=float)
-            accel_s2 = np.array([d['all'][2] for d in person_accel_data], dtype=float)
-            accel_s12 = np.array([d['all'][3] for d in person_accel_data], dtype=float)
-            min_accels = np.array([d['min'] for d in person_accel_data], dtype=float)
+            accel_n = np.array([d['all'][0] if len(d['all']) > 0 else np.nan for d in person_accel_data], dtype=float)
+            accel_s1 = np.array([d['all'][1] if len(d['all']) > 1 else np.nan for d in person_accel_data], dtype=float)
+            accel_s2 = np.array([d['all'][2] if len(d['all']) > 2 else np.nan for d in person_accel_data], dtype=float)
+            accel_s12 = np.array([d['all'][3] if len(d['all']) > 3 else np.nan for d in person_accel_data], dtype=float)
+            min_accels = np.array([d['min'] if 'min' in d else np.nan for d in person_accel_data], dtype=float)
+
 
             # ★★★ 無限大値をNaNに変換してプロット ★★★
             accel_n_clean = np.where(np.isinf(accel_n), np.nan, accel_n)
@@ -1223,3 +1757,4 @@ def plot_acceleration_graph(all_accelerations_data, frames, threshold, output_di
 
 if __name__ == '__main__':
     main()
+

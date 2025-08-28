@@ -8,14 +8,6 @@ import traceback
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-
-"""
-スプライン補間では一度nanがでてしまうとその後の加速度が算出できない
-nanではない有効なフレームの加速度をつかうとしても正しい判定ができていない
-"""
-
-
-
 # --- ユーティリティ関数 ---
 
 def load_camera_parameters(params_file):

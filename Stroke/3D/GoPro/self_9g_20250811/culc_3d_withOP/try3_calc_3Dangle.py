@@ -399,8 +399,8 @@ def main():
     # 解析したいデータが含まれるディレクトリを指定してください
     base_dir = Path(r"G:\gait_pattern\20250811_br\sub1\thera0-2")
 
-    # try_1_spline.pyが出力したJSONファイルを指定
-    json_file = base_dir / "3d_gait_analysis_spline_v1" / "thera0-2_3d_results_spline.json"
+    # try_1_kalman.pyが出力したJSONファイルを指定
+    json_file = base_dir / "3d_gait_analysis_kalman_v1" / "thera0-2_3d_results_kalman.json"
     subject_name = base_dir.parent.name
     thera_name = base_dir.name
 
@@ -459,7 +459,8 @@ def main():
 
         if subject_name == "sub1" and thera_name == "thera0-2":
             start_frame = ic_frames['R'][3]
-            end_frame = ic_frames['R'][7]
+            end_frame = ic_frames['R'][5]
+            # end_frame = ic_frames['R'][7]
         else:
             start_frame = ic_frames['R'][0]
             end_frame = ic_frames['R'][-1]
