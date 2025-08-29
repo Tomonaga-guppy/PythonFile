@@ -11,109 +11,108 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt, resample
 import json
 
-def read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz, geometry_path = None):
-    df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])  #Motive
+def read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz, geometry_path=None):
+    """
+    OptiTrackの3Dデータを読み込み、前処理を行う。
+    【改訂版ロジック】
+    1. 100Hzのままデータ範囲を決定する。
+    2. 100Hzのデータに対して、スプライン補間と幾何学的補間を全て実行する。
+    3. 完全に補間された後、最後にダウンサンプリングを行う。
+    """
+    def geometric_interpolation(marker_df, marker_to_fix, geometry, original_missing_mask):
+        """
+        指定されたマーカーを、幾何学情報を用いて補間する汎用関数。
+        引数として「元々欠損していた行のマスク」を受け取るように変更。
+        """
+        # 補間対象マーカー用の幾何学情報を取得
+        if marker_to_fix not in geometry:
+            print(f"警告: ジオメトリ情報に '{marker_to_fix}' の定義がありません。")
+            return marker_df
 
-    print(f"元のデータ形状: {df.shape}")
-    print(f"解析範囲（100Hz）: {start_frame_100hz} to {end_frame_100hz}")
+        # ★★★ 変更点 ★★★
+        # 引数で渡されたマスクを使い、元々欠損があったかどうかを判断する
+        if not original_missing_mask.any():
+            print(f"{marker_to_fix} に元々の欠損はなかったため、幾何学的な補間はスキップしました。")
+            return marker_df
 
-    # データの範囲をチェック
+        marker_geometry = geometry[marker_to_fix]
+        ref_marker_names = marker_geometry["reference_markers"]
+
+        # 必要な列名を取得
+        target_cols = [c for c in marker_df.columns if marker_to_fix in c[0]]
+        ref_cols_map = {name: [c for c in marker_df.columns if name in c[0]] for name in ref_marker_names}
+
+        if not target_cols or not all(ref_cols_map.values()):
+            print(f"警告: {marker_to_fix} またはその参照マーカーがデータフレームにありません。")
+            return marker_df
+
+        print(f"ジオメトリ情報を使用して、元々欠損していた {marker_to_fix} を再計算・補完します。")
+
+        # T-poseでの形状（ソース）を定義
+        source_vectors = [np.array(marker_geometry["reference_vectors"][name]) for name in ref_marker_names]
+        target_offset_vector = np.array(marker_geometry["target_offset_vector"])
+
+        # ★★★ 変更点 ★★★
+        # print(f"marker_df[original_missing_mask].index: {marker_df[original_missing_mask].index}")
+        # 引数で渡されたマスクを使って、元々欠損していた行だけをループする
+        # for index in marker_df[original_missing_mask].index:
+        for index in range(len(marker_df)):  #すべての行を対象とする（もともととれているデータも上書きしてほかのマーカーから補間）
+            row = marker_df.loc[index]
+
+            # 参照マーカーのデータが揃っているか確認
+            if all(not row[cols].isnull().any() for cols in ref_cols_map.values()):
+                ref_positions = [row[ref_cols_map[name]].values for name in ref_marker_names]
+
+                centroid_current = np.mean(ref_positions, axis=0)
+                target_vectors = [p - centroid_current for p in ref_positions]
+
+                rot, _ = R.align_vectors(target_vectors, source_vectors)
+                estimated_offset = rot.apply(target_offset_vector)
+                estimated_target = centroid_current + estimated_offset
+
+                marker_df.loc[index, target_cols] = estimated_target
+
+        return marker_df
+
+    df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])
+
     if start_frame_100hz >= len(df) or end_frame_100hz >= len(df) or start_frame_100hz < 0:
         print(f"Error: Requested range ({start_frame_100hz}-{end_frame_100hz}) is outside available data range (0-{len(df)-1})")
         return np.array([]), range(0)
 
-    # 範囲を調整
-    start_frame = max(0, start_frame_100hz)
-    end_frame = min(len(df)-1, end_frame_100hz)
-    df = df.loc[start_frame:end_frame]
-    print(f"After range selection: {df.shape}")
-
-    if down_hz:
-        # 100Hz → 60Hz のダウンサンプリング
-        original_length = len(df)
-        target_length = int(original_length * 60 / 100)
-        print(f"ダウンサンプリング: {original_length} → {target_length} フレーム")
-        if target_length <= 0:
-            print("Error: Target length is 0 after downsampling")
-            return np.array([]), range(0)
-
-        # 各列に対してリサンプリングを適用
-        resampled_data = {}
-        for col in df.columns:
-            if df[col].dtype in ['float64', 'int64']:  # 数値列のみリサンプリング
-                if not df[col].dropna().empty:
-                    resampled_data[col] = resample(df[col].dropna(), target_length)
-                else:
-                    resampled_data[col] = np.full(target_length, np.nan)
-            else:
-                # 非数値列は単純にインデックスを調整
-                if len(df) > 0:
-                    step = len(df) / target_length
-                    indices = [int(i * step) for i in range(target_length)]
-                    resampled_data[col] = df[col].iloc[indices].reset_index(drop=True)
-                else:
-                    resampled_data[col] = np.full(target_length, np.nan)
-
-        # 辞書から一度にDataFrameを作成
-        df_down = pd.DataFrame(resampled_data).reset_index(drop=True)
-    else:
-        df_down = df
+    start_frame, end_frame = max(0, start_frame_100hz), min(len(df)-1, end_frame_100hz)
+    df_100hz = df.loc[start_frame:end_frame].reset_index(drop=True)
 
     marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
-
-    marker_set_df = df_down[[col for col in df_down.columns if any(marker in col[0] for marker in marker_set)]].copy()
-
-    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"before_interp_marker_set_{os.path.basename(csv_path)}"))
+    marker_set_df = df_100hz[[col for col in df_100hz.columns if any(marker in col[0] for marker in marker_set)]].copy()
 
     if marker_set_df.empty:
         print("Error: No marker data found")
         return np.array([]), range(0)
 
-    # LPSI補間を行う前に、元々LPSIが欠損していた場所を記録しておく
-    lpsi_cols = [c for c in marker_set_df.columns if 'LPSI' in c[0]]
-    original_lpsi_missing_mask = pd.Series(False, index=marker_set_df.index)
-    if lpsi_cols:
-        original_lpsi_missing_mask = marker_set_df[lpsi_cols].isnull().any(axis=1)
-        print("LPSIの元々の欠損状況:")
+    # --- ここから補間処理 (全て100Hzで実行) ---
+    markers_to_fix = ["LPSI"]
+    original_missing_masks = {}
+    # print("スプライン補間を行う前に、元々の欠損箇所を記録します。")
+    for marker in markers_to_fix:
+        cols = [c for c in marker_set_df.columns if marker in c[0]]
+        if cols:
+            original_missing_masks[marker] = marker_set_df[cols].isnull().any(axis=1)
+    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"before_interpolation_{os.path.basename(csv_path)}"))  #確認用
 
-    print("LPSI等の細かい欠損を補完するため、先に三次スプライン補間を実行します。")
-    marker_set_df.interpolate(method='spline', order=3, limit_direction='both', inplace=True)
+    print("細かい欠損を補完するため、先に三次スプライン補間を実行します。")
+    marker_set_df.interpolate(method='cubic', limit_direction='both', inplace=True)
+    # marker_set_df.interpolate(method='spline', order=3, limit_direction='both', inplace=True)  #なんかこれだとうまくいかなかった
+    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"after_interpolation_{os.path.basename(csv_path)}"))  #確認用
 
     if geometry_path and os.path.exists(geometry_path):
-        if original_lpsi_missing_mask.any():
-            print(f"ジオメトリ情報 {geometry_path} を使用して、元々欠損していたLPSIを再計算・補完します。")
-            with open(geometry_path, 'r') as f:
-                geometry = json.load(f)
+        with open(geometry_path, 'r') as f:
+            geometry = json.load(f)
+        for marker in markers_to_fix:
+            if marker in original_missing_masks:
+                marker_set_df = geometric_interpolation(marker_set_df, marker, geometry, original_missing_masks[marker])
+    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"after_geometric_interpolation_{os.path.basename(csv_path)}"))   #確認用
 
-            ref_vecs = geometry['reference_vectors']
-            source_vectors = [np.array(ref_vecs['RASI']), np.array(ref_vecs['LASI']), np.array(ref_vecs['RPSI'])]
-            target_offset_vector = np.array(geometry['target_offset_vector']['LPSI'])
-
-            rasi_cols = [c for c in marker_set_df.columns if 'RASI' in c[0]]
-            lasi_cols = [c for c in marker_set_df.columns if 'LASI' in c[0]]
-            rpsi_cols = [c for c in marker_set_df.columns if 'RPSI' in c[0]]
-
-            # 元々LPSIが欠損していた行だけをループ
-            for index in marker_set_df[original_lpsi_missing_mask].index:
-                row = marker_set_df.loc[index]
-                # 基準点が（スプライン補間後に）有効か確認
-                if not row[rasi_cols].isnull().any() and not row[lasi_cols].isnull().any() and not row[rpsi_cols].isnull().any():
-                    p_rasi = row[rasi_cols].values
-                    p_lasi = row[lasi_cols].values
-                    p_rpsi = row[rpsi_cols].values
-
-                    centroid_current = (p_rasi + p_lasi + p_rpsi) / 3
-                    target_vectors = [p_rasi - centroid_current, p_lasi - centroid_current, p_rpsi - centroid_current]
-
-                    rot, _ = R.align_vectors(target_vectors, source_vectors)
-                    estimated_offset = rot.apply(target_offset_vector)
-                    estimated_lpsi = centroid_current + estimated_offset
-
-                    marker_set_df.loc[index, lpsi_cols] = estimated_lpsi
-        else:
-            print("LPSIに元々の欠損はなかったため、幾何学的な補間はスキップしました。")
-
-    # 最終チェック：それでも欠損が残っている場合は線形補間
     if marker_set_df.isnull().values.any():
         print("警告: 全ての補間処理後もデータに欠損値が残っています。残りの欠損を線形補間します。")
         marker_set_df.interpolate(method='linear', limit_direction='both', inplace=True)
@@ -121,25 +120,32 @@ def read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz, geo
     if marker_set_df.isnull().values.any():
         print("エラー: 補間後も処理できない欠損値が残っています。")
         return np.array([]), range(0)
+    # --- ここまで補間処理 ---
 
-    # full_range をダウンサンプリング後のインデックスベースで設定
-    full_range = range(0, len(marker_set_df))
-    print(f"Processing range: {full_range}")
+    # --- 最後にダウンサンプリング ---
+    if down_hz:
+        print("100Hzから60Hzへダウンサンプリングします。")
+        original_length = len(marker_set_df)
+        target_length = int(original_length * 60 / 100)
 
-    success_df = marker_set_df.reindex(full_range)
-    interpolate_success_df = success_df.interpolate(method='spline', order=3)
+        if target_length <= 0:
+            print("Error: Target length is 0 after downsampling")
+            return np.array([]), range(0)
 
-    for i, index in enumerate(full_range):
-        marker_set_df.loc[index, :] = interpolate_success_df.iloc[i, :]
+        resampled_df = pd.DataFrame()
+        for col in marker_set_df.columns:
+            # この時点では欠損はないはずなので、dropna()は不要だが念のため残す
+            resampled_df[col] = resample(marker_set_df[col].dropna(), target_length)
 
-    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path)}"))
+        final_df = resampled_df
+    else:
+        final_df = marker_set_df
 
-    keypoints = marker_set_df.values
-    if keypoints.size == 0:
-        print("Error: No keypoint data after processing")
-        return np.array([]), range(0)
-
-    keypoints_mocap = keypoints.reshape(-1, len(marker_set), 3)  #xyzで組になるように変形
+    # --- 以降の処理 ---
+    full_range = range(0, len(final_df))
+    final_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path)}"))
+    keypoints = final_df.values
+    keypoints_mocap = keypoints.reshape(-1, len(marker_set), 3)
 
     return keypoints_mocap, full_range
 
@@ -161,12 +167,13 @@ def main():
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-15\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera0-2\mocap"
-    csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera1-1\mocap"
+    csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera1-0\mocap"
+
     if csv_path_dir == r"G:\gait_pattern\20250811_br\sub1\thera0-2\mocap":
         start_frame_100hz = 1000
         end_frame_100hz = 1440
-    elif csv_path_dir == r"G:\gait_pattern\20250811_br\sub1\thera1-1\mocap":
-        start_frame_100hz = 1089
+    elif csv_path_dir == r"G:\gait_pattern\20250811_br\sub1\thera1-0\mocap":
+        start_frame_100hz = 1090
         end_frame_100hz = 1252
     elif csv_path_dir == r"G:\gait_pattern\20250811_br\sub0\thera0-16\mocap":
         start_frame_100hz = 890
@@ -189,6 +196,10 @@ def main():
     csv_paths = [path for path in csv_paths if not os.path.basename(path).startswith("marker_set_")]
     # angle_で始まるファイルも除外（既に処理済みのファイル）
     csv_paths = [path for path in csv_paths if not os.path.basename(path).startswith("angle_")]
+    # beforeで始まるファイルも除外（既に処理済みのファイル）
+    csv_paths = [path for path in csv_paths if not os.path.basename(path).startswith("before_")]
+    #  afterで始まるファイルも除外（既に処理済みのファイル）
+    csv_paths = [path for path in csv_paths if not os.path.basename(path).startswith("after_")]
 
     # Tpose時の骨盤の姿勢（3x3の回転行列）を読み込み
     neutral_matrix_path = r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap\rot_pelvis_neutral.npy"
@@ -291,10 +302,10 @@ def main():
             rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
 
             """現在の骨盤の向きがTposeの状態からどれだけずれているかを計算し、その分を補正する（Tposeの状態をゼロとする）"""
-            # rot_pelvis = np.dot(np.linalg.inv(rot_pelvis_neutral), rot_pelvis)
-            # e_x_pelvis = rot_pelvis[:,0]
-            # e_y_pelvis = rot_pelvis[:,1]
-            # e_z_pelvis = rot_pelvis[:,2]
+            rot_pelvis = np.dot(np.linalg.inv(rot_pelvis_neutral), rot_pelvis)
+            e_x_pelvis = rot_pelvis[:,0]
+            e_y_pelvis = rot_pelvis[:,1]
+            e_z_pelvis = rot_pelvis[:,2]
 
             #必要な原点の設定
             rshank = (rknee[frame_num, :] + rknee2[frame_num, :]) / 2
@@ -375,6 +386,8 @@ def main():
             # r_hip_abduction_angle = R.from_matrix(rknee_realative_rotation_rl).as_euler('YZX', degrees=True)[2]  #左下腿基準で右膝の外転内転角度を計算
 
 
+            # 股関節の外旋内旋角度（やり方別）
+
 
             # ただの2つのベクトルのなす角
 
@@ -435,7 +448,7 @@ def main():
             # lhee_basse_pelvis = np.dot(trans_mat_pelvis, np.append(lhee[frame_num,:], 1))[:3]
             # print(f"lhee_basse_pelvis = {lhee_basse_pelvis}")
 
-            plot_flag = True
+            plot_flag = False
             if plot_flag:
                 # print(frame_num)  #相対フレーム数
                 if frame_num == 0:
