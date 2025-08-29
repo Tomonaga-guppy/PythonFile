@@ -10,6 +10,10 @@ from scipy.optimize import minimize
 from tqdm import tqdm
 import warnings
 
+"""
+始めにrawからパラメータを推定してそれを毎フレーム使用
+"""
+
 # m_triangulationモジュールから、指定された関数をインポート
 try:
     from m_triangulation import triangulate_and_rotate
@@ -26,7 +30,7 @@ warnings.filterwarnings('ignore', category=RuntimeWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
 # =============================================================================
-# 0. 設定と定数 (try_1_kalman.pyを参考)
+# 0. 設定と定数
 # =============================================================================
 ROOT_DIR = Path(r"G:\gait_pattern\20250811_br")
 STEREO_CALI_DIR = Path(r"G:\gait_pattern\stereo_cali\9g_20250811")
@@ -79,7 +83,7 @@ def load_2d_data(openpose_dir1, openpose_dir2):
     return np.array(all_kps1), np.array(all_kps2), common_frames
 
 # =============================================================================
-# 2. 3D座標の計算 (三角測量)
+# 2. 3D座標の計算
 # =============================================================================
 
 def calculate_raw_3d_coordinates(kps1_seq, kps2_seq, P1, P2):
@@ -94,56 +98,39 @@ def calculate_raw_3d_coordinates(kps1_seq, kps2_seq, P1, P2):
     return raw_3d_points
 
 # =============================================================================
-# 3. 尤度最大化とカルマンフィルタによる補正 (フレームごと推定版)
+# 3. 尤度最大化とカルマンフィルタによる補正
 # =============================================================================
 
 def moving_average_filter(data, window_size=3):
-    """MATLABのmaf(...,3)と同等の移動平均フィルタ"""
-    if len(data) < window_size:
-        return data
-    # window_size分の重みを均等にしたカーネルを作成し、畳み込み演算を行う
+    if len(data) < window_size: return data
     return np.convolve(data, np.ones(window_size)/window_size, mode='same')
 
 def local_level_kf(y, a1, P1, var_eta, var_eps):
-    """ローカルレベルモデルのカルマンフィルタリング"""
     L = len(y)
-    # 各変数を格納するための配列を初期化
-    a_tt1, P_tt1 = np.zeros(L + 1), np.zeros(L + 1) # 予測値
+    a_tt1, P_tt1 = np.zeros(L + 1), np.zeros(L + 1)
     a_tt1[0], P_tt1[0] = a1, P1
-    v_t, F_t = np.zeros(L), np.zeros(L)             # 予測誤差関連
-    a_tt, P_tt = np.zeros(L), np.zeros(L)           # フィルタリング後の値
+    v_t, F_t = np.zeros(L), np.zeros(L)
+    a_tt, P_tt = np.zeros(L), np.zeros(L)
     for t in range(L):
-        # --- 更新ステップ (Correction Step) ---
-        # 予測誤差(v_t)と、その分散(F_t)を計算
         v_t[t] = y[t] - a_tt1[t]
         F_t[t] = P_tt1[t] + var_eps
         if F_t[t] <= 1e-10: F_t[t] = 1e-10
-        # カルマンゲイン(K_t)を計算
         K_t = P_tt1[t] / F_t[t]
-        # 予測値(a_tt1)を観測値(y)で補正し、フィルタリング後の値(a_tt)を求める
         a_tt[t] = a_tt1[t] + K_t * v_t[t]
         P_tt[t] = P_tt1[t] * (1 - K_t)
-        # --- 予測ステップ (Prediction Step) ---
-        # 次のフレームの状態(a_tt1[t+1])を予測
         a_tt1[t+1] = a_tt[t]
         P_tt1[t+1] = P_tt[t] + var_eta
     return a_tt, P_tt, F_t, v_t
 
 def calc_log_diffuse_llhd(y, vars):
-    """ローカルレベルモデルの散漫対数尤度を計算"""
     try:
         y_valid = y[~np.isnan(y)]
         if len(y_valid) < 2: return -1e10
-        # varsは [ψ_η, ψ_ε]
         psi_eta, psi_eps = np.clip(vars, -10, 10)
-        # パラメータを分散に戻す
         var_eta, var_eps = np.exp(2 * psi_eta), np.exp(2 * psi_eps)
         var_eta, var_eps = np.clip(var_eta, 1e-8, 1e8), np.clip(var_eps, 1e-8, 1e8)
-        # フィルタの初期値を設定
         a1, P1 = y_valid[0], var_eps
-        # 実際にカルマンフィルタを実行
         _, _, F_t, v_t = local_level_kf(y_valid, a1, P1, var_eta, var_eps)
-        # フィルタリング結果から尤度を計算
         valid_F = np.maximum(F_t[1:], 1e-10)
         tmp = np.sum(np.log(valid_F) + v_t[1:]**2 / valid_F)
         log_ld = -0.5 * len(y_valid) * np.log(2 * np.pi) - 0.5 * tmp
@@ -151,79 +138,61 @@ def calc_log_diffuse_llhd(y, vars):
     except:
         return -1e10
 
-def estimate_kf_parameters(y, initial_value=0.005):
-    """準ニュートン法で対数尤度を最大化し、ノイズパラメータを推定"""
+def estimate_kf_parameters(y, initial_value=0.0005):
     par = np.clip(initial_value, 1e-6, 0.1)
-    # 最適化を安定させるため、分散の平方根の対数を初期値とする
     x0 = [np.log(np.sqrt(par)), np.log(np.sqrt(par))]
-    # 最適化の実行：calc_log_diffuse_llhdの返す値が最大になるxを探す
     res = minimize(lambda x: -calc_log_diffuse_llhd(y, x), x0, method='L-BFGS-B', bounds=([-5, -5], [5, 5]))
     x_opt = res.x if res.success else x0
-    # 最適化されたパラメータを、元の分散の値に戻す
     var_eta_opt = np.clip(np.exp(2 * x_opt[0]), 1e-6, 100.0)
     var_eps_opt = np.clip(np.exp(2 * x_opt[1]), 1e-6, 100.0)
     return var_eta_opt, var_eps_opt
 
-
-def run_kalman_filter_for_series(coordinate_series, initial_value=0.005):
-    """
-    与えられた時系列データに対してパラメータ推定とKFを行い、滑らかな速度を返す
-    初期値はデフォルトで0.005に設定（変えてもあんまり影響なさそう）
-    """
+def run_kalman_filter_for_series(coordinate_series, params=None, initial_value=0.005):
     valid_mask = ~np.isnan(coordinate_series)
     if np.sum(valid_mask) < 5:
-        return None
-    # 1. 座標から速度を計算
+        return None, None
     y = np.diff(coordinate_series[valid_mask])
-    # 2. 速度データを平滑化
     y_maf = moving_average_filter(y)
-    # 3. 平滑化されたデータから最適なノイズパラメータを推定
-    var_eta, var_eps = estimate_kf_parameters(y_maf, initial_value)
-    # MATLAB版ではパラメータを交換しているため、それに倣う
+    if params is None:
+        var_eta, var_eps = estimate_kf_parameters(y_maf, initial_value)
+    else:
+        var_eta, var_eps = params
     var_eps, var_eta = var_eta, var_eps
     a1, P1 = var_eps, var_eta
-    # 4. 最適なパラメータを使って、元の速度データをフィルタリング
     a_tt, _, _, _ = local_level_kf(y_maf, a1, P1, var_eta, var_eps)
-    return a_tt
+    return a_tt, (var_eta, var_eps)
 
 def apply_frame_by_frame_correction(raw_3d, kps1_seq, kps2_seq, P1, P2):
-    """
-    フレームごとに加速度をチェックし、キーポイントの入れ替わりを再三角測量で補正する
-    """
     print("フレームごとの入れ替わり検出と補正を実行中...")
     corrected_3d = raw_3d.copy()
-    # num_frames = 350
     num_frames = len(raw_3d)
-
+    print("カルマンフィルターの最適パラメータを事前に推定中...")
+    kf_params_cache = {}
+    for r_idx, l_idx, name in tqdm(KEYPOINT_PAIRS, desc="パラメータ推定"):
+        for kp_idx in [r_idx, l_idx]:
+            for axis in range(3):
+                coordinate_series = raw_3d[:, kp_idx, axis]
+                _, params = run_kalman_filter_for_series(coordinate_series)
+                if params:
+                    kf_params_cache[(kp_idx, axis)] = params
     for i in tqdm(range(2, num_frames), desc="フレーム処理"):
         kp1, cf1 = kps1_seq[i][:, :2], kps1_seq[i][:, 2]
         kp2, cf2 = kps2_seq[i][:, :2], kps2_seq[i][:, 2]
-
         for r_idx, l_idx, name in KEYPOINT_PAIRS:
-            prev_2 = corrected_3d[i-2]  #2フレーム前の座標
-            prev_1 = corrected_3d[i-1]  #1フレーム前の座標
-            current_raw = raw_3d[i]  #現在の座標
-
-            if np.any(np.isnan(prev_1[r_idx])) or np.any(np.isnan(prev_2[r_idx])) or \
-               np.any(np.isnan(prev_1[l_idx])) or np.any(np.isnan(prev_2[l_idx])) or \
+            prev_2_raw, prev_1_raw, current_raw = raw_3d[i-2], raw_3d[i-1], raw_3d[i]
+            if np.any(np.isnan(prev_1_raw[r_idx])) or np.any(np.isnan(prev_2_raw[r_idx])) or \
+               np.any(np.isnan(prev_1_raw[l_idx])) or np.any(np.isnan(prev_2_raw[l_idx])) or \
                np.any(np.isnan(current_raw[r_idx])) or np.any(np.isnan(current_raw[l_idx])):
                 continue
-
-            accel_r = np.linalg.norm((current_raw[r_idx] - prev_1[r_idx]) - (prev_1[r_idx] - prev_2[r_idx]))
-            accel_l = np.linalg.norm((current_raw[l_idx] - prev_1[l_idx]) - (prev_1[l_idx] - prev_2[l_idx]))
-
-            if accel_r < ACCELERATION_THRESHOLD and accel_l < ACCELERATION_THRESHOLD:  #どちらの足も正常の場合はそのまま
-                corrected_3d[i, r_idx] = current_raw[r_idx]
-                corrected_3d[i, l_idx] = current_raw[l_idx]
-
-            elif accel_r > ACCELERATION_THRESHOLD and accel_l > ACCELERATION_THRESHOLD:  #両足ともエラーの場合は入れ替えまたはどちらもカルマンフィルタで補間
+            accel_r = np.linalg.norm((current_raw[r_idx] - prev_1_raw[r_idx]) - (prev_1_raw[r_idx] - prev_2_raw[r_idx]))
+            accel_l = np.linalg.norm((current_raw[l_idx] - prev_1_raw[l_idx]) - (prev_1_raw[l_idx] - prev_2_raw[l_idx]))
+            if accel_r < ACCELERATION_THRESHOLD and accel_l < ACCELERATION_THRESHOLD:
+                corrected_3d[i, r_idx], corrected_3d[i, l_idx] = current_raw[r_idx], current_raw[l_idx]
+            elif accel_r > ACCELERATION_THRESHOLD and accel_l > ACCELERATION_THRESHOLD:
                 patterns = [
-                    {'name': 'swap_cam1',  'r_kp1': kp1[l_idx], 'r_kp2': kp2[r_idx], 'r_cf1': cf1[l_idx], 'r_cf2': cf2[r_idx],
-                                           'l_kp1': kp1[r_idx], 'l_kp2': kp2[l_idx], 'l_cf1': cf1[r_idx], 'l_cf2': cf2[l_idx]},
-                    {'name': 'swap_cam2',  'r_kp1': kp1[r_idx], 'r_kp2': kp2[l_idx], 'r_cf1': cf1[r_idx], 'r_cf2': cf2[l_idx],
-                                           'l_kp1': kp1[l_idx], 'l_kp2': kp2[r_idx], 'l_cf1': cf1[l_idx], 'l_cf2': cf2[r_idx]},
-                    {'name': 'swap_both',  'r_kp1': kp1[l_idx], 'r_kp2': kp2[l_idx], 'r_cf1': cf1[l_idx], 'r_cf2': cf2[l_idx],
-                                           'l_kp1': kp1[r_idx], 'l_kp2': kp2[r_idx], 'l_cf1': cf1[r_idx], 'l_cf2': cf2[r_idx]},
+                    {'name': 'swap_cam1',  'r_kp1': kp1[l_idx], 'r_kp2': kp2[r_idx], 'r_cf1': cf1[l_idx], 'r_cf2': cf2[r_idx], 'l_kp1': kp1[r_idx], 'l_kp2': kp2[l_idx], 'l_cf1': cf1[r_idx], 'l_cf2': cf2[l_idx]},
+                    {'name': 'swap_cam2',  'r_kp1': kp1[r_idx], 'r_kp2': kp2[l_idx], 'r_cf1': cf1[r_idx], 'r_cf2': cf2[l_idx], 'l_kp1': kp1[l_idx], 'l_kp2': kp2[r_idx], 'l_cf1': cf1[l_idx], 'l_cf2': cf2[r_idx]},
+                    {'name': 'swap_both',  'r_kp1': kp1[l_idx], 'r_kp2': kp2[l_idx], 'r_cf1': cf1[l_idx], 'r_cf2': cf2[l_idx], 'l_kp1': kp1[r_idx], 'l_kp2': kp2[r_idx], 'l_cf1': cf1[r_idx], 'l_cf2': cf2[r_idx]},
                 ]
                 results = []
                 for p in patterns:
@@ -233,81 +202,48 @@ def apply_frame_by_frame_correction(raw_3d, kps1_seq, kps2_seq, P1, P2):
                     temp_kp1[l_idx], temp_kp2[l_idx], temp_cf1[l_idx], temp_cf2[l_idx] = p['l_kp1'], p['l_kp2'], p['l_cf1'], p['l_cf2']
                     p_3d = triangulate_and_rotate(P1, P2, temp_kp1, temp_kp2, temp_cf1, temp_cf2)
                     p_3d_r, p_3d_l = p_3d[r_idx], p_3d[l_idx]
-
-                    if np.any(np.isnan(p_3d_r)) or np.any(np.isnan(p_3d_l)):
-                        p_accel = np.inf
+                    if np.any(np.isnan(p_3d_r)) or np.any(np.isnan(p_3d_l)): p_accel = np.inf
                     else:
-                        p_accel_r = np.linalg.norm((p_3d_r - prev_1[r_idx]) - (prev_1[r_idx] - prev_2[r_idx]))
-                        p_accel_l = np.linalg.norm((p_3d_l - prev_1[l_idx]) - (prev_1[l_idx] - prev_2[l_idx]))
+                        p_accel_r = np.linalg.norm((p_3d_r - corrected_3d[i-1][r_idx]) - (corrected_3d[i-1][r_idx] - corrected_3d[i-2][r_idx]))
+                        p_accel_l = np.linalg.norm((p_3d_l - corrected_3d[i-1][l_idx]) - (corrected_3d[i-1][l_idx] - corrected_3d[i-2][l_idx]))
                         p_accel = p_accel_r + p_accel_l
                     results.append({'accel': p_accel, 'accel_r': p_accel_r, 'accel_l': p_accel_l, 'r_3d': p_3d_r, 'l_3d': p_3d_l})
-
-                # 組み替えたパターンの中で左右ともに閾値未満の組み合わせのみ抽出
                 valid_results = [r for r in results if r['accel_r'] < ACCELERATION_THRESHOLD and r['accel_l'] < ACCELERATION_THRESHOLD]
-
-                if valid_results:  #もし有効な組み合わせがあれば左右加速度の和が最小のものを選択して入れ替え
+                if valid_results:
                     best_pattern = min(valid_results, key=lambda x: x['accel_r'] + x['accel_l'])
-                    corrected_3d[i, r_idx] = best_pattern['r_3d']
-                    corrected_3d[i, l_idx] = best_pattern['l_3d']
+                    corrected_3d[i, r_idx], corrected_3d[i, l_idx] = best_pattern['r_3d'], best_pattern['l_3d']
                 else:
-                    # どちらも閾値未満がない場合は両足ともカルマンフィルタで補完
                     for axis in range(3):
-                        vel_r_axis = run_kalman_filter_for_series(corrected_3d[:i, r_idx, axis])
-                        if vel_r_axis is not None and len(vel_r_axis) > 0:
-                            kalman_velocity = vel_r_axis[-1]
-                            corrected_3d[i, r_idx, axis] = corrected_3d[i-1, r_idx, axis] + kalman_velocity
-                        else:
-                            corrected_3d[i, r_idx, axis] = corrected_3d[i-1, r_idx, axis] + (corrected_3d[i-1, r_idx, axis] - corrected_3d[i-2, r_idx, axis])
-
-                        vel_l_axis = run_kalman_filter_for_series(corrected_3d[:i, l_idx, axis])
-                        if vel_l_axis is not None and len(vel_l_axis) > 0:
-                            kalman_velocity = vel_l_axis[-1]
-                            corrected_3d[i, l_idx, axis] = corrected_3d[i-1, l_idx, axis] + kalman_velocity
-                        else:
-                            corrected_3d[i, l_idx, axis] = corrected_3d[i-1, l_idx, axis] + (corrected_3d[i-1, l_idx, axis] - corrected_3d[i-2, l_idx, axis])
-                pass
-
-            # --- 右足のみエラーのケースの処理 ---
+                        params_r = kf_params_cache.get((r_idx, axis))
+                        vel_r_axis, _ = run_kalman_filter_for_series(corrected_3d[:i, r_idx, axis], params=params_r)
+                        if vel_r_axis is not None and len(vel_r_axis) > 0: corrected_3d[i, r_idx, axis] = corrected_3d[i-1, r_idx, axis] + vel_r_axis[-1]
+                        else: corrected_3d[i, r_idx, axis] = corrected_3d[i-1, r_idx, axis] + (corrected_3d[i-1, r_idx, axis] - corrected_3d[i-2, r_idx, axis])
+                        params_l = kf_params_cache.get((l_idx, axis))
+                        vel_l_axis, _ = run_kalman_filter_for_series(corrected_3d[:i, l_idx, axis], params=params_l)
+                        if vel_l_axis is not None and len(vel_l_axis) > 0: corrected_3d[i, l_idx, axis] = corrected_3d[i-1, l_idx, axis] + vel_l_axis[-1]
+                        else: corrected_3d[i, l_idx, axis] = corrected_3d[i-1, l_idx, axis] + (corrected_3d[i-1, l_idx, axis] - corrected_3d[i-2, l_idx, axis])
             elif accel_r > ACCELERATION_THRESHOLD and accel_l < ACCELERATION_THRESHOLD:
-                # === デバッグ文 ===
-                # print(f"フレーム {i}: 🚨 右足 {name} で異常加速度を検出 (R:{accel_r:.2f} > {ACCELERATION_THRESHOLD})。補正を開始...")
-
                 corrected_3d[i, l_idx] = current_raw[l_idx]
                 for axis in range(3):
-                    vel_r_axis = run_kalman_filter_for_series(corrected_3d[:i, r_idx, axis])
+                    params = kf_params_cache.get((r_idx, axis))
+                    vel_r_axis, _ = run_kalman_filter_for_series(corrected_3d[:i, r_idx, axis], params=params)
                     if vel_r_axis is not None and len(vel_r_axis) > 0:
-                        kalman_velocity = vel_r_axis[-1]
-                        corrected_3d[i, r_idx, axis] = corrected_3d[i-1, r_idx, axis] + kalman_velocity
-                        # === デバッグ文 ===
-                        if name == "BigToe":
-                            print(f"  -> ✅ フレーム {i}, 右足 {name} ({'XYZ'[axis]}軸): カルマンフィルタ成功。速度: {kalman_velocity:.4f}")
+                        corrected_3d[i, r_idx, axis] = corrected_3d[i-1, r_idx, axis] + vel_r_axis[-1]
                     else:
-                        # === デバッグ文 (最重要) ===
-                        print(f"  -> ‼️ フレーム {i}, 右足 {name} ({'XYZ'[axis]}軸): カルマンフィルタ失敗！フォールバック（等速直線運動）で補正。")
                         corrected_3d[i, r_idx, axis] = corrected_3d[i-1, r_idx, axis] + (corrected_3d[i-1, r_idx, axis] - corrected_3d[i-2, r_idx, axis])
-
-            # --- 左足のみエラーのケースの処理 ---
             elif accel_r < ACCELERATION_THRESHOLD and accel_l > ACCELERATION_THRESHOLD:
-                # === デバッグ文 ===
-                # print(f"フレーム {i}: 🚨 左足 {name} で異常加速度を検出 (L:{accel_l:.2f} > {ACCELERATION_THRESHOLD})。補正を開始...")
-
                 corrected_3d[i, r_idx] = current_raw[r_idx]
                 for axis in range(3):
-                    vel_l_axis = run_kalman_filter_for_series(corrected_3d[:i, l_idx, axis])
+                    params = kf_params_cache.get((l_idx, axis))
+                    vel_l_axis, _ = run_kalman_filter_for_series(corrected_3d[:i, l_idx, axis], params=params)
                     if vel_l_axis is not None and len(vel_l_axis) > 0:
-                        # === デバッグ文 ===
-                        if name == "BigToe":
-                            print(f"  -> ✅ フレーム {i}, 左足 {name} ({'XYZ'[axis]}軸): カルマンフィルタ成功。速度予測で補正。")
-                        kalman_velocity = vel_l_axis[-1]
-                        corrected_3d[i, l_idx, axis] = corrected_3d[i-1, l_idx, axis] + kalman_velocity
+                        corrected_3d[i, l_idx, axis] = corrected_3d[i-1, l_idx, axis] + vel_l_axis[-1]
                     else:
-                        # === デバッグ文 ===
-                        print(f"  -> ‼️ フレーム {i}, 左足 {name} ({'XYZ'[axis]}軸): カルマンフィルタ失敗！フォールバック（等速直線運動）で補正。")
                         corrected_3d[i, l_idx, axis] = corrected_3d[i-1, l_idx, axis] + (corrected_3d[i-1, l_idx, axis] - corrected_3d[i-2, l_idx, axis])
     return corrected_3d
 
 # =============================================================================
-# 4. データの後処理と可視化
+# 4. データの後処理と可視化 (★★ ここから変更 ★★)
 # =============================================================================
 
 def calculate_accelerations(points_3d):
@@ -322,94 +258,63 @@ def calculate_accelerations(points_3d):
 def post_process_data(raw_points, corrected_points):
     """欠損値補間と平滑化フィルタを適用"""
     print("データの後処理中...")
-
-    # 処理対象のデータ配列をリスト化
     data_arrays = {'raw': raw_points.copy(), 'corrected': corrected_points.copy()}
     processed_arrays = {}
-
     for key, data_arr in data_arrays.items():
         if key == 'raw':
-            # --- ギャップが短い区間のみスプライン補間 ---
             for kp_idx in tqdm(range(data_arr.shape[1]), desc=f"  スプライン補間 ({key})"):
                 for axis_idx in range(data_arr.shape[2]):
                     seq = data_arr[:, kp_idx, axis_idx]
-                    is_nan = np.isnan(seq)
-                    nan_indices = np.where(is_nan)[0]
-
+                    is_nan, nan_indices = np.isnan(seq), np.where(np.isnan(seq))[0]
                     if not len(nan_indices): continue
-
-                    # NaNの連続区間を見つける
                     gaps = np.split(nan_indices, np.where(np.diff(nan_indices) != 1)[0] + 1)
-
                     for gap in gaps:
-                        if len(gap) > MAX_INTERPOLATION_GAP:
-                            continue # ギャップが長すぎる場合はスキップ
-
+                        if len(gap) > MAX_INTERPOLATION_GAP: continue
                         start, end = gap[0], gap[-1]
-                        # 補間に使用する前後の有効な点を十分な数だけ確保
                         prev_indices = np.where(~is_nan & (np.arange(len(seq)) < start))[0]
                         next_indices = np.where(~is_nan & (np.arange(len(seq)) > end))[0]
-
-                        if len(prev_indices) < 2 or len(next_indices) < 2:
-                            continue # 前後のデータが不足している場合はスキップ
-
-                        # ギャップの前後5点（最大）を使って補間
+                        if len(prev_indices) < 2 or len(next_indices) < 2: continue
                         interp_indices = np.concatenate([prev_indices[-5:], next_indices[:5]])
-                        interp_x = interp_indices
-                        interp_y = seq[interp_indices]
-
-                        if len(interp_x) < 4: continue # 補間に最低4点必要
-
-                        cs = CubicSpline(interp_x, interp_y)
+                        if len(interp_indices) < 4: continue
+                        cs = CubicSpline(interp_indices, seq[interp_indices])
                         data_arr[gap, kp_idx, axis_idx] = cs(gap)
-        else:
-            pass
-
-        # --- バターワースフィルタ ---
         for kp_idx in tqdm(range(data_arr.shape[1]), desc=f"  バターワースフィルタ ({key})"):
             for axis_idx in range(data_arr.shape[2]):
                 seq = data_arr[:, kp_idx, axis_idx]
                 valid_mask = ~np.isnan(seq)
-                if np.sum(valid_mask) > 8: # フィルタ適用に十分な長さが必要
+                if np.sum(valid_mask) > 8:
                     b, a = butter(4, BUTTERWORTH_CUTOFF / (FRAME_RATE / 2), btype='low')
                     data_arr[valid_mask, kp_idx, axis_idx] = filtfilt(b, a, seq[valid_mask])
-
         processed_arrays[key] = data_arr
-
     return processed_arrays['raw'], processed_arrays['corrected']
 
-
-def save_and_visualize_results(output_dir, file_prefix, frames, raw_unprocessed, raw_processed, final_corrected, raw_accelerations, corrected_accelerations):
-    """結果をJSONファイルに保存し、比較グラフを生成"""
+def save_and_visualize_results(output_dir, file_prefix, frames, raw_unprocessed, raw_processed, corrected_unprocessed, final_corrected, raw_accelerations, corrected_accelerations):
+    """
+    結果をJSONファイルに保存し、比較グラフを生成
+    (★変更★: corrected_unprocessed を引数に追加)
+    """
     print("結果の保存と可視化...")
     output_dir.mkdir(exist_ok=True, parents=True)
-    output_data = []
-    for i, frame_name in enumerate(frames):
-        output_data.append({
-            "frame_name": frame_name, "person_1": {
-                "raw_unprocessed_3d": raw_unprocessed[i].tolist(),
-                "raw_processed_3d": raw_processed[i].tolist(),
-                "final_corrected_3d": final_corrected[i].tolist()
-            }})
+    # ★変更★: JSONにも corrected_unprocessed を追加
+    output_data = [{"frame_name": frame_name, "person_1": {"raw_unprocessed_3d": raw_unprocessed[i].tolist(), "corrected_unprocessed_3d": corrected_unprocessed[i].tolist(), "raw_processed_3d": raw_processed[i].tolist(), "final_corrected_3d": final_corrected[i].tolist()}} for i, frame_name in enumerate(frames)]
     with open(output_dir / f"{file_prefix}_3d_results.json", 'w') as f:
         json.dump(output_data, f, indent=4)
     print(f"  ✓ JSONファイルを保存しました: {file_prefix}_3d_results.json")
-
     graphs_dir = output_dir / "graphs"; graphs_dir.mkdir(exist_ok=True)
     time_axis = np.arange(len(frames))
-
-    # --- 軌道プロット ---
     for r_idx, l_idx, name in KEYPOINT_PAIRS:
         fig, axes = plt.subplots(3, 2, figsize=(20, 15), sharex=True)
         fig.suptitle(f"{name} (KP {r_idx} & {l_idx}) Trajectory Analysis", fontsize=16)
         for axis in range(3):
-            ax0 = axes[axis, 0]
+            # --- ★変更★ 左列のプロット (Raw vs Corrected (Unfiltered)) ---
+            ax0 = axes[axis, 0]; ax1 = axes[axis, 1]
             ax0.plot(time_axis, raw_unprocessed[:, r_idx, axis], 'o', color='lightcoral', markersize=2, alpha=0.5, label=f'Right {name} (Raw)')
             ax0.plot(time_axis, raw_unprocessed[:, l_idx, axis], 'o', color='lightblue', markersize=2, alpha=0.5, label=f'Left {name} (Raw)')
-            ax0.plot(time_axis, final_corrected[:, r_idx, axis], 'r-', label=f'Right {name} (Final)')
-            ax0.plot(time_axis, final_corrected[:, l_idx, axis], 'b-', label=f'Left {name} (Final)')
-            ax0.set_title(f'Left/Right Comparison (Raw vs Final) - {"XYZ"[axis]} axis'); ax0.set_ylabel('Position (mm)'); ax0.grid(True); ax0.legend()
-            ax1 = axes[axis, 1]
+            ax0.plot(time_axis, corrected_unprocessed[:, r_idx, axis], 'r-', label=f'Right {name} (Corrected)')
+            ax0.plot(time_axis, corrected_unprocessed[:, l_idx, axis], 'b-', label=f'Left {name} (Corrected)')
+            ax0.set_title(f'Left/Right Comparison (Raw vs Corrected) - {"XYZ"[axis]} axis'); ax0.set_ylabel('Position (mm)'); ax0.grid(True); ax0.legend()
+
+            # --- 右列のプロット (Raw Processed vs Final Corrected (Filtered)) ---
             ax1.plot(time_axis, raw_processed[:, r_idx, axis], 'r--', alpha=0.7, label=f'Right {name} (Raw Processed)')
             ax1.plot(time_axis, final_corrected[:, r_idx, axis], 'r-', label=f'Right {name} (Final Corrected)')
             ax1.plot(time_axis, raw_processed[:, l_idx, axis], 'b--', alpha=0.7, label=f'Left {name} (Raw Processed)')
@@ -418,85 +323,70 @@ def save_and_visualize_results(output_dir, file_prefix, frames, raw_unprocessed,
         plt.tight_layout(rect=[0, 0.03, 1, 0.95]); plt.savefig(graphs_dir / f"{file_prefix}_{name}_trajectory.png"); plt.close()
     print(f"  ✓ 軌道グラフを {graphs_dir} に保存しました。")
 
-    # --- 加速度プロット ---
+    # 加速度プロット (変更なし)
     for r_idx, l_idx, name in KEYPOINT_PAIRS:
         fig, axes = plt.subplots(2, 1, figsize=(20, 12), sharex=True)
         fig.suptitle(f"{name} (KP {r_idx} & {l_idx}) Acceleration Analysis", fontsize=16)
-
         axes[0].plot(time_axis, raw_accelerations[:, r_idx], 'r-', alpha=0.5, label=f'Right {name} (Raw Accel)')
         axes[0].plot(time_axis, corrected_accelerations[:, r_idx], 'r-', linewidth=2, label=f'Right {name} (Final Accel)')
         axes[0].axhline(y=ACCELERATION_THRESHOLD, color='k', linestyle='--', label='Threshold')
-        axes[0].set_title(f'Right {name} Acceleration')
-        axes[0].set_ylabel('Acceleration (mm/frame^2)')
-        axes[0].legend(); axes[0].grid(True)
-
+        axes[0].set_title(f'Right {name} Acceleration'); axes[0].set_ylabel('Acceleration (mm/frame^2)'); axes[0].legend(); axes[0].grid(True)
         axes[1].plot(time_axis, raw_accelerations[:, l_idx], 'b-', alpha=0.5, label=f'Left {name} (Raw Accel)')
         axes[1].plot(time_axis, corrected_accelerations[:, l_idx], 'b-', linewidth=2, label=f'Left {name} (Final Accel)')
         axes[1].axhline(y=ACCELERATION_THRESHOLD, color='k', linestyle='--', label='Threshold')
-        axes[1].set_title(f'Left {name} Acceleration')
-        axes[1].set_xlabel('Frame'); axes[1].set_ylabel('Acceleration (mm/frame^2)')
-        axes[1].legend(); axes[1].grid(True)
-
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        plt.savefig(graphs_dir / f"{file_prefix}_{name}_acceleration.png")
-        plt.close()
+        axes[1].set_title(f'Left {name} Acceleration'); axes[1].set_xlabel('Frame'); axes[1].set_ylabel('Acceleration (mm/frame^2)'); axes[1].legend(); axes[1].grid(True)
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95]); plt.savefig(graphs_dir / f"{file_prefix}_{name}_acceleration.png"); plt.close()
     print(f"  ✓ 加速度グラフを {graphs_dir} に保存しました。")
-
 
 # =============================================================================
 # メイン実行部
 # =============================================================================
 def main():
-    """メインの処理パイプライン (try_1_kalman.pyの構成を反映)"""
+    """メインの処理パイプライン"""
     directions = ["fl", "fr"]
     try:
         params_cam1 = load_camera_parameters(STEREO_CALI_DIR / directions[0] / "camera_params_with_ext_OC.json")
         params_cam2 = load_camera_parameters(STEREO_CALI_DIR / directions[1] / "camera_params_with_ext_OC.json")
-        P1 = create_projection_matrix(params_cam1)
-        P2 = create_projection_matrix(params_cam2)
+        P1, P2 = create_projection_matrix(params_cam1), create_projection_matrix(params_cam2)
     except FileNotFoundError as e:
-        print(f"✗ エラー: カメラパラメータファイルが見つかりません。{e}")
-        return
-
+        print(f"✗ エラー: カメラパラメータファイルが見つかりません。{e}"); return
     subject_dirs = sorted([d for d in ROOT_DIR.iterdir() if d.is_dir() and d.name.startswith("sub")])
     for subject_dir in subject_dirs:
         thera_dirs = sorted([d for d in subject_dir.iterdir() if d.is_dir() and d.name.startswith("thera")])
         for thera_dir in thera_dirs:
-            if subject_dir.name != "sub1" or thera_dir.name != "thera0-2":
-                continue
-
+            # NOTE: デバッグ用に処理対象を限定
+            if subject_dir.name != "sub1" or thera_dir.name != "thera0-2": continue
             print(f"\n{'='*80}\n処理開始: {thera_dir.relative_to(ROOT_DIR)}")
-            openpose_dir1 = thera_dir / directions[0] / "openpose.json"
-            openpose_dir2 = thera_dir / directions[1] / "openpose.json"
+            openpose_dir1, openpose_dir2 = thera_dir / directions[0] / "openpose.json", thera_dir / directions[1] / "openpose.json"
             if not (openpose_dir1.exists() and openpose_dir2.exists()):
-                print(f"  - スキップ: OpenPoseディレクトリが見つかりません。")
-                continue
-
-            # 1. 2Dデータの読み込み
+                print(f"  - スキップ: OpenPoseディレクトリが見つかりません。"); continue
             kps1_seq, kps2_seq, frames = load_2d_data(openpose_dir1, openpose_dir2)
             if not frames:
-                print(f"  - スキップ: 共通フレームが見つかりません。")
-                continue
+                print(f"  - スキップ: 共通フレームが見つかりません。"); continue
 
-            # 2. 生の3D座標を計算
             raw_3d = calculate_raw_3d_coordinates(kps1_seq, kps2_seq, P1, P2)
-
-            # 3. フレームごとの補正
-            corrected_3d = apply_frame_by_frame_correction(raw_3d, kps1_seq, kps2_seq, P1, P2)
-
-            # 4. データの後処理
+            corrected_3d = apply_frame_by_frame_correction(raw_3d, kps1_seq, kps2_seq, P1, P2) # 後処理前の補正済みデータ
             raw_processed, final_corrected = post_process_data(raw_3d, corrected_3d)
 
-            # 5. 結果の保存と可視化
-            output_dir = thera_dir / "3d_gait_analysis_frame_by_frame_kalman"
+            output_dir = thera_dir / "3d_gait_analysis_kalman_v2" # 出力先フォルダ名を変更
             raw_accelerations = calculate_accelerations(raw_3d)
             corrected_accelerations = calculate_accelerations(final_corrected)
-            save_and_visualize_results(output_dir, thera_dir.name, frames, raw_3d, raw_processed, final_corrected, raw_accelerations, corrected_accelerations)
+
+            # --- ★変更★ save_and_visualize_results の呼び出し ---
+            # 後処理前の corrected_3d を corrected_unprocessed として渡す
+            save_and_visualize_results(
+                output_dir, thera_dir.name, frames,
+                raw_unprocessed=raw_3d,
+                raw_processed=raw_processed,
+                corrected_unprocessed=corrected_3d,
+                final_corrected=final_corrected,
+                raw_accelerations=raw_accelerations,
+                corrected_accelerations=corrected_accelerations
+            )
             print(f"処理が正常に完了しました: {thera_dir.name}")
 
 if __name__ == '__main__':
     try:
         main()
     except Exception as e:
-        print(f"\nエラーが発生しました: {e}")
-        traceback.print_exc()
+        print(f"\nエラーが発生しました: {e}"); traceback.print_exc()
