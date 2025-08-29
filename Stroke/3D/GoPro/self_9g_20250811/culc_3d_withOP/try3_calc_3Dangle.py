@@ -34,8 +34,8 @@ def load_3d_data_from_json(json_path, person_key='person_1'):
 
         data_sets = {'raw_processed': [], 'final': []}
         data_keys = {
-            'raw_processed': 'points_3d_raw_processed',
-            'final': 'points_3d_final'
+            'raw_processed': 'raw_processed_3d',
+            'final': 'final_corrected_3d'
         }
 
         for frame_data in all_frames_data:
@@ -147,125 +147,36 @@ def calc_joint_angles_3d(points_3d):
 
         return angle_deg
 
-    def calculate_signed_3d_vector_angle(v1, v2, reference_normal=None):
-        """
-        2つの3Dベクトル間の符号付き角度を計算
-
-        Args:
-            v1: 第1ベクトル (frames, 3) - 近位セグメント
-            v2: 第2ベクトル (frames, 3) - 遠位セグメント
-            reference_normal: 参照法線ベクトル（屈曲方向の判定用）
-
-        Returns:
-            np.ndarray: 符号付き角度（度数）
-        """
-        # ベクトルの長さを計算
-        v1_norm = np.linalg.norm(v1, axis=1, keepdims=True)
-        v2_norm = np.linalg.norm(v2, axis=1, keepdims=True)
-
-        # 正規化
-        v1_unit = np.divide(v1, v1_norm, out=np.zeros_like(v1), where=v1_norm!=0)
-        v2_unit = np.divide(v2, v2_norm, out=np.zeros_like(v2), where=v2_norm!=0)
-
-        # 内積を計算
-        dot_product = np.sum(v1_unit * v2_unit, axis=1)
-
-        # 外積を計算
-        cross_product = np.cross(v1_unit, v2_unit)
-        cross_magnitude = np.linalg.norm(cross_product, axis=1)
-
-        # 角度を計算
-        angle_rad = np.arctan2(cross_magnitude, dot_product)
-
-        # 符号の判定（参照法線との内積で決定）
-        if reference_normal is not None:
-            # 外積と参照法線の内積で符号を決定
-            sign = np.sum(cross_product * reference_normal, axis=1)
-            sign = np.sign(sign)
-            angle_rad = angle_rad * sign
-
-        # 度数に変換
-        angle_deg = np.degrees(angle_rad)
-
-        return angle_deg
-
-    def calculate_joint_flexion_extension(proximal_point, joint_point, distal_point):
-        """
-        関節の屈曲-伸展角度を3Dベクトル角度として計算
-
-        Args:
-            proximal_point: 近位点の座標 (frames, 3)
-            joint_point: 関節点の座標 (frames, 3)
-            distal_point: 遠位点の座標 (frames, 3)
-
-        Returns:
-            np.ndarray: 屈曲-伸展角度（度数）
-        """
-        # セグメントベクトルを計算
-        proximal_segment = joint_point - proximal_point  # 近位セグメント（関節へ向かう）
-        distal_segment = distal_point - joint_point      # 遠位セグメント（関節から離れる）
-
-        # 2つのセグメント間の角度を計算
-        angle = calculate_3d_vector_angle(proximal_segment, distal_segment)
-
-        # 180度から引いて関節角度にする（真っ直ぐが180度、屈曲すると角度が小さくなる）
-        joint_angle = 180.0 - angle
-
-        return joint_angle
-
-    def calculate_hip_angle_with_trunk_3d(trunk_point1, trunk_point2, hip_point, knee_point):
-        """
-        体幹基準での股関節角度を3Dベクトル角度として計算
-
-        Args:
-            trunk_point1, trunk_point2: 体幹の2点 (frames, 3)
-            hip_point: 股関節点 (frames, 3)
-            knee_point: 膝関節点 (frames, 3)
-
-        Returns:
-            np.ndarray: 股関節角度（度数）
-        """
-        # 体幹ベクトル
-        trunk_vector = trunk_point2 - trunk_point1
-
-        # 大腿ベクトル
-        thigh_vector = knee_point - hip_point
-
-        # 2つのベクトル間の角度を計算
-        angle = calculate_3d_vector_angle(trunk_vector, thigh_vector)
-
-        return angle
-
     # 全3D座標を使用
     p = points_3d  # (frames, 25, 3)
 
     # 股関節の屈曲伸展角度
-    trunk_vector = p[:, KEYPOINTS_MAP['MidHip']] - p[:, KEYPOINTS_MAP['Neck']]
-    l_thigh_vector = p[:, KEYPOINTS_MAP['LKnee']] - p[:, KEYPOINTS_MAP['LHip']]
+    trunk_vector = p[:, KEYPOINTS_MAP['MidHip']] - p[:, KEYPOINTS_MAP['Neck']]  #首から骨盤へのベクトル
+    l_thigh_vector = p[:, KEYPOINTS_MAP['LKnee']] - p[:, KEYPOINTS_MAP['LHip']]   #股関節から膝へのベクトル
     l_hip_flexion_angle = calculate_3d_vector_angle(l_thigh_vector, trunk_vector)
-    l_hip_flexion_angle = l_hip_flexion_angle - 180
+    l_hip_flexion_angle = l_hip_flexion_angle
 
     r_thigh_vector = p[:, KEYPOINTS_MAP['RKnee']] - p[:, KEYPOINTS_MAP['RHip']]
     r_hip_flexion_angle = calculate_3d_vector_angle(r_thigh_vector, trunk_vector)
-    r_hip_flexion_angle = r_hip_flexion_angle - 180
+    r_hip_flexion_angle = r_hip_flexion_angle
 
     # 膝関節の屈曲伸展角度
     l_shank_vector = p[:, KEYPOINTS_MAP['LAnkle']] - p[:, KEYPOINTS_MAP['LKnee']]
     l_knee_flexion_angle = calculate_3d_vector_angle(l_thigh_vector, l_shank_vector)
-    l_knee_flexion_angle = l_knee_flexion_angle - 180
+    l_knee_flexion_angle = l_knee_flexion_angle
 
     r_shank_vector = p[:, KEYPOINTS_MAP['RAnkle']] - p[:, KEYPOINTS_MAP['RKnee']]
     r_knee_flexion_angle = calculate_3d_vector_angle(r_thigh_vector, r_shank_vector)
-    r_knee_flexion_angle = r_knee_flexion_angle - 180
+    r_knee_flexion_angle = r_knee_flexion_angle
 
     # 足関節の背屈底屈角度
     l_foot_vector = (p[:, KEYPOINTS_MAP['LBigToe']] + p[:, KEYPOINTS_MAP['LSmallToe']]) - p[:, KEYPOINTS_MAP['LAnkle']]
     l_ankle_dorsiflexion_angle = calculate_3d_vector_angle(l_shank_vector, l_foot_vector)
-    l_ankle_dorsiflexion_angle = l_ankle_dorsiflexion_angle - 90
+    l_ankle_dorsiflexion_angle = l_ankle_dorsiflexion_angle
 
     r_foot_vector = (p[:, KEYPOINTS_MAP['RBigToe']] + p[:, KEYPOINTS_MAP['RSmallToe']]) - p[:, KEYPOINTS_MAP['RAnkle']]
     r_ankle_dorsiflexion_angle = calculate_3d_vector_angle(r_shank_vector, r_foot_vector)
-    r_ankle_dorsiflexion_angle = r_ankle_dorsiflexion_angle - 90
+    r_ankle_dorsiflexion_angle = r_ankle_dorsiflexion_angle
 
     # 股関節の外転内転角度
     l_hip_abduction_angle = calculate_3d_vector_angle(l_thigh_vector, trunk_vector)
@@ -400,7 +311,7 @@ def main():
     base_dir = Path(r"G:\gait_pattern\20250811_br\sub1\thera0-2")
 
     # try_1_kalman.pyが出力したJSONファイルを指定
-    json_file = base_dir / "3d_gait_analysis_kalman_v1" / "thera0-2_3d_results_kalman.json"
+    json_file = base_dir / "3d_gait_analysis_kalman_v3" / "thera0-2_3d_results.json"
     subject_name = base_dir.parent.name
     thera_name = base_dir.name
 
@@ -458,14 +369,22 @@ def main():
             plt.close()
 
         if subject_name == "sub1" and thera_name == "thera0-2":
-            start_frame = ic_frames['R'][3]
-            end_frame = ic_frames['R'][5]
-            # end_frame = ic_frames['R'][7]
+            start_frame = 200
+            end_frame = 400
+            side = "R"
         else:
-            start_frame = ic_frames['R'][0]
-            end_frame = ic_frames['R'][-1]
+            start_frame_idx = 0
+            end_frame_idx = -1
 
-        print(f"解析範囲: {start_frame} 〜 {end_frame} フレーム")
+        start_frame_idx = next((i for i, v in enumerate(ic_frames['R']) if v > start_frame), None)
+        end_frame_idx = max((i for i, v in enumerate(ic_frames['R']) if v <= end_frame), default=None)
+
+        print(f"解析開始フレーム: {start_frame} (ICフレーム: {ic_frames['R'][start_frame_idx] if start_frame_idx is not None else 'N/A'})")
+        print(f"解析終了フレーム: {end_frame} (ICフレーム: {ic_frames['R'][end_frame_idx] if end_frame_idx is not None else 'N/A'})")
+
+        print(f"解析範囲: {start_frame_idx} 〜 {end_frame_idx} フレーム")
+        cycle_num = end_frame_idx - start_frame_idx
+        print(f"歩行周期数: {cycle_num} 周期")
 
         # 3. 関節角度の計算
         angles_df = calc_joint_angles_3d(points_3d)
@@ -475,6 +394,71 @@ def main():
         # データを保存
         angles_dict[data_type] = angles_df
         ic_frames_dict[data_type] = ic_frames
+
+    def plot_joint_angle_cycles(angles_df, ic_frames, joint_name, side, save_path):
+        """
+        歩行周期ごとに関節角度を歩行周期%で揃えてプロットし、平均±標準偏差を塗りつぶす
+
+        Args:
+            angles_df (pd.DataFrame): 関節角度データ（フレーム番号index）
+            ic_frames (list): 歩行周期の区切りフレーム番号（例: ICのフレーム番号リスト）
+            joint_name (str): 例 'Hip_Flexion'
+            side (str): 'L' or 'R'
+            save_path (Path): 保存パス
+        """
+        # 周期ごとにリサンプリング（0～100%で揃える）
+        cycles = []
+        for i in range(len(ic_frames)-1):
+            print(f"周期 {i+1}:")
+            start, end = ic_frames[i], ic_frames[i+1]
+            print(f"  - start: {start}, end: {end}")
+            cycle = angles_df.loc[start:end, f"{side}_{joint_name}"].values
+            # 0～100%で100分割
+            cycle_percent = np.linspace(0, 100, 100)
+            if len(cycle) < 2:
+                continue
+            cycle_interp = np.interp(cycle_percent, np.linspace(0, 100, len(cycle)), cycle)
+            cycles.append(cycle_interp)
+        if not cycles:
+            print("周期データがありません")
+            return
+        cycles = np.array(cycles)
+        mean_curve = np.mean(cycles, axis=0)
+        std_curve = np.std(cycles, axis=0)
+
+        # print(f"cycles:{cycles}")
+        # print(f"cycles.shape:{cycles.shape}")
+
+        plt.figure(figsize=(10,5))
+        for c in cycles:
+            plt.plot(np.linspace(0, 100, 100), c, color='gray', alpha=0.3)
+        plt.plot(np.linspace(0, 100, 100), mean_curve, color='blue', label='Mean')
+        plt.fill_between(np.linspace(0, 100, 100), mean_curve-std_curve, mean_curve+std_curve, color='blue', alpha=0.2, label='±1SD')
+        plt.xlabel('Gait Cycle (%)')
+        plt.ylabel('Angle (degrees)')
+        plt.title(f'{side} {joint_name} (Mean ± SD)')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(save_path)
+        plt.show()
+        plt.close()
+
+    # data_keys = {
+    #     'raw_processed': 'raw_processed_3d',
+    #     'final': 'final_corrected_3d'
+    # }
+
+    #右股関節屈曲角度を歩行周期%でプロット
+    plot_joint_angle_cycles(angles_df=angles_dict['final'], ic_frames=ic_frames_dict['final']['R'][start_frame_idx:end_frame_idx+1],
+                            joint_name='Hip_Flexion',side='R',save_path=output_dir / "R_Hip_Flexion_gaitcycle.png")
+
+    #右ひざ関節屈曲角度を歩行周期%でプロット
+    plot_joint_angle_cycles(angles_df=angles_dict['final'], ic_frames=ic_frames_dict['final']['R'][start_frame_idx:end_frame_idx+1],
+                            joint_name='Knee_Flexion', side='R', save_path=output_dir / "R_Knee_Flexion_gaitcycle.png")
+
+    #右足関節背屈角度を歩行周期%でプロット
+    plot_joint_angle_cycles(angles_df=angles_dict['final'], ic_frames=ic_frames_dict['final']['R'][start_frame_idx:end_frame_idx+1],
+                            joint_name='Ankle_Dorsiflexion', side='R', save_path=output_dir / "R_Ankle_Dorsiflexion_gaitcycle.png")
 
     # 両方のデータが揃ったら比較プロットを作成
     if len(angles_dict) == 2:

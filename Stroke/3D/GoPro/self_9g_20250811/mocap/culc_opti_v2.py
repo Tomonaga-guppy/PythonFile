@@ -1,3 +1,7 @@
+"""
+Tposeの際の骨盤の向きにより、各フレームの骨盤の向きを補正してから関節角度を計算する
+"""
+
 import pandas as pd
 import os
 import glob
@@ -7,11 +11,11 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt, resample
 import json
 
-def read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz):
+def read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz, geometry_path = None):
     df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])  #Motive
 
-    print(f"Original dataframe shape: {df.shape}")
-    print(f"Requested range: {start_frame_100hz} to {end_frame_100hz}")
+    print(f"元のデータ形状: {df.shape}")
+    print(f"解析範囲（100Hz）: {start_frame_100hz} to {end_frame_100hz}")
 
     # データの範囲をチェック
     if start_frame_100hz >= len(df) or end_frame_100hz >= len(df) or start_frame_100hz < 0:
@@ -21,7 +25,6 @@ def read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz):
     # 範囲を調整
     start_frame = max(0, start_frame_100hz)
     end_frame = min(len(df)-1, end_frame_100hz)
-
     df = df.loc[start_frame:end_frame]
     print(f"After range selection: {df.shape}")
 
@@ -29,9 +32,7 @@ def read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz):
         # 100Hz → 60Hz のダウンサンプリング
         original_length = len(df)
         target_length = int(original_length * 60 / 100)
-
-        print(f"Downsampling from {original_length} to {target_length} frames")
-
+        print(f"ダウンサンプリング: {original_length} → {target_length} フレーム")
         if target_length <= 0:
             print("Error: Target length is 0 after downsampling")
             return np.array([]), range(0)
@@ -62,19 +63,63 @@ def read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz):
 
     marker_set_df = df_down[[col for col in df_down.columns if any(marker in col[0] for marker in marker_set)]].copy()
 
-    print(f"Marker set dataframe shape: {marker_set_df.shape}")
+    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"before_interp_marker_set_{os.path.basename(csv_path)}"))
 
     if marker_set_df.empty:
         print("Error: No marker data found")
         return np.array([]), range(0)
 
-    success_frame_list = []
-    for frame in range(0, len(marker_set_df)):
-        if not marker_set_df.iloc[frame].isna().any():
-            success_frame_list.append(frame)
+    # LPSI補間を行う前に、元々LPSIが欠損していた場所を記録しておく
+    lpsi_cols = [c for c in marker_set_df.columns if 'LPSI' in c[0]]
+    original_lpsi_missing_mask = pd.Series(False, index=marker_set_df.index)
+    if lpsi_cols:
+        original_lpsi_missing_mask = marker_set_df[lpsi_cols].isnull().any(axis=1)
+        print("LPSIの元々の欠損状況:")
 
-    if not success_frame_list:
-        print("Error: No valid frames found")
+    print("LPSI等の細かい欠損を補完するため、先に三次スプライン補間を実行します。")
+    marker_set_df.interpolate(method='spline', order=3, limit_direction='both', inplace=True)
+
+    if geometry_path and os.path.exists(geometry_path):
+        if original_lpsi_missing_mask.any():
+            print(f"ジオメトリ情報 {geometry_path} を使用して、元々欠損していたLPSIを再計算・補完します。")
+            with open(geometry_path, 'r') as f:
+                geometry = json.load(f)
+
+            ref_vecs = geometry['reference_vectors']
+            source_vectors = [np.array(ref_vecs['RASI']), np.array(ref_vecs['LASI']), np.array(ref_vecs['RPSI'])]
+            target_offset_vector = np.array(geometry['target_offset_vector']['LPSI'])
+
+            rasi_cols = [c for c in marker_set_df.columns if 'RASI' in c[0]]
+            lasi_cols = [c for c in marker_set_df.columns if 'LASI' in c[0]]
+            rpsi_cols = [c for c in marker_set_df.columns if 'RPSI' in c[0]]
+
+            # 元々LPSIが欠損していた行だけをループ
+            for index in marker_set_df[original_lpsi_missing_mask].index:
+                row = marker_set_df.loc[index]
+                # 基準点が（スプライン補間後に）有効か確認
+                if not row[rasi_cols].isnull().any() and not row[lasi_cols].isnull().any() and not row[rpsi_cols].isnull().any():
+                    p_rasi = row[rasi_cols].values
+                    p_lasi = row[lasi_cols].values
+                    p_rpsi = row[rpsi_cols].values
+
+                    centroid_current = (p_rasi + p_lasi + p_rpsi) / 3
+                    target_vectors = [p_rasi - centroid_current, p_lasi - centroid_current, p_rpsi - centroid_current]
+
+                    rot, _ = R.align_vectors(target_vectors, source_vectors)
+                    estimated_offset = rot.apply(target_offset_vector)
+                    estimated_lpsi = centroid_current + estimated_offset
+
+                    marker_set_df.loc[index, lpsi_cols] = estimated_lpsi
+        else:
+            print("LPSIに元々の欠損はなかったため、幾何学的な補間はスキップしました。")
+
+    # 最終チェック：それでも欠損が残っている場合は線形補間
+    if marker_set_df.isnull().values.any():
+        print("警告: 全ての補間処理後もデータに欠損値が残っています。残りの欠損を線形補間します。")
+        marker_set_df.interpolate(method='linear', limit_direction='both', inplace=True)
+
+    if marker_set_df.isnull().values.any():
+        print("エラー: 補間後も処理できない欠損値が残っています。")
         return np.array([]), range(0)
 
     # full_range をダウンサンプリング後のインデックスベースで設定
@@ -112,39 +157,51 @@ def butter_lowpass_fillter(data, order, cutoff_freq, frame_list, sampling_freq=6
 
 def main():
     down_hz = True  # True: 100Hz→60Hz変換, False: 100Hzのまま
-    csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-16\mocap"
+    # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-16\mocap"
+    # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-15\mocap"
+    # csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera0-2\mocap"
+    csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera1-1\mocap"
     if csv_path_dir == r"G:\gait_pattern\20250811_br\sub1\thera0-2\mocap":
         start_frame_100hz = 1000
         end_frame_100hz = 1440
+    elif csv_path_dir == r"G:\gait_pattern\20250811_br\sub1\thera1-1\mocap":
+        start_frame_100hz = 1089
+        end_frame_100hz = 1252
     elif csv_path_dir == r"G:\gait_pattern\20250811_br\sub0\thera0-16\mocap":
         start_frame_100hz = 890
         end_frame_100hz = 1210
     elif csv_path_dir == r"G:\gait_pattern\20250811_br\sub0\thera0-15\mocap":
-        #0-0-15 で股関節外転
-        start_frame_100hz = 2751
-        end_frame_100hz = 3144
+        # #0-0-15 で股関節外転 maxは1756くらい（60Hz）
+        # start_frame_100hz = 2751
+        # end_frame_100hz = 3144
         #0-0-15 で右股関節外旋（右足外転）
         start_frame_100hz = 627
         end_frame_100hz = 976
     else:
         #適当
-        start_frame_100hz = 1600
-        end_frame_100hz = 1800
+        start_frame_100hz = 0
+        end_frame_100hz = 100
 
     csv_paths = glob.glob(os.path.join(csv_path_dir, "*.csv"))
 
     # marker_set_で始まるファイルを除外
     csv_paths = [path for path in csv_paths if not os.path.basename(path).startswith("marker_set_")]
-
     # angle_で始まるファイルも除外（既に処理済みのファイル）
     csv_paths = [path for path in csv_paths if not os.path.basename(path).startswith("angle_")]
+
+    # Tpose時の骨盤の姿勢（3x3の回転行列）を読み込み
+    neutral_matrix_path = r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap\rot_pelvis_neutral.npy"
+    rot_pelvis_neutral = np.load(neutral_matrix_path)
+
+    geometry_json_path = r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap\geometry.json"
 
     for i, csv_path in enumerate(csv_paths):
         print(f"Processing: {csv_path}")
 
         try:
-            keypoints_mocap, full_range = read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz)
+            keypoints_mocap, full_range = read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz,
+                                                            geometry_path=geometry_json_path)
         except Exception as e:
             print(f"Error processing {csv_path}: {e}")
             continue
@@ -162,9 +219,6 @@ def main():
         angle_list = []
         dist_list = []
         bector_list = []
-
-        e_z_lshank_list = []
-        e_z_lfoot_list = []
 
         # 前フレームの角度を保存する変数（角度の連続性を保つため）
         prev_angles = None
@@ -236,6 +290,12 @@ def main():
             e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
             rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
 
+            """現在の骨盤の向きがTposeの状態からどれだけずれているかを計算し、その分を補正する（Tposeの状態をゼロとする）"""
+            # rot_pelvis = np.dot(np.linalg.inv(rot_pelvis_neutral), rot_pelvis)
+            # e_x_pelvis = rot_pelvis[:,0]
+            # e_y_pelvis = rot_pelvis[:,1]
+            # e_z_pelvis = rot_pelvis[:,2]
+
             #必要な原点の設定
             rshank = (rknee[frame_num, :] + rknee2[frame_num, :]) / 2
             lshank = (lknee[frame_num, :] + lknee2[frame_num, :]) / 2
@@ -299,6 +359,14 @@ def main():
             r_ankle_absorption_angle = R.from_matrix(r_ankle_realative_rotation).as_euler('YZX', degrees=True)[0]
             l_ankle_absorption_angle = R.from_matrix(l_ankle_realative_rotation).as_euler('YZX', degrees=True)[0]
 
+            # 股関節の外旋内旋角度
+            r_hip_external_rotation_angle = R.from_matrix(r_hip_realative_rotation).as_euler('YZX', degrees=True)[1]
+            l_hip_external_rotation_angle = R.from_matrix(l_hip_realative_rotation).as_euler('YZX', degrees=True)[1]
+            # # 確認用0-0-15 左足基準で右足の外旋内旋角度を計算(足の場合はXが外転内転, Z内返し外返し)
+            # r_ankle_realative_rotation_rl = np.dot(np.linalg.inv(rot_lshank), rot_rfoot)
+            # r_hip_external_rotation_angle = R.from_matrix(r_ankle_realative_rotation_rl).as_euler('YZX', degrees=True)[2]
+
+
             # 股関節の外転内転角度
             r_hip_abduction_angle = R.from_matrix(r_hip_realative_rotation).as_euler('YZX', degrees=True)[2]
             l_hip_abduction_angle = R.from_matrix(l_hip_realative_rotation).as_euler('YZX', degrees=True)[2]
@@ -306,14 +374,7 @@ def main():
             # rknee_realative_rotation_rl = np.dot(np.linalg.inv(rot_lshank), rot_rshank)
             # r_hip_abduction_angle = R.from_matrix(rknee_realative_rotation_rl).as_euler('YZX', degrees=True)[2]  #左下腿基準で右膝の外転内転角度を計算
 
-            # 股関節の外旋内旋角度
-            r_hip_external_rotation_angle = R.from_matrix(r_hip_realative_rotation).as_euler('YZX', degrees=True)[1]
-            l_hip_external_rotation_angle = R.from_matrix(l_hip_realative_rotation).as_euler('YZX', degrees=True)[1]
 
-
-            # 確認用0-0-15 左足基準で右足の外旋内旋角度を計算(足の場合はXが外転内転, Z内返し外返し)
-            # r_ankle_realative_rotation_rl = np.dot(np.linalg.inv(rot_lshank), rot_rfoot)
-            # r_hip_external_rotation_angle = R.from_matrix(r_ankle_realative_rotation_rl).as_euler('YZX', degrees=True)[2]
 
             # ただの2つのベクトルのなす角
 
@@ -374,10 +435,9 @@ def main():
             # lhee_basse_pelvis = np.dot(trans_mat_pelvis, np.append(lhee[frame_num,:], 1))[:3]
             # print(f"lhee_basse_pelvis = {lhee_basse_pelvis}")
 
-            plot_flag = False
-            # print(f"frame_num: {frame_num}")
+            plot_flag = True
             if plot_flag:
-                print(frame_num)
+                # print(frame_num)  #相対フレーム数
                 if frame_num == 0:
                 # if frame_num == 1756-1650:  #100Hzで2926(足を最大に外転してるくらいの時)
                     fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
@@ -603,19 +663,6 @@ def main():
             plt.savefig(os.path.join(csv_path_dir, "joint_angles_initial_contact_60Hz.png"))
             plt.close()
 
-            # 股関節の外転内転角度プロット
-            plt.plot(df.index, df["r_hip_abduction_angle"], label="Right Hip Abduction Angle")
-            # plt.plot(df.index, df["l_hip_abduction_angle"], label="Left Hip Abduction Angle")
-            for idx, ic_frame_60hz in enumerate(filtered_list_60hz_absolute):
-                plt.axvline(x=ic_frame_60hz, color='red', linestyle='--', alpha=0.5, label='Initial Contact (60Hz)' if idx == 0 else "")
-            plt.ylabel("Angle (degrees)")
-            plt.title("Hip Abduction Angles")
-            plt.legend()
-            plt.tight_layout()
-            # plt.show()
-            plt.savefig(os.path.join(csv_path_dir, "hip_abduction_angles_60Hz.png"))
-            plt.close()
-
             # 股関節の外旋内旋角度プロット
             # plt.plot(df.index, df["l_hip_external_rotation_angle"], label="Left Hip External Rotation Angle")
             plt.plot(df.index, df["r_hip_external_rotation_angle"], label="Right Hip External Rotation Angle")
@@ -628,6 +675,22 @@ def main():
             plt.savefig(os.path.join(csv_path_dir, "hip_external_rotation_angles_60Hz.png"))
             plt.show()
             plt.close()
+
+
+            # 股関節の外転内転角度プロット
+            plt.plot(df.index, df["r_hip_abduction_angle"], label="Right Hip Abduction Angle")
+            # plt.plot(df.index, df["l_hip_abduction_angle"], label="Left Hip Abduction Angle")
+            for idx, ic_frame_60hz in enumerate(filtered_list_60hz_absolute):
+                plt.axvline(x=ic_frame_60hz, color='red', linestyle='--', alpha=0.5, label='Initial Contact (60Hz)' if idx == 0 else "")
+            plt.ylabel("Angle (degrees)")
+            plt.title("Hip Abduction Angles")
+            plt.legend()
+            plt.tight_layout()
+            plt.show()
+            plt.savefig(os.path.join(csv_path_dir, "hip_abduction_angles_60Hz.png"))
+            plt.close()
+
+
 
             # デバッグ用：角度データとICフレームの対応確認
             print("\n=== デバッグ情報 ===")
