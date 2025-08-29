@@ -171,36 +171,62 @@ np.save(neutral_matrix_path, rot_pelvis_neutral)
 print(f"ニュートラルな骨盤の回転行列:\n{rot_pelvis_neutral}")
 print(f"ニュートラルな骨盤の回転行列を保存しました: {neutral_matrix_path}")
 
-r_asi = r_asi_array.mean(axis=0)
-l_asi = l_asi_array.mean(axis=0)
-r_psi = r_psi_array.mean(axis=0)
-l_psi = l_psi_array.mean(axis=0)
 
-# 3点 (RASI, LASI, LPSI) を基準点群とする
-centroid_ref = (r_asi + l_asi + r_psi) / 3
-# 補完したい点 (RPSI) の、基準点群中心からの相対ベクトル
-v_rasi_ref = r_asi - centroid_ref
-v_lasi_ref = l_asi - centroid_ref
-v_rpsi_ref = r_psi - centroid_ref
+"""
+T-poseデータから、各骨盤マーカーを残りの3点から計算するための
+幾何学情報をすべて計算し、JSONファイルに保存する。
+"""
+try:
+    df = pd.read_csv(tpose_csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])
+except Exception as e:
+    print(f"エラー: CSVファイルの読み込みに失敗しました。詳細: {e}")
 
-# 補完したい点 (LPSI) の、基準点群中心からの相対ベクトル
-v_lpsi_offset = l_psi - centroid_ref
+all_markers = ["RASI", "LASI", "RPSI", "LPSI"]
 
-# JSONデータを作成
-geometry = {
-    "reference_vectors": {
-        "RASI": v_rasi_ref.tolist(),
-        "LASI": v_lasi_ref.tolist(),
-        "RPSI": v_rpsi_ref.tolist()
-    },
-    "target_offset_vector": {
-        "LPSI": v_lpsi_offset.tolist()
+try:
+    marker_df = df[[col for col in df.columns if any(m in col[0] for m in all_markers)]].copy()
+except KeyError:
+    print(f"エラー: CSVファイルに {', '.join(all_markers)} のいずれかのデータが見つかりません。")
+
+valid_rows = marker_df.dropna()
+if valid_rows.empty:
+    print(f"エラー: T-poseファイルに4つのマーカーが全て揃っているフレームが見つかりませんでした。")
+
+print(f"{len(valid_rows)} フレーム分の有効なデータから平均的な位置関係を計算します。")
+mean_coords = valid_rows.mean()
+
+# 各マーカーの平均座標を辞書に格納
+marker_positions = {m: mean_coords[[c for c in mean_coords.index if m in c[0]]].values for m in all_markers}
+
+# 全ジオメトリ情報を格納する辞書
+full_geometry = {}
+
+# 各マーカーを補完対象（target）としてループ
+for target_marker in all_markers:
+    # 残りの3つを基準（references）とする
+    reference_markers = [m for m in all_markers if m != target_marker]
+
+    ref_positions = [marker_positions[m] for m in reference_markers]
+
+    # 基準点群の中心を計算
+    centroid_ref = np.mean(ref_positions, axis=0)
+
+    # 基準点群の中心からの相対ベクトル
+    reference_vectors = {name: (marker_positions[name] - centroid_ref).tolist() for name in reference_markers}
+
+    # 補完したい点の、基準点群中心からの相対ベクトル
+    target_offset_vector = (marker_positions[target_marker] - centroid_ref).tolist()
+
+    # このマーカー用の情報を辞書に格納
+    full_geometry[target_marker] = {
+        "reference_markers": reference_markers,
+        "reference_vectors": reference_vectors,
+        "target_offset_vector": target_offset_vector
     }
-}
 
-geometry_json_path = os.path.join(output_dir, "geometry.json")
+geometry_path = os.path.join(output_dir, "geometry.json")
 # JSONファイルに保存
-with open(geometry_json_path, 'w') as f:
-    json.dump(geometry, f, indent=4)
+with open(geometry_path, 'w') as f:
+    json.dump(full_geometry, f, indent=4)
 
-print(f"骨盤のジオメトリ情報を {geometry_json_path} に保存しました。")
+print(f"汎用的な骨盤ジオメトリ情報を {geometry_path} に保存しました。")
