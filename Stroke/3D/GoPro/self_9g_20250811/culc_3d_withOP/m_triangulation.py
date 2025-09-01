@@ -2,7 +2,7 @@ import numpy as np
 
 """
 ★★★ 重み付き三角測量モジュール ★★★
-2Dキーポイントから3D座標を計算するための関数群
+2Dキーポイントから3D座標と信頼度を計算するための関数群
 平行移動量は計測ごとに毎回変更してください
 """
 
@@ -18,13 +18,17 @@ def construct_D_block(P, uv, w=1):
     ))
 
 def weighted_linear_triangulation(P1, P2, correspondences, weights=None):
-    """重み付き線形三角測量を実行"""
+    """
+    重み付き線形三角測量を実行し、3D座標と信頼度を返す
+    """
     projection_matrices = [P1, P2]
     n_cameras = len(projection_matrices)
 
     if weights is None:
+        weights = [1.0] * n_cameras
         w = np.ones(n_cameras)
     else:
+        # nanを小さな値に置き換える
         w = [np.nan_to_num(wi, nan=0.1) for wi in weights]
 
     D = np.zeros((n_cameras * 2, 4))
@@ -37,20 +41,45 @@ def weighted_linear_triangulation(P1, P2, correspondences, weights=None):
     u, s, vh = np.linalg.svd(Q)
     point_3d = p2e(u[:, -1, np.newaxis])
 
-    return point_3d.flatten()
+    # --- ★★★ 変更点: 信頼度の計算 (utilsCameraPy3.py参考) ★★★ ---
+    weightArray = np.asarray(weights)
+    # 0でない重みが2つ未満の場合、信頼度は0
+    if np.count_nonzero(weightArray) < 2:
+        conf = 0.0
+    else:
+        # 0でない重みのみを抽出
+        valid_weights = weightArray[weightArray != 0]
+        # 有効な重みがすべてnanの場合、信頼度は0.5
+        if np.all(np.isnan(valid_weights)):
+             conf = 0.5
+        else:
+             # nanを無視して平均を計算
+             conf = np.nanmean(valid_weights)
+    # ----------------------------------------------------------------
+
+    return point_3d.flatten(), conf
 
 def triangulate_points_weighted(P1, P2, points1, points2, confidences1, confidences2):
-    """重み付き三角測量を使用して2D点から3D点を計算"""
+    """
+    重み付き三角測量を使用して2D点から3D点と信頼度を計算
+    """
     points_3d_list = []
+    # ★★★ 変更点: 信頼度を格納するリストを追加 ★★★
+    confidences_list = []
     for i in range(points1.shape[0]):
         correspondences = np.column_stack([points1[i], points2[i]])
         weights = [confidences1[i], confidences2[i]]
         try:
-            point_3d = weighted_linear_triangulation(P1, P2, correspondences, weights)
+            # ★★★ 変更点: 3D座標と信頼度を両方受け取る ★★★
+            point_3d, conf = weighted_linear_triangulation(P1, P2, correspondences, weights)
             points_3d_list.append(point_3d)
+            confidences_list.append(conf)
         except Exception:
             points_3d_list.append(np.full(3, np.nan))
-    return np.array(points_3d_list)
+            # ★★★ 変更点: エラー時は信頼度にもnanを追加 ★★★
+            confidences_list.append(np.nan)
+    # ★★★ 変更点: 3D座標と信頼度の両方を返す ★★★
+    return np.array(points_3d_list), np.array(confidences_list)
 
 def rotate_coordinates_x_axis(points_3d, angle_degrees=180):
     """3D座標をX軸周りに回転させた後、平行移動を適用する"""
@@ -65,12 +94,14 @@ def rotate_coordinates_x_axis(points_3d, angle_degrees=180):
     return rotated_points + translation
 
 def triangulate_and_rotate(P1, P2, points1, points2, confidences1, confidences2):
-    """三角測量と座標回転をまとめて行うヘルパー関数"""
+    """三角測量と座標回転をまとめて行い、3D座標と信頼度を返すヘルパー関数"""
     valid_indices = np.where(~np.isnan(points1).any(axis=1) & ~np.isnan(points2).any(axis=1))[0]
     if len(valid_indices) == 0:
-        return np.full((25, 3), np.nan)
+        # ★★★ 変更点: 信頼度の配列も返す ★★★
+        return np.full((25, 3), np.nan), np.full((25,), np.nan)
 
-    points_3d_raw = triangulate_points_weighted(
+    # ★★★ 変更点: 信頼度も受け取る ★★★
+    points_3d_raw, confidences_raw = triangulate_points_weighted(
         P1, P2,
         points1[valid_indices],
         points2[valid_indices],
@@ -78,6 +109,13 @@ def triangulate_and_rotate(P1, P2, points1, points2, confidences1, confidences2)
         confidences2[valid_indices]
     )
     points_3d_rotated = rotate_coordinates_x_axis(points_3d_raw)
+
     full_points_3d = np.full((25, 3), np.nan)
     full_points_3d[valid_indices] = points_3d_rotated
-    return full_points_3d
+
+    # ★★★ 変更点: 信頼度を格納する配列を作成し、値をセット ★★★
+    full_confidences = np.full((25,), np.nan)
+    full_confidences[valid_indices] = confidences_raw
+
+    # ★★★ 変更点: 3D座標と信頼度の両方を返す ★★★
+    return full_points_3d, full_confidences

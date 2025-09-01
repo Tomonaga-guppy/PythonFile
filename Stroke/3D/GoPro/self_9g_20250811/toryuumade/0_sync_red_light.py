@@ -54,31 +54,31 @@ def select_video_range(cap, detected_frame_num, video_path):
     json_filename = "gopro_trimming_info.json"
     json_path = video_path.parent.with_name("gopro_trimming_info.json")
     print(f"JSONファイルパス: {json_path}")
-    
+
     existing_start_rel = None
     existing_end_rel = None
     existing_trim_length = None
-    
+
     if json_path.exists():
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 existing_data = json.load(f)
-            
+
             trimming_settings = existing_data.get("trimming_settings", {})
             existing_start_rel = trimming_settings.get("start_frame_relative", None)
             existing_end_rel = trimming_settings.get("end_frame_relative", None)
             existing_trim_length = trimming_settings.get("trimmed_frame_count", None)
-            
+
             if existing_start_rel is not None and existing_end_rel is not None:
                 print(f"\n既存のJSONファイルを検出: {json_path}")
                 print(f"既存の相対開始フレーム: {existing_start_rel}")
                 print(f"既存の相対終了フレーム: {existing_end_rel}")
                 print(f"既存の切り出し長: {existing_trim_length}フレーム")
-                
+
                 return existing_start_rel, existing_end_rel
-                
+
                 # print("既存の設定を自動適用しますか？ (y/n) (デフォルト: y)")
-                
+
                 # # ★★★ 標準入力を使用してユーザー入力を取得 ★★★
                 # try:
                 #     user_input = input("入力してください (y/n): ").strip().lower()
@@ -91,46 +91,46 @@ def select_video_range(cap, detected_frame_num, video_path):
                 #         print("無効な入力です。新しい設定を行います")
                 # except (EOFError, KeyboardInterrupt):
                 #     print("\n入力がキャンセルされました。新しい設定を行います")
-                        
+
         except Exception as e:
             print(f"既存JSONファイルの読み込みに失敗: {e}")
             existing_start_rel = None
             existing_end_rel = None
-    
+
     print("\n=== 動画切り出し範囲選択 ===")
     print("detected_frameを0フレーム目として、その後の範囲を選択してください")
     print("矢印キー: フレーム移動 | スペース: 再生/停止 | Enter: 決定 | 'q': 終了")
-    
+
     # 動画情報を取得
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    
+
     # detected_frame以降のフレーム数を計算
     available_frames = total_frames - int(detected_frame_num)
-    
+
     if available_frames <= 0:
         print("エラー: detected_frame以降にフレームが存在しません")
         return None, None
-    
+
     # 選択状態の管理
     current_relative_frame = 0  # detected_frameからの相対位置
     is_playing = False
     start_frame_rel = -1  # 開始フレーム（相対位置）
     end_frame_rel = -1    # 終了フレーム（相対位置）
     selection_mode = "start"  # "start" or "end"
-    
+
     window_name = "Video Range Selector"
     cv2.namedWindow(window_name)
-    
+
     # トラックバーのコールバック関数
     def on_trackbar(val):
         nonlocal current_relative_frame, is_playing
         current_relative_frame = val
         is_playing = False
-    
+
     # トラックバーを作成（0からavailable_frames-1まで）
     cv2.createTrackbar("Position", window_name, 0, available_frames - 1, on_trackbar)
-    
+
     while True:
         # 自動再生
         if is_playing:
@@ -138,26 +138,26 @@ def select_video_range(cap, detected_frame_num, video_path):
             if current_relative_frame >= available_frames:
                 current_relative_frame = available_frames - 1
                 is_playing = False
-        
+
         # トラックバー位置を更新
         cv2.setTrackbarPos("Position", window_name, current_relative_frame)
-        
+
         # 実際のフレーム番号を計算
         actual_frame = int(detected_frame_num) + current_relative_frame
-        
+
         # フレームを読み込み
         cap.set(cv2.CAP_PROP_POS_FRAMES, actual_frame)
         ret, frame = cap.read()
-        
+
         if not ret:
             current_relative_frame = max(0, current_relative_frame - 1)
             is_playing = False
             continue
-        
+
         # 現在時刻を計算
         current_time = actual_frame / fps if fps > 0 else 0
         relative_time = current_relative_frame / fps if fps > 0 else 0
-        
+
         # UIオーバーレイを描画（余白を持たせて横幅いっぱいに使用）
         overlay = frame.copy()
         margin = 20  # 左右の余白
@@ -165,91 +165,91 @@ def select_video_range(cap, detected_frame_num, video_path):
         cv2.rectangle(overlay, (margin, 10), (frame.shape[1] - margin, overlay_height), (0, 0, 0), -1)
         alpha = 0.7
         frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
-        
+
         # 現在のモードを表示
         mode_text = f"Selecting: {'START frame' if selection_mode == 'start' else 'END frame'}"
         cv2.putText(frame, mode_text, (margin + 10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 255), 3)
-        
+
         # フレーム情報を表示
         frame_text = f"Relative Frame: {current_relative_frame} / Actual Frame: {actual_frame}"
         cv2.putText(frame, frame_text, (margin + 10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
-        
+
         # 時間情報を表示
         time_text = f"Relative Time: {relative_time:.2f}s / Actual Time: {current_time:.2f}s"
         cv2.putText(frame, time_text, (margin + 10, 130), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
-        
+
         # 選択済みフレーム情報を表示
         selection_text = f"Start: {start_frame_rel if start_frame_rel >= 0 else 'Not Set'} | End: {end_frame_rel if end_frame_rel >= 0 else 'Not Set'}"
         cv2.putText(frame, selection_text, (margin + 10, 170), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
-        
+
         # 操作説明を表示
         controls_text = "Arrow Keys: Move | Space: Play/Pause | Enter: Confirm | 'q': Quit"
         cv2.putText(frame, controls_text, (margin + 10, 210), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 0), 2)
-        
+
         # 選択済みフレームをマーク
         if start_frame_rel >= 0 and current_relative_frame == start_frame_rel:
             cv2.rectangle(frame, (0, 0), (frame.shape[1], frame.shape[0]), (0, 255, 0), 8)
             cv2.putText(frame, "START FRAME", (50, frame.shape[0] - 50), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), 4)
-        
+
         if end_frame_rel >= 0 and current_relative_frame == end_frame_rel:
             cv2.rectangle(frame, (0, 0), (frame.shape[1], frame.shape[0]), (0, 0, 255), 8)
             cv2.putText(frame, "END FRAME", (50, frame.shape[0] - 50), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 0, 255), 4)
-        
+
         # フレームをリサイズして表示
         display_frame = cv2.resize(frame, (1280, 720))
         cv2.imshow(window_name, display_frame)
-        
+
         # キー入力処理
         wait_time = 33 if is_playing else 0
         key = cv2.waitKeyEx(wait_time)
-        
+
         if key == -1:
             continue
-        
+
         if key == ord('q'):
             print("範囲選択を中断しました")
             cv2.destroyWindow(window_name)
             return None, None
-        
+
         elif key == 13:  # Enterキー
             if selection_mode == "start":
                 start_frame_rel = current_relative_frame
                 selection_mode = "end"
                 print(f"開始フレーム（相対）: {start_frame_rel} を設定しました")
                 print("次に終了フレームを選択してください")
-            
+
             elif selection_mode == "end":
                 if current_relative_frame <= start_frame_rel:
                     print("エラー: 終了フレームは開始フレームより後に設定してください")
                     continue
-                
+
                 end_frame_rel = current_relative_frame
                 print(f"終了フレーム（相対）: {end_frame_rel} を設定しました")
-                
+
                 # 確認
                 duration_frames = end_frame_rel - start_frame_rel + 1
                 duration_seconds = duration_frames / fps if fps > 0 else 0
                 print(f"切り出し範囲: {start_frame_rel} ～ {end_frame_rel} ({duration_frames}フレーム, {duration_seconds:.2f}秒)")
-                
+
                 cv2.destroyWindow(window_name)
                 return start_frame_rel, end_frame_rel
 
-        
+
         elif key == ord(' '):  # スペースキー
             is_playing = not is_playing
-        
+
         elif key == 2424832:  # 左矢印キー
             is_playing = False
             current_relative_frame = max(0, current_relative_frame - 1)
-        
+
         elif key == 2555904:  # 右矢印キー
             is_playing = False
             current_relative_frame = min(available_frames - 1, current_relative_frame + 1)
-        
+
         # ウィンドウが閉じられたかチェック
         if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
             break
-    
+
     cv2.destroyWindow(window_name)
     return None, None
 
@@ -259,40 +259,40 @@ def clip_video_segment(video_path, detected_frame_num, start_frame_rel, end_fram
     指定された範囲で動画を切り出して保存する
     """
     print("\n=== 動画切り出し処理 ===")
-    
+
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"エラー: 動画ファイルを開けませんでした: {video_path}")
         return None
-    
+
     # 動画情報を取得
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    
+
     # 実際のフレーム番号を計算
     actual_start_frame = int(detected_frame_num) + start_frame_rel
     actual_end_frame = int(detected_frame_num) + end_frame_rel
     total_output_frames = actual_end_frame - actual_start_frame + 1
-    
+
     # 出力ファイル名を生成
     output_filename = f"trimed_f{actual_start_frame}-{actual_end_frame}.mp4"
     output_path = video_path.parent / output_filename
-    
+
     # VideoWriterを初期化
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     writer = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
-    
+
     if not writer.isOpened():
         print(f"エラー: 出力ファイルを作成できませんでした: {output_path}")
         cap.release()
         return None
-    
+
     # 開始フレームに移動
     cap.set(cv2.CAP_PROP_POS_FRAMES, actual_start_frame)
-    
+
     print(f"動画切り出し中... ({total_output_frames}フレーム)")
-    
+
     # フレームを書き込み
     written_frames = 0
     for i in range(total_output_frames):
@@ -300,21 +300,21 @@ def clip_video_segment(video_path, detected_frame_num, start_frame_rel, end_fram
         if not ret:
             print(f"警告: フレーム {actual_start_frame + i} を読み込めませんでした")
             break
-        
+
         writer.write(frame)
         written_frames += 1
-        
+
         # 進捗表示
         if (i + 1) % 30 == 0 or i == total_output_frames - 1:
             progress = (i + 1) / total_output_frames * 100
             print(f"進捗: {progress:.1f}% ({i + 1}/{total_output_frames})")
-    
+
     cap.release()
     writer.release()
-    
+
     print(f"完了！切り出した動画を保存しました: {output_path}")
     print(f"出力フレーム数: {written_frames}")
-    
+
     return output_path
 
 
@@ -325,7 +325,7 @@ def save_trimming_info(video_path, detected_frame_num, start_frame_rel, end_fram
     # JSONファイル名を生成
     json_filename = "gopro_trimming_info.json"
     json_path = video_path.parent.with_name(json_filename)
-    
+
     # 動画情報を取得
     cap = cv2.VideoCapture(str(video_path))
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -334,17 +334,17 @@ def save_trimming_info(video_path, detected_frame_num, start_frame_rel, end_fram
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
-    
+
     # 実際のフレーム番号を計算
     actual_start_frame = int(detected_frame_num) + start_frame_rel
     actual_end_frame = int(detected_frame_num) + end_frame_rel
-    
+
     # 時間情報を計算
     detected_time = detected_frame_num / fps if fps > 0 else 0
     start_time = actual_start_frame / fps if fps > 0 else 0
     end_time = actual_end_frame / fps if fps > 0 else 0
     trimmed_duration = (actual_end_frame - actual_start_frame + 1) / fps if fps > 0 else 0
-    
+
     # JSON情報を作成
     trimming_info = {
         "metadata": {
@@ -379,21 +379,21 @@ def save_trimming_info(video_path, detected_frame_num, start_frame_rel, end_fram
             "trimmed_duration_seconds": trimmed_duration
         }
     }
-    
+
     # JSONファイルに保存
     try:
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(trimming_info, f, indent=2, ensure_ascii=False)
-        
+
         print(f"切り出し情報をJSONファイルに保存しました: {json_path}")
         print(f"基準フレーム: {int(detected_frame_num)}")
         print(f"切り出し範囲（相対）: {start_frame_rel} ～ {end_frame_rel}")
         print(f"切り出し範囲（絶対）: {actual_start_frame} ～ {actual_end_frame}")
         print(f"切り出し総フレーム数: {actual_end_frame - actual_start_frame + 1}")
         print(f"切り出し時間: {trimmed_duration:.2f}秒")
-        
+
         return json_path
-        
+
     except Exception as e:
         print(f"エラー: JSONファイルの保存に失敗しました: {e}")
         return None
@@ -487,43 +487,43 @@ def show_detection_frames(cap, detected_frame_num, roi_box, display_scale, total
 
     # 3x3グリッドの配置を作成
     grid_frames = []
-    
+
     # 上段：前の3フレーム（offset -3, -2, -1）
     top_row = []
     for i in range(3):
         frame = frames[i]
         frame_num, time_sec, avg_r, border_color, r_diff, offset = frame_info[i]
-        
-        processed_frame = create_frame_with_info(frame, frame_num, time_sec, avg_r, r_diff, 
-                                               border_color, border_thickness, target_width, 
+
+        processed_frame = create_frame_with_info(frame, frame_num, time_sec, avg_r, r_diff,
+                                               border_color, border_thickness, target_width,
                                                target_height, base_width, base_height, False)
         top_row.append(processed_frame)
-    
+
     # 中段：左右は黒、中央に検出フレーム（offset 0）
     middle_row = []
     # 左側：黒フレーム
     black_frame = create_black_frame_with_info(target_width, target_height, border_thickness)
     middle_row.append(black_frame)
-    
+
     # 中央：検出フレーム
     frame = frames[3]  # offset 0のフレーム
     frame_num, time_sec, avg_r, border_color, r_diff, offset = frame_info[3]
-    detected_frame = create_frame_with_info(frame, frame_num, time_sec, avg_r, r_diff, 
-                                          border_color, border_thickness, target_width, 
+    detected_frame = create_frame_with_info(frame, frame_num, time_sec, avg_r, r_diff,
+                                          border_color, border_thickness, target_width,
                                           target_height, base_width, base_height, True)
     middle_row.append(detected_frame)
-    
+
     # 右側：黒フレーム
     middle_row.append(black_frame.copy())
-    
+
     # 下段：後の3フレーム（offset +1, +2, +3）
     bottom_row = []
     for i in range(4, 7):
         frame = frames[i]
         frame_num, time_sec, avg_r, border_color, r_diff, offset = frame_info[i]
-        
-        processed_frame = create_frame_with_info(frame, frame_num, time_sec, avg_r, r_diff, 
-                                               border_color, border_thickness, target_width, 
+
+        processed_frame = create_frame_with_info(frame, frame_num, time_sec, avg_r, r_diff,
+                                               border_color, border_thickness, target_width,
                                                target_height, base_width, base_height, False)
         bottom_row.append(processed_frame)
 
@@ -538,10 +538,10 @@ def show_detection_frames(cap, detected_frame_num, roi_box, display_scale, total
     # タイトルを追加（フォントサイズを大きくする）
     title_height = 140  # タイトル領域を少し大きくする
     title_frame = np.zeros((title_height, final_grid.shape[1], 3), dtype=np.uint8)
-    
+
     # ★★★ Pathlibを使用してファイル名を取得 ★★★
     video_filename = video_path.name
-    
+
     cv2.putText(title_frame, f"Detection: {video_filename} - Frame {int(detected_frame_num)}",
                (20, 45), cv2.FONT_HERSHEY_SIMPLEX, 1.8, (255, 255, 255), 4)  # ファイル名を表示
     cv2.putText(title_frame, f"Red border = Detected frame  |  FPS: {fps:.1f}",
@@ -564,7 +564,7 @@ def show_detection_frames(cap, detected_frame_num, roi_box, display_scale, total
 
     # ウィンドウ名を定義
     window_name = "Detection Frames (3x3 Grid View)"
-    
+
     # cv2.imshow(window_name, final_display)
     print(f"\n=== 検出確認 ===")
     print(f"動画ファイル: {video_filename}")
@@ -580,10 +580,10 @@ def show_detection_frames(cap, detected_frame_num, roi_box, display_scale, total
     output_path = video_path.parent / output_filename
     # Pathオブジェクトを文字列に変換してcv2.imwriteに渡す
     cv2.imwrite(str(output_path), final_display)
-    
+
     # キー入力を待つ
     cv2.waitKey(0)
-    
+
     # ★★★ ウィンドウが存在するかチェックしてから削除 ★★★
     try:
         # ウィンドウが存在するかチェック
@@ -594,7 +594,7 @@ def show_detection_frames(cap, detected_frame_num, roi_box, display_scale, total
         pass
 
 
-def create_frame_with_info(frame, frame_num, time_sec, avg_r, r_diff, border_color, border_thickness, 
+def create_frame_with_info(frame, frame_num, time_sec, avg_r, r_diff, border_color, border_thickness,
                           target_width, target_height, base_width, base_height, is_detected):
     """
     フレームに情報テキストを追加して処理する
@@ -642,7 +642,7 @@ def create_black_frame_with_info(target_width, target_height, border_thickness):
     """
     # 黒いフレームを作成
     black_frame = np.zeros((target_height, target_width, 3), dtype=np.uint8)
-    
+
     # 枠を追加（グレー）
     frame_with_border = cv2.copyMakeBorder(black_frame, border_thickness, border_thickness,
                                           border_thickness, border_thickness,
@@ -672,7 +672,7 @@ def main():
         # ★★★ 既にtrimedファイルが存在するかチェック ★★★
         parent_dir = VIDEO_PATH.parent
         existing_trimed_files = list(parent_dir.glob("trimed*.mp4"))
-        
+
         if existing_trimed_files:
             print(f"\n=== {direction}方向をスキップ ===")
             print(f"既存のtrimedファイルが見つかりました: {[f.name for f in existing_trimed_files]}")
@@ -767,7 +767,7 @@ def main():
         while cap.isOpened() and processing_window_exists:
             # ★★★ フレーム読み込み前に現在のフレーム番号を取得 ★★★
             current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
-            
+
             ret, frame = cap.read()
             if not ret:
                 break
@@ -851,21 +851,21 @@ def main():
         # ★★★ 検出されたフレームがある場合、前後のフレームを表示し、動画切り出しを実行 ★★★
         if detected_frame_num is not None:
             print(f"R値が増加したフレーム番号: {int(detected_frame_num)}")
-            
+
             # 検出フレーム確認画面を表示
             show_detection_frames(cap, detected_frame_num, roi_box, DISPLAY_SCALE, total_frames, total_duration, VIDEO_PATH)
-            
+
             # 動画切り出し範囲を選択
             start_frame_rel, end_frame_rel = select_video_range(cap, detected_frame_num, VIDEO_PATH)
-            
+
             if start_frame_rel is not None and end_frame_rel is not None:
                 # 動画を切り出し
                 output_video_path = clip_video_segment(VIDEO_PATH, detected_frame_num, start_frame_rel, end_frame_rel)
-                
+
                 # JSON情報を保存
                 if output_video_path:
                     save_trimming_info(VIDEO_PATH, detected_frame_num, start_frame_rel, end_frame_rel, output_video_path)
-                
+
                 print(f"\n=== 処理完了 ===")
                 print(f"検出フレーム: {int(detected_frame_num)}")
                 print(f"切り出し動画: {output_video_path}")

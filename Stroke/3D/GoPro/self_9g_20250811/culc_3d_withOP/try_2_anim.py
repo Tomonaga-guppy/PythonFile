@@ -107,9 +107,9 @@ def update_animation_frame(frame_idx, animation_data, skeleton_plots, text_plot,
     all_plot_elements.extend([title_text, frame_info_text])
 
     # ★★★ 修正点: 毎フレームで軸の範囲を強制的に設定 ★★★
-    ax.set_xlim(-2000, 2000)
+    ax.set_xlim(0, 2000)
     ax.set_ylim(-2000, 2000)
-    ax.set_zlim(0, 2500)
+    ax.set_zlim(0, 2000)
 
     return all_plot_elements
 
@@ -140,19 +140,23 @@ def create_3d_animation(animation_data, metadata, save_path, view_config):
         print(f"データ範囲 - X: [{x_min:.1f}, {x_max:.1f}], Y: [{y_min:.1f}, {y_max:.1f}], Z: [{z_min:.1f}, {z_max:.1f}]")
 
         # 固定範囲を設定（データに基づいて調整可能）
-        ax.set_xlim(-2000, 2000)
-        ax.set_ylim(-5000, 3000)
-        ax.set_zlim(0, 2500)
+        ax.set_xlim(0, 2000)
+        ax.set_ylim(-2000, 2000)
+        ax.set_zlim(0, 2000)
     else:
         # デフォルト範囲
-        ax.set_xlim(-2000, 2000)
-        ax.set_ylim(-5000, 3000)
-        ax.set_zlim(0, 2500)
+        ax.set_xlim(0, 2000)
+        ax.set_ylim(-2000, 2000)
+        ax.set_zlim(0, 2000)
 
-    ax.set_xlabel('Z-axis (mm) - Forward')
-    ax.set_ylabel('X-axis (mm) - Sideways')
-    ax.set_zlabel('Y-axis (mm) - Up')
+    ax.set_xlabel('Z-axis (mm) - Forward', fontsize=35, labelpad=30)
+    ax.set_ylabel('X-axis (mm) - Sideways', fontsize=35, labelpad=30)
+    ax.set_zlabel('Y-axis (mm) - Up', fontsize=35, labelpad=30)
     ax.view_init(elev=view_config['elev'], azim=view_config['azim'])
+
+    ax.tick_params(axis='x', labelsize=14)
+    ax.tick_params(axis='y', labelsize=14)
+    ax.tick_params(axis='z', labelsize=14)
 
     # ★★★ 修正点: set_aspectを明示的に無効化 ★★★
     # ax.set_aspect('equal')を使わない、または'auto'に設定
@@ -174,7 +178,7 @@ def create_3d_animation(animation_data, metadata, save_path, view_config):
 
     title_str = (f"3D Gait Animation ({metadata['data_source']}) - View: {view_config['name']}\n"
                  f"{metadata['subject']} / {metadata['therapist']}")
-    title_text = ax.text2D(0.5, 0.95, title_str, transform=ax.transAxes, fontsize=14, ha='center')
+    title_text = ax.text2D(0.5, 0.95, title_str, transform=ax.transAxes, fontsize=20, ha='center')
     frame_info_text = ax.text2D(0.02, 0.02, "", transform=ax.transAxes, fontsize=10, va='bottom', bbox=dict(boxstyle='round', fc='wheat', alpha=0.7))
     text_plot = (title_text, frame_info_text)
 
@@ -197,7 +201,7 @@ def create_3d_animation(animation_data, metadata, save_path, view_config):
 def main():
     root_dir = Path(r"G:\gait_pattern\20250811_br")
     # results_folder_name = "3d_gait_analysis" # 読み込み元フォルダ名
-    results_folder_name = "3d_gait_analysis_spline_v1" # 読み込み元フォルダ名
+    results_folder_name = "3d_gait_analysis_kalman_v3" # 読み込み元フォルダ名
     output_animation_dir = root_dir / "3d_animations"
     output_animation_dir.mkdir(exist_ok=True)
 
@@ -207,7 +211,10 @@ def main():
         "oblique":  {"name": "Oblique",  "elev": 10, "azim": 45}
     }
 
-    data_keys_to_animate = ["points_3d_raw", "points_3d_corrected_kalman", "points_3d_final"]
+    # data_keys_to_animate = ["points_3d_raw", "points_3d_corrected_kalman", "points_3d_final"]
+    data_keys_to_animate = ["raw_unprocessed_3d"]
+
+    # data_keys_to_animate = ["points_3d_raw", "points_3d_corrected_kalman", "points_3d_final"]
 
     json_files = list(root_dir.glob(f"**/{results_folder_name}/*.json"))
     if not json_files:
@@ -225,7 +232,7 @@ def main():
             continue
 
         for data_key in data_keys_to_animate:
-            if data_key == "points_3d_corrected_kalman":
+            if data_key == "points_3d_corrected_kalman" or data_key == "points_3d_final":
                 print(f"作成省略 {data_key}")
                 continue
 
@@ -235,9 +242,9 @@ def main():
 
             if animation_data and metadata:
                 for view_name, view_config in view_options.items():
-                    # if view_name == "frontal":
-                    #     print(f"作成省略 {view_name}視点")
-                    #     continue
+                    if view_name != "oblique":
+                        print(f"作成省略 {view_name}視点")
+                        continue
 
                     tqdm.write(f"    - {view_config['name']}視点")
                     output_filename = f"{metadata['subject']}_{metadata['therapist']}_{metadata['data_source']}_{view_name}.mp4"
