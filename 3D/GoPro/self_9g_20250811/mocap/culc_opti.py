@@ -98,12 +98,12 @@ def read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz, geo
         cols = [c for c in marker_set_df.columns if marker in c[0]]
         if cols:
             original_missing_masks[marker] = marker_set_df[cols].isnull().any(axis=1)
-    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"before_interpolation_{os.path.basename(csv_path)}"))  #確認用
+    # marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"before_interpolation_{os.path.basename(csv_path)}"))  #確認用
 
     print("細かい欠損を補完するため、先に三次スプライン補間を実行します。")
     marker_set_df.interpolate(method='cubic', limit_direction='both', inplace=True)
     # marker_set_df.interpolate(method='spline', order=3, limit_direction='both', inplace=True)  #なんかこれだとうまくいかなかった
-    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"after_interpolation_{os.path.basename(csv_path)}"))  #確認用
+    # marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"after_interpolation_{os.path.basename(csv_path)}"))  #確認用
 
     if geometry_path and os.path.exists(geometry_path):
         with open(geometry_path, 'r') as f:
@@ -111,7 +111,7 @@ def read_3d_optitrack(csv_path, down_hz, start_frame_100hz, end_frame_100hz, geo
         for marker in markers_to_fix:
             if marker in original_missing_masks:
                 marker_set_df = geometric_interpolation(marker_set_df, marker, geometry, original_missing_masks[marker])
-    marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"after_geometric_interpolation_{os.path.basename(csv_path)}"))   #確認用
+    # marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"after_geometric_interpolation_{os.path.basename(csv_path)}"))   #確認用
 
     if marker_set_df.isnull().values.any():
         print("警告: 全ての補間処理後もデータに欠損値が残っています。残りの欠損を線形補間します。")
@@ -167,11 +167,15 @@ def main():
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-15\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera0-2\mocap"
-    csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera1-0\mocap"
+    csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera0-3\mocap"
+    # csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera1-0\mocap"
 
     if csv_path_dir == r"G:\gait_pattern\20250811_br\sub1\thera0-2\mocap":
         start_frame_100hz = 1000
         end_frame_100hz = 1440
+    elif csv_path_dir == r"G:\gait_pattern\20250811_br\sub1\thera0-3\mocap":
+        start_frame_100hz = 943
+        end_frame_100hz = 1400
     elif csv_path_dir == r"G:\gait_pattern\20250811_br\sub1\thera1-0\mocap":
         start_frame_100hz = 1090
         end_frame_100hz = 1252
@@ -228,8 +232,10 @@ def main():
         sampling_freq = 60 if down_hz else 100
 
         angle_list = []
-        dist_list = []
-        bector_list = []
+        dist_r_list = []
+        bector_r_list = []
+        dist_l_list = []
+        bector_l_list = []
 
         # 前フレームの角度を保存する変数（角度の連続性を保つため）
         prev_angles = None
@@ -252,7 +258,12 @@ def main():
         rhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 11, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
         lhee = np.array([butter_lowpass_fillter(keypoints_mocap[:, 3, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
 
-        print(f"ダウンサンプリング後full_range: {full_range}")
+        # full_range = range(1, len(rasi))  #差分取るために0からではなく1フレーム目からにする
+        print(f"ダウンサンプリング後full_range(開始点は1フレーム後から): {full_range}")
+
+        hip_list = []
+
+
         for frame_num in full_range:
             #メモ
             d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
@@ -302,10 +313,17 @@ def main():
             rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
 
             """現在の骨盤の向きがTposeの状態からどれだけずれているかを計算し、その分を補正する（Tposeの状態をゼロとする）"""
-            rot_pelvis = np.dot(np.linalg.inv(rot_pelvis_neutral), rot_pelvis)
-            e_x_pelvis = rot_pelvis[:,0]
-            e_y_pelvis = rot_pelvis[:,1]
-            e_z_pelvis = rot_pelvis[:,2]
+            # rot_pelvis = np.dot(np.linalg.inv(rot_pelvis_neutral), rot_pelvis)
+            # e_x_pelvis = rot_pelvis[:,0]
+            # e_y_pelvis = rot_pelvis[:,1]
+            # e_z_pelvis = rot_pelvis[:,2]
+
+            hip_list.append(hip)
+            hip_array = np.array(hip_list)
+            if frame_num == 0:
+                continue
+            else:
+                pass
 
             #必要な原点の設定
             rshank = (rknee[frame_num, :] + rknee2[frame_num, :]) / 2
@@ -385,11 +403,42 @@ def main():
             # rknee_realative_rotation_rl = np.dot(np.linalg.inv(rot_lshank), rot_rshank)
             # r_hip_abduction_angle = R.from_matrix(rknee_realative_rotation_rl).as_euler('YZX', degrees=True)[2]  #左下腿基準で右膝の外転内転角度を計算
 
+            def signed_angle_on_plane(forward_v, asai_v, r_hip_v):
+                """
+                forward_v, asai_vで定義される平面上にr_hip_vを射影し、
+                forward_vとr_hip_vのなす角度（符号付き, degree）を返す
+                """
+                # 平面法線
+                plane_normal = np.cross(forward_v, asai_v)
+                plane_normal /= np.linalg.norm(plane_normal)
 
-            # 股関節の外旋内旋角度（やり方別）
+                # forward_vを平面上に正規化
+                f_proj = forward_v - np.dot(forward_v, plane_normal) * plane_normal
+                f_proj /= np.linalg.norm(f_proj)
 
+                # r_hip_vを平面上に射影・正規化
+                r_proj = r_hip_v - np.dot(r_hip_v, plane_normal) * plane_normal
+                r_proj /= np.linalg.norm(r_proj)
 
-            # ただの2つのベクトルのなす角
+                # atan2で符号付き角度
+                x = np.dot(f_proj, r_proj)
+                y = np.dot(np.cross(f_proj, r_proj), plane_normal)
+                angle_rad = np.arctan2(y, x)
+                angle_deg = np.degrees(angle_rad)
+                return angle_deg
+
+            # 股関節の外旋内旋角度2（やり方別）
+            forward_v = hip_array[frame_num, :] - hip_array[frame_num-1, :]  # 前のフレームから現在のフレームまでの進行方向ベクトル
+            asis_v = lasi[frame_num, :] - rasi[frame_num, :]  # 右と左のASISを結ぶベクトル 右から左
+            r_hip_v = rshank - rthigh  # 右股関節→右膝ベクトル
+            l_hip_v = lshank - lthigh  # 左股関節→左膝ベクトル
+            r_hip_external_rotation_angle_2 = signed_angle_on_plane(forward_v, asis_v, r_hip_v)
+            l_hip_external_rotation_angle_2 = signed_angle_on_plane(forward_v, asis_v, l_hip_v)
+
+            # 股関節の外転内転角度2（やり方別）
+            down_v = np.cross(asis_v, forward_v)  # 下方向ベクトル（体の軸のイメージ）
+            r_hip_abduction_angle_2 = signed_angle_on_plane(down_v, asis_v, r_hip_v)
+            l_hip_abduction_angle_2 = signed_angle_on_plane(down_v, asis_v, l_hip_v)
 
             # 角度の連続性を保つ処理
             def unwrap_angle(current_angle, prev_angle):
@@ -406,7 +455,9 @@ def main():
                     return current_angle
 
             angles = [r_hip_flexion_angle, l_hip_flexion_angle, r_knee_flexion_angle, l_knee_flexion_angle, r_ankle_absorption_angle, l_ankle_absorption_angle,
-                      r_hip_abduction_angle, l_hip_abduction_angle, r_hip_external_rotation_angle, l_hip_external_rotation_angle]
+                      r_hip_external_rotation_angle, l_hip_external_rotation_angle, r_hip_abduction_angle, l_hip_abduction_angle,
+                      r_hip_external_rotation_angle_2, l_hip_external_rotation_angle_2,
+                      r_hip_abduction_angle_2, l_hip_abduction_angle_2]
 
             # 角度の連続性を保つ
             if prev_angles is not None:
@@ -420,9 +471,9 @@ def main():
             angles[3] = 180 - angles[3]
             angles[4] = 90 - angles[4]  #ankle底屈背屈
             angles[5] = 90 - angles[5]
-            angles[6] = - angles[6]  #hip外転内転
-            angles[7] = - angles[7]
-            angles[8] = angles[8]  #hip外旋内旋
+            angles[6] = angles[6]  #hip外旋内旋
+            angles[7] = angles[7]
+            angles[8] = angles[8]  #hip外転内転
             angles[9] = angles[9]
 
             # 前フレームの角度として保存
@@ -540,11 +591,15 @@ def main():
             # e_z_lfoot_list.append(e_z_lfoot)
 
             #骨盤とかかとの距離計算
-            dist = np.linalg.norm(rhee[frame_num, :] - hip[:])
-            bector = rhee[frame_num, :] - hip[:]
-            dist_list.append(dist)
-            bector_list.append(bector)
+            dist_r = np.linalg.norm(rhee[frame_num, :] - hip[:])
+            bector_r = rhee[frame_num, :] - hip[:]
+            dist_r_list.append(dist_r)
+            bector_r_list.append(bector_r)
             # bector_list.append(lhee_basse_pelvis)
+            dist_l = np.linalg.norm(lhee[frame_num, :] - hip[:])
+            bector_l = lhee[frame_num, :] - hip[:]
+            dist_l_list.append(dist_l)
+            bector_l_list.append(bector_l)
 
         # print(f"angle_array = {angle_array}")
         # print(f"angle_array.shape = {angle_array.shape}")
@@ -560,6 +615,10 @@ def main():
             # 100Hzデータの場合、start_frameからの100Hz絶対フレーム番号
             absolute_frame_indices = np.array(full_range) + start_frame_100hz
 
+        # print(f"absolute_frame_indices = {absolute_frame_indices}")
+        absolute_frame_indices = absolute_frame_indices[1:]
+        # print(f"absolute_frame_indices = {absolute_frame_indices}")
+
         df = pd.DataFrame({
             "r_hip_flexion_angle": angle_array[:, 0],
             "r_knee_flexion_angle": angle_array[:, 2],
@@ -567,10 +626,14 @@ def main():
             "l_hip_flexion_angle": angle_array[:, 1],
             "l_knee_flexion_angle": angle_array[:, 3],
             "l_ankle_absorption_angle": angle_array[:, 5],
-            "r_hip_abduction_angle": angle_array[:, 6],
-            "l_hip_abduction_angle": angle_array[:, 7],
-            "r_hip_external_rotation_angle": angle_array[:, 8],
-            "l_hip_external_rotation_angle": angle_array[:, 9]
+            "r_hip_external_rotation_angle": angle_array[:, 6],
+            "l_hip_external_rotation_angle": angle_array[:, 7],
+            "r_hip_abduction_angle": angle_array[:, 8],
+            "l_hip_abduction_angle": angle_array[:, 9],
+            "r_hip_external_rotation_angle_2": angle_array[:, 10],
+            "l_hip_external_rotation_angle_2": angle_array[:, 11],
+            "r_hip_abduction_angle_2": angle_array[:, 12],
+            "l_hip_abduction_angle_2": angle_array[:, 13]
         }, index=absolute_frame_indices)
 
         # ファイル名に適切なサンプリング周波数を記載
@@ -588,11 +651,13 @@ def main():
         # plt.cla
 
         if down_hz:
-            bector_array = np.array(bector_list)
-            rhee_pel_z = bector_array[:, 2]
+            bector_r_array = np.array(bector_r_list)
+            rhee_pel_z = bector_r_array[:, 2]
+            bector_l_array = np.array(bector_l_list)
+            lhee_pel_z = bector_l_array[:, 2]
 
             # 60Hzデータでの相対フレーム番号（0から始まる）
-            relative_frames_60hz = np.array(full_range)
+            relative_frames_60hz = np.array(full_range)[1:]
 
             # 60Hzデータでの絶対フレーム番号
             # start_frameは100Hzでの番号なので、60Hzに変換してから相対フレームに加算
@@ -604,56 +669,111 @@ def main():
             # 60Hz相対フレームを100Hzに変換してstart_frameを加算
             absolute_frames_100hz = (relative_frames_60hz * 100 / 60 + start_frame_100hz).astype(int)
 
-            df_ic = pd.DataFrame({
+            # print(f"relative_frames_60hz = {relative_frames_60hz}")
+            # print(f"len(frame_60hz_relative) = {len(relative_frames_60hz)}")
+            # print(f"len(frame_60hz_absolute) = {len(absolute_frames_60hz)}")
+            # print(f"len(frame_100hz_absolute) = {len(absolute_frames_100hz)}")
+            # print(f"len(rhee_pel_z) = {len(rhee_pel_z)}")
+
+            df_ic_o = pd.DataFrame({
                 "frame_60hz_relative": relative_frames_60hz,
                 "frame_60hz_absolute": absolute_frames_60hz,
                 "frame_100hz_absolute": absolute_frames_100hz,
-                "rhee_pel_z": rhee_pel_z
+                "rhee_pel_z": rhee_pel_z,
+                "lhee_pel_z": lhee_pel_z
             })
-            df_ic = df_ic.sort_values(by="rhee_pel_z", ascending=False)
+            df_ic_o.index = df_ic_o.index + 1
+            df_ic_r = df_ic_o.sort_values(by="rhee_pel_z", ascending=False)
+            df_ic_l = df_ic_o.sort_values(by="lhee_pel_z", ascending=False)
 
             # 初期接地検出（60Hz相対フレーム番号で）
-            ic_list_60hz_relative = df_ic.head(30)["frame_60hz_relative"].values.astype(int)
-            ic_list_60hz_absolute = df_ic.head(30)["frame_60hz_absolute"].values.astype(int)
-            ic_list_100hz_absolute = df_ic.head(30)["frame_100hz_absolute"].values.astype(int)
+            ic_r_list_60hz_relative = df_ic_r.head(30)["frame_60hz_relative"].values.astype(int)
+            ic_r_list_60hz_absolute = df_ic_r.head(30)["frame_60hz_absolute"].values.astype(int)
+            ic_r_list_100hz_absolute = df_ic_r.head(30)["frame_100hz_absolute"].values.astype(int)
 
             print(f"start_frame (100Hz): {start_frame_100hz}")
             print(f"end_frame (100Hz): {end_frame_100hz}")
             print(f"start_frame (60Hz): {start_frame_60hz}")
             print(f"end_frame (60Hz): {end_frame_60hz}")
-            print(f"ic_list (60Hz相対フレーム): {ic_list_60hz_relative}")
-            print(f"ic_list (60Hz絶対フレーム): {ic_list_60hz_absolute}")
-            print(f"ic_list (100Hz絶対フレーム): {ic_list_100hz_absolute}")
+            print(f"ic_r_list (60Hz相対フレーム): {ic_r_list_60hz_relative}")
+            print(f"ic_r_list (60Hz絶対フレーム): {ic_r_list_60hz_absolute}")
+            print(f"ic_r_list (100Hz絶対フレーム): {ic_r_list_100hz_absolute}")
 
-            # フィルタリング処理（60Hz相対フレーム番号ベース）
-            filtered_list_60hz_relative = []
-            skip_values = set()
-            for value in ic_list_60hz_relative:
-                if value in skip_values:
+            ic_l_list_60hz_relative = df_ic_l.head(30)["frame_60hz_relative"].values.astype(int)
+            ic_l_list_60hz_absolute = df_ic_l.head(30)["frame_60hz_absolute"].values.astype(int)
+            ic_l_list_100hz_absolute = df_ic_l.head(30)["frame_100hz_absolute"].values.astype(int)
+
+            # print(f"start_frame (100Hz): {start_frame_100hz}")
+            # print(f"end_frame (100Hz): {end_frame_100hz}")
+            # print(f"start_frame (60Hz): {start_frame_60hz}")
+            # print(f"end_frame (60Hz): {end_frame_60hz}")
+            # print(f"ic_l_list (60Hz相対フレーム): {ic_l_list_60hz_relative}")
+            # print(f"ic_l_list (60Hz絶対フレーム): {ic_l_list_60hz_absolute}")
+
+            filtered_ic_r_list_60hz_relative = []
+            skip_values_r = set()
+            for value in ic_r_list_60hz_relative:
+                if value in skip_values_r:
                     continue
-                filtered_list_60hz_relative.append(value)
+                filtered_ic_r_list_60hz_relative.append(value)
                 # 60Hzでの10フレーム間隔でスキップ
-                skip_values.update(range(value - 10, value + 11))
-            filtered_list_60hz_relative = sorted(filtered_list_60hz_relative)
+                skip_values_r.update(range(value - 10, value + 11))
+            filtered_ic_r_list_60hz_relative = sorted(filtered_ic_r_list_60hz_relative)
+            print(f"フィルタリング後のリスト (60Hz相対フレーム): {filtered_ic_r_list_60hz_relative}")
+
+            filtered_ic_l_list_60hz_relative = []
+            skip_values_l = set()
+            for value in ic_l_list_60hz_relative:
+                if value in skip_values_l:
+                    continue
+                filtered_ic_l_list_60hz_relative.append(value)
+                # 60Hzでの10フレーム間隔でスキップ
+                skip_values_l.update(range(value - 10, value + 11))
+            filtered_ic_l_list_60hz_relative = sorted(filtered_ic_l_list_60hz_relative)
 
             # 絶対フレーム番号に変換
-            filtered_list_60hz_absolute = []
-            filtered_list_100hz_absolute = []
-            for relative_frame in filtered_list_60hz_relative:
+            filtered_ic_r_list_60hz_absolute = []
+            filtered_ic_r_list_100hz_absolute = []
+            for relative_ic_r_frame in filtered_ic_r_list_60hz_relative:
                 # 60Hz絶対フレーム番号
-                absolute_60hz = relative_frame + start_frame_60hz
-                filtered_list_60hz_absolute.append(absolute_60hz)
+                absolute_60hz = relative_ic_r_frame + start_frame_60hz
+                filtered_ic_r_list_60hz_absolute.append(absolute_60hz)
 
                 # 100Hz絶対フレーム番号
-                absolute_100hz = int(relative_frame * 100 / 60 + start_frame_100hz)
-                filtered_list_100hz_absolute.append(absolute_100hz)
+                absolute_100hz = int(relative_ic_r_frame * 100 / 60 + start_frame_100hz)
+                filtered_ic_r_list_100hz_absolute.append(absolute_100hz)
+            print(f"フィルタリング後のic_rリスト (60Hz絶対フレーム): {filtered_ic_r_list_60hz_absolute}")
+            print(f"フィルタリング後のic_rリスト (100Hz絶対フレーム): {filtered_ic_r_list_100hz_absolute}")
 
-            print(f"フィルタリング後のリスト (60Hz絶対フレーム): {filtered_list_60hz_absolute}")
-            print(f"フィルタリング後のリスト (100Hz絶対フレーム): {filtered_list_100hz_absolute}")
+            filtered_ic_l_list_60hz_absolute = []
+            filtered_ic_l_list_100hz_absolute = []
+            for relative_ic_l_frame in filtered_ic_l_list_60hz_relative:
+                # 60Hz絶対フレーム番号
+                absolute_60hz = relative_ic_l_frame + start_frame_60hz
+                filtered_ic_l_list_60hz_absolute.append(absolute_60hz)
 
-            # 絶対フレーム番号として保存
-            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_60Hz_absolute_{os.path.basename(csv_path).split('.')[0]}"), filtered_list_60hz_absolute)
-            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_100Hz_absolute_{os.path.basename(csv_path).split('.')[0]}"), filtered_list_100hz_absolute)
+                # 100Hz絶対フレーム番号
+                absolute_100hz = int(relative_ic_l_frame * 100 / 60 + start_frame_100hz)
+                filtered_ic_l_list_100hz_absolute.append(absolute_100hz)
+
+            # # 絶対フレーム番号として保存
+            # np.save(os.path.join(os.path.dirname(csv_path), f"ic_r_frame_60Hz_absolute_{os.path.basename(csv_path).split('.')[0]}"), filtered_ic_r_list_60hz_absolute)
+            # np.save(os.path.join(os.path.dirname(csv_path), f"ic_r_frame_100Hz_absolute_{os.path.basename(csv_path).split('.')[0]}"), filtered_ic_r_list_100hz_absolute)
+            # np.save(os.path.join(os.path.dirname(csv_path), f"ic_l_frame_60Hz_absolute_{os.path.basename(csv_path).split('.')[0]}"), filtered_ic_l_list_60hz_absolute)
+            # np.save(os.path.join(os.path.dirname(csv_path), f"ic_l_frame_100Hz_absolute_{os.path.basename(csv_path).split('.')[0]}"), filtered_ic_l_list_100hz_absolute)
+
+            # 骨盤とかかとの距離をプロット
+            plt.figure()
+            plt.plot(df_ic_o.index, df_ic_o["rhee_pel_z"], label="Right Heel - Pelvis Z Position")
+            plt.plot(df_ic_o.index, df_ic_o["lhee_pel_z"], label="Left Heel - Pelvis Z Position")
+            plt.xlabel("Frame (60Hz absolute)")
+            plt.ylabel("Position (mm)")
+            plt.title("Heel Z Position")
+            plt.legend()
+            plt.tight_layout()
+            plt.savefig(os.path.join(csv_path_dir, "heel_z_position_60Hz.png"))
+            # plt.show()
+            plt.close()
 
             # 関節角度と初期接地をプロット（60Hz絶対フレーム番号で統一）
             plt.figure(figsize=(12, 6))
@@ -665,7 +785,7 @@ def main():
             plt.plot(df.index, df["l_knee_flexion_angle"], label="Left Knee Flexion Angle")
             plt.plot(df.index, df["l_ankle_absorption_angle"], label="Left Ankle Absorption Angle")
             # 初期接地フレーム（60Hz絶対フレーム）を縦線で表示
-            for idx, ic_frame_60hz in enumerate(filtered_list_60hz_absolute):
+            for idx, ic_frame_60hz in enumerate(filtered_ic_r_list_60hz_absolute):
                 plt.axvline(x=ic_frame_60hz, color='red', linestyle='--', alpha=0.5, label='Initial Contact (60Hz)' if idx == 0 else "")
             plt.xlabel("Frame (60Hz absolute)")
             plt.ylabel("Angle (degrees)")
@@ -679,96 +799,134 @@ def main():
             # 股関節の外旋内旋角度プロット
             # plt.plot(df.index, df["l_hip_external_rotation_angle"], label="Left Hip External Rotation Angle")
             plt.plot(df.index, df["r_hip_external_rotation_angle"], label="Right Hip External Rotation Angle")
-            for idx, ic_frame_60hz in enumerate(filtered_list_60hz_absolute):
+            # plt.plot(df.index, df["r_hip_external_rotation_angle_2"], label="Right Hip External Rotation Angle (method 2)", linestyle='dotted')
+            for idx, ic_frame_60hz in enumerate(filtered_ic_r_list_60hz_absolute):
                 plt.axvline(x=ic_frame_60hz, color='red', linestyle='--', alpha=0.5, label='Initial Contact (60Hz)' if idx == 0 else "")
             plt.ylabel("Angle (degrees)")
             plt.title("Hip External Rotation Angles")
             plt.legend()
             plt.tight_layout()
             plt.savefig(os.path.join(csv_path_dir, "hip_external_rotation_angles_60Hz.png"))
-            plt.show()
+            # plt.show()
             plt.close()
 
 
             # 股関節の外転内転角度プロット
             plt.plot(df.index, df["r_hip_abduction_angle"], label="Right Hip Abduction Angle")
+            # plt.plot(df.index,df["r_hip_abduction_angle_2"], label="Right Hip Abduction Angle (method 2)", linestyle='dotted')
             # plt.plot(df.index, df["l_hip_abduction_angle"], label="Left Hip Abduction Angle")
-            for idx, ic_frame_60hz in enumerate(filtered_list_60hz_absolute):
+            for idx, ic_frame_60hz in enumerate(filtered_ic_r_list_60hz_absolute):
                 plt.axvline(x=ic_frame_60hz, color='red', linestyle='--', alpha=0.5, label='Initial Contact (60Hz)' if idx == 0 else "")
             plt.ylabel("Angle (degrees)")
             plt.title("Hip Abduction Angles")
             plt.legend()
             plt.tight_layout()
-            plt.show()
             plt.savefig(os.path.join(csv_path_dir, "hip_abduction_angles_60Hz.png"))
+            # plt.show()
             plt.close()
 
+            # # デバッグ用：角度データとICフレームの対応確認
+            # print("\n=== デバッグ情報 ===")
+            # print(f"角度データのインデックス範囲: {df.index.min()} - {df.index.max()}")
+            # print(f"ICフレーム（60Hz絶対）: {filtered_ic_r_list_60hz_absolute}")
+            # print(f"ICフレーム（100Hz絶対）: {filtered_ic_r_list_100hz_absolute}")
+
+        else:  # 100Hzのままの場合
+            # bector_array = np.array(bector_list)
+            # lhee_pel_z = bector_array[:, 2]
+
+            # # 100Hzデータでの絶対フレーム番号を計算
+            # absolute_frames_100hz = np.array(full_range) + start_frame_100hz
+
+            # df_ic = pd.DataFrame({
+            #     "frame_100hz": absolute_frames_100hz,
+            #     "lhee_pel_z": lhee_pel_z
+            # })
+            # df_ic = df_ic.sort_values(by="lhee_pel_z", ascending=False)
+
+            # ic_list_100hz = df_ic.head(30)["frame_100hz"].values.astype(int)
+            # print(f"ic_list (100Hz絶対フレーム) = {ic_list_100hz}")
+
+            # # フィルタリング処理
+            # filtered_list_100hz = []
+            # skip_values = set()
+            # for value in ic_list_100hz:
+            #     if value in skip_values:
+            #         continue
+            #     filtered_list_100hz.append(value)
+            #     # 100Hzでの16フレーム間隔でスキップ（60Hzでの10フレームに相当）
+            #     skip_values.update(range(value - 16, value + 17))
+            # filtered_list_100hz = sorted(filtered_list_100hz)
+            # print(f"フィルタリング後のリスト (100Hz絶対フレーム): {filtered_list_100hz}")
+
+            # # 絶対フレーム番号として保存
+            # np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_100Hz_absolute_{os.path.basename(csv_path).split('.')[0]}"), filtered_list_100hz)
+
+            # # 関節角度と初期接地をプロット（100Hzの場合）
+            # plt.figure(figsize=(12, 6))
+            # plt.plot(df.index, df["r_hip_angle"], label="Right Hip Angle")
+            # plt.plot(df.index, df["r_knee_angle"], label="Right Knee Angle")
+            # plt.plot(df.index, df["r_ankle_angle"], label="Right Ankle Angle")
+            # plt.plot(df.index, df["l_hip_angle"], label="Left Hip Angle")
+            # plt.plot(df.index, df["l_knee_angle"], label="Left Knee Angle")
+            # plt.plot(df.index, df["l_ankle_angle"], label="Left Ankle Angle")
+
+            # # 初期接地フレーム（100Hz絶対フレーム）を縦線で表示
+            # for idx, ic_frame_100hz in enumerate(filtered_list_100hz):
+            #     plt.axvline(x=ic_frame_100hz, color='red', linestyle='--', alpha=0.5, label='Initial Contact' if idx == 0 else "")
+
+            # plt.xlabel("Frame (100Hz absolute)")
+            # plt.ylabel("Angle (degrees)")
+            # plt.title("Joint Angles and Initial Contact Frames")
+            # plt.legend()
+            # plt.tight_layout()
+            # plt.show()
+            pass
 
 
-            # デバッグ用：角度データとICフレームの対応確認
-            print("\n=== デバッグ情報 ===")
-            print(f"角度データのインデックス範囲: {df.index.min()} - {df.index.max()}")
-            print(f"ICフレーム（60Hz絶対）: {filtered_list_60hz_absolute}")
-            print(f"ICフレーム（100Hz絶対）: {filtered_list_100hz_absolute}")
+        # 歩行速度 walk speedの算出
+        cycle_frame = [[filtered_ic_r_list_60hz_relative[i], filtered_ic_r_list_60hz_relative[i+1]] for i in range(len(filtered_ic_r_list_60hz_relative)-1)]
+        speed = []
+        for start, end in cycle_frame:
+            duration = (end - start) / 60  # 60Hzなので秒に変換
+            distance = np.linalg.norm(hip_array[end,:] - hip_array[start,:])
+            speed.append(distance / duration if duration > 0 else 0)
+            # print(f"start_end: {start}-{end}, duration: {duration}, distance: {distance}, speed: {speed[-1]}")
+        gait_speed_mean = np.mean(speed, axis=0)
+        gait_speed_std = np.std(speed, axis=0)
+        print(f"歩行速度: {gait_speed_mean} m/s")
 
-            # ICフレームが角度データの範囲内にあるかチェック
-            for ic_frame in filtered_list_60hz_absolute:
-                if ic_frame in df.index:
-                    print(f"IC Frame {ic_frame}: 角度データ内に存在")
-                else:
-                    print(f"IC Frame {ic_frame}: 角度データ範囲外")
-        else:
-            # 100Hzのままの場合
-            bector_array = np.array(bector_list)
-            lhee_pel_z = bector_array[:, 2]
+        # 歩隔の算出
+        print(f"filtered_ic_r_list_60hz_relative: {filtered_ic_r_list_60hz_relative}")
+        print(f"filtered_ic_l_list_60hz_relative: {filtered_ic_l_list_60hz_relative}")
+        step_length_list = []
+        for start, end in cycle_frame:
+            mid = (start + end) / 2
+            l_ic_relative_frame = min(filtered_ic_l_list_60hz_relative, key=lambda x: abs(x - mid))
+            step_length_1 = abs(rhee[start, 0] - lhee[l_ic_relative_frame, 0])
+            step_length_2 = abs(lhee[l_ic_relative_frame, 0] - rhee[end, 0])
+            step_length = (step_length_1 + step_length_2) / 2
+            step_length_list.append(step_length)
+            # print(f"start: {start}, end: {end}, l_ic: {l_ic_relative_frame}, step_length_1: {step_length_1}, step_length_2: {step_length_2}, step_length: {step_length}")
+        step_length_mean = np.mean(step_length_list, axis=0)
+        step_length_std = np.std(step_length_list, axis=0)
+        print(f"歩隔: {step_length_mean} m")
 
-            # 100Hzデータでの絶対フレーム番号を計算
-            absolute_frames_100hz = np.array(full_range) + start_frame_100hz
-
-            df_ic = pd.DataFrame({
-                "frame_100hz": absolute_frames_100hz,
-                "lhee_pel_z": lhee_pel_z
-            })
-            df_ic = df_ic.sort_values(by="lhee_pel_z", ascending=False)
-
-            ic_list_100hz = df_ic.head(30)["frame_100hz"].values.astype(int)
-            print(f"ic_list (100Hz絶対フレーム) = {ic_list_100hz}")
-
-            # フィルタリング処理
-            filtered_list_100hz = []
-            skip_values = set()
-            for value in ic_list_100hz:
-                if value in skip_values:
-                    continue
-                filtered_list_100hz.append(value)
-                # 100Hzでの16フレーム間隔でスキップ（60Hzでの10フレームに相当）
-                skip_values.update(range(value - 16, value + 17))
-            filtered_list_100hz = sorted(filtered_list_100hz)
-            print(f"フィルタリング後のリスト (100Hz絶対フレーム): {filtered_list_100hz}")
-
-            # 絶対フレーム番号として保存
-            np.save(os.path.join(os.path.dirname(csv_path), f"ic_frame_100Hz_absolute_{os.path.basename(csv_path).split('.')[0]}"), filtered_list_100hz)
-
-            # 関節角度と初期接地をプロット（100Hzの場合）
-            plt.figure(figsize=(12, 6))
-            plt.plot(df.index, df["r_hip_angle"], label="Right Hip Angle")
-            plt.plot(df.index, df["r_knee_angle"], label="Right Knee Angle")
-            plt.plot(df.index, df["r_ankle_angle"], label="Right Ankle Angle")
-            plt.plot(df.index, df["l_hip_angle"], label="Left Hip Angle")
-            plt.plot(df.index, df["l_knee_angle"], label="Left Knee Angle")
-            plt.plot(df.index, df["l_ankle_angle"], label="Left Ankle Angle")
-
-            # 初期接地フレーム（100Hz絶対フレーム）を縦線で表示
-            for idx, ic_frame_100hz in enumerate(filtered_list_100hz):
-                plt.axvline(x=ic_frame_100hz, color='red', linestyle='--', alpha=0.5, label='Initial Contact' if idx == 0 else "")
-
-            plt.xlabel("Frame (100Hz absolute)")
-            plt.ylabel("Angle (degrees)")
-            plt.title("Joint Angles and Initial Contact Frames")
-            plt.legend()
-            plt.tight_layout()
-            plt.show()
-
+        # 歩行速度及び歩隔をjsonファイルで保存
+        gait_data = {
+            "start_frame_60Hz": int(start_frame_60hz),
+            "end_frame_60Hz": int(end_frame_60hz),
+            "ic_r_list_60hz_absolute": [int(x) for x in filtered_ic_r_list_60hz_absolute],
+            "ic_l_list_60hz_absolute": [int(x) for x in filtered_ic_l_list_60hz_absolute],
+            "cycle_num": int(len(cycle_frame)),
+            "gait speed": float(gait_speed_mean),
+            "gait speed std": float(gait_speed_std),
+            "step length": float(step_length_mean),
+            "step length std": float(step_length_std)
+        }
+        json_path = os.path.join(os.path.dirname(csv_path), f"gait_data_{os.path.basename(csv_path).split('.')[0]}.json")
+        with open(json_path, "w") as json_file:
+            json.dump(gait_data, json_file, ensure_ascii=False, indent=4)
 
 if __name__ == "__main__":
     main()

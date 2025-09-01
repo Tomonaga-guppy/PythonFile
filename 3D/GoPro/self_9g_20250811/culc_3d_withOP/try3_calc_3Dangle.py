@@ -219,9 +219,9 @@ def plot_gait_angles_comparison(angles_dict, ic_frames_dict, start_frame, end_fr
         title: グラフタイトル
         save_path: 保存パス
     """
-    # デバッグ: 利用可能なカラムを確認
-    for data_type, angles_df in angles_dict.items():
-        print(f"Available columns for {data_type}: {list(angles_df.columns)}")
+    # # デバッグ: 利用可能なカラムを確認
+    # for data_type, angles_df in angles_dict.items():
+    #     print(f"Available columns for {data_type}: {list(angles_df.columns)}")
 
     joint_names = ['Hip', 'Knee', 'Ankle']
     sides = ['L', 'R']
@@ -301,17 +301,17 @@ def plot_gait_angles_comparison(angles_dict, ic_frames_dict, start_frame, end_fr
     plt.tight_layout()
     plt.suptitle(title, y=0.98)
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    plt.show()
+    # plt.show()
     plt.close()
 
 def main():
     """メイン処理"""
     # --- 設定 ---
     # 解析したいデータが含まれるディレクトリを指定してください
-    base_dir = Path(r"G:\gait_pattern\20250811_br\sub1\thera0-2")
+    base_dir = Path(r"G:\gait_pattern\20250811_br\sub1\thera0-3")
 
     # try_1_kalman.pyが出力したJSONファイルを指定
-    json_file = base_dir / "3d_gait_analysis_kalman_v3" / "thera0-2_3d_results.json"
+    json_file = base_dir / "3d_gait_analysis_kalman_v3" / "thera0-3_3d_results.json"
     subject_name = base_dir.parent.name
     thera_name = base_dir.name
 
@@ -321,6 +321,29 @@ def main():
 
     # 解析対象の人物
     person_key = 'person_1'
+
+    mocap_json_path = base_dir / "mocap" / "gait_data_1_0_3.json"
+    with open(mocap_json_path, 'r') as f:
+        mocap_data = json.load(f)
+    # print(f"mocap_data: {mocap_data}")
+    mocap_start_frame = mocap_data["start_frame_60Hz"]
+    mocap_end_frame = mocap_data["end_frame_60Hz"]
+    mocap_ic_r_list = mocap_data["ic_r_list_60hz_absolute"]
+    mocap_ic_l_list = mocap_data["ic_l_list_60hz_absolute"]
+    print(f"mocap_start_frame: {mocap_start_frame}")
+    print(f"mocap_end_frame: {mocap_end_frame}")
+    print(f"mocap_ic_r_list: {mocap_ic_r_list}")
+    print(f"mocap_ic_l_list: {mocap_ic_l_list}")
+    print("*" * 60)
+
+    gopro_trim_json_path = base_dir / "gopro_trimming_info.json"
+    with open(gopro_trim_json_path, 'r') as f:
+        gopro_trim_data = json.load(f)
+    # print(f"gopro_trim_data: {gopro_trim_data}")
+    gopro_start_frame = gopro_trim_data['trimming_settings']['start_frame_relative']
+    gopro_end_frame = gopro_trim_data['trimming_settings']['end_frame_relative']
+    print(f"gopro_start_frame: {gopro_start_frame}")
+    print(f"gopro_end_frame: {gopro_end_frame}")
 
     if base_dir.parent.name == "sub1" and base_dir.name == "thera0-2":
         analysis_start_frame = 0
@@ -340,6 +363,7 @@ def main():
     if not points_data_dict:
         print("データが読み込めなかったため、処理を終了します。")
         return
+    print(f"points_data_dict: {points_data_dict}")
 
     # 'raw_processed'と'final'の両方のデータセットに対して処理を実行
     angles_dict = {}
@@ -357,6 +381,11 @@ def main():
         print("踵接地タイミングを検出しました:")
         print(f"  - 右足 (R): {ic_frames['R']}")
         print(f"  - 左足 (L): {ic_frames['L']}")
+        ic_frames['R'] = [frame + gopro_start_frame for frame in ic_frames['R']]
+        ic_frames['L'] = [frame + gopro_start_frame for frame in ic_frames['L']]
+        print(f"補正後のICフレーム (GoPro開始フレームを加算):")
+        print(f"  - 右足 (R): {ic_frames['R']}")
+        print(f"  - 左足 (L): {ic_frames['L']}")
 
         if data_type == 'raw_processed':  # 1回だけ保存
             plt.plot(relative_dist_dict['R'], label='R')
@@ -368,19 +397,28 @@ def main():
             plt.savefig(base_dir / "relative_distance_plot.png")
             plt.close()
 
-        if subject_name == "sub1" and thera_name == "thera0-2":
-            start_frame = 200
-            end_frame = 400
-            side = "R"
-        else:
-            start_frame_idx = 0
-            end_frame_idx = -1
+        # if subject_name == "sub1" and thera_name == "thera0-2":
+        #     start_frame = 200
+        #     end_frame = 400
+        #     side = "R"
+        # else:
+        #     start_frame_idx = 0
+        #     end_frame_idx = -1
 
-        start_frame_idx = next((i for i, v in enumerate(ic_frames['R']) if v > start_frame), None)
-        end_frame_idx = max((i for i, v in enumerate(ic_frames['R']) if v <= end_frame), default=None)
+        # start_frame_idx = next((i for i, v in enumerate(ic_frames['R']) if v > start_frame), None)
+        # end_frame_idx = max((i for i, v in enumerate(ic_frames['R']) if v <= end_frame), default=None)
 
-        print(f"解析開始フレーム: {start_frame} (ICフレーム: {ic_frames['R'][start_frame_idx] if start_frame_idx is not None else 'N/A'})")
-        print(f"解析終了フレーム: {end_frame} (ICフレーム: {ic_frames['R'][end_frame_idx] if end_frame_idx is not None else 'N/A'})")
+        # print(f"解析開始フレーム: {start_frame} (ICフレーム: {ic_frames['R'][start_frame_idx] if start_frame_idx is not None else 'N/A'})")
+        # print(f"解析終了フレーム: {end_frame} (ICフレーム: {ic_frames['R'][end_frame_idx] if end_frame_idx is not None else 'N/A'})")
+
+        start_frame_idx = next((i for i, v in enumerate(ic_frames['R']) if v > gopro_start_frame), None)
+        end_frame_idx = max((i for i, v in enumerate(ic_frames['R']) if v <= gopro_end_frame), default=None)
+
+        print(f"解析開始フレーム: {gopro_start_frame} (ICフレーム: {ic_frames['R'][start_frame_idx] if start_frame_idx is not None else 'N/A'})")
+        print(f"解析終了フレーム: {gopro_end_frame} (ICフレーム: {ic_frames['R'][end_frame_idx] if end_frame_idx is not None else 'N/A'})")
+
+        print(f"mocap_ic_r_frames: {mocap_ic_r_list}")
+        print(f"mocap_ic_l_frames: {mocap_ic_l_list}")
 
         print(f"解析範囲: {start_frame_idx} 〜 {end_frame_idx} フレーム")
         cycle_num = end_frame_idx - start_frame_idx
@@ -389,7 +427,7 @@ def main():
         # 3. 関節角度の計算
         angles_df = calc_joint_angles_3d(points_3d)
         print("関節角度を計算しました。")
-        angles_df = angles_df.loc[start_frame:end_frame]
+        angles_df = angles_df.loc[gopro_start_frame:gopro_end_frame]
 
         # データを保存
         angles_dict[data_type] = angles_df
@@ -409,9 +447,9 @@ def main():
         # 周期ごとにリサンプリング（0～100%で揃える）
         cycles = []
         for i in range(len(ic_frames)-1):
-            print(f"周期 {i+1}:")
+            # print(f"周期 {i+1}:")
             start, end = ic_frames[i], ic_frames[i+1]
-            print(f"  - start: {start}, end: {end}")
+            # print(f"  - start: {start}, end: {end}")
             cycle = angles_df.loc[start:end, f"{side}_{joint_name}"].values
             # 0～100%で100分割
             cycle_percent = np.linspace(0, 100, 100)
@@ -440,7 +478,7 @@ def main():
         plt.legend()
         plt.tight_layout()
         plt.savefig(save_path)
-        plt.show()
+        # plt.show()
         plt.close()
 
     # data_keys = {
@@ -478,7 +516,7 @@ def main():
         # 4. 比較グラフの描画と保存
         plot_title = f"Joint Angles Comparison (raw_processed vs final) - {base_dir.name} ({person_key})"
         save_path = output_dir / f"{base_dir.name}_{person_key}_angles_comparison.png"
-        plot_gait_angles_comparison(angles_dict, ic_frames_dict, start_frame, end_frame, plot_title, save_path)
+        plot_gait_angles_comparison(angles_dict, ic_frames_dict, gopro_start_frame, gopro_end_frame, plot_title, save_path)
 
     print("\n全ての処理が完了しました。")
 
