@@ -1,3 +1,8 @@
+"""
+元データのZ座標が汚いから先にバターワースフィルタで平滑化してから補間を試したけど、あんまり変わらなかったから使うのやめた
+"""
+
+
 import module_mocap as moc
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -5,6 +10,7 @@ import pandas as pd
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
+
 
 tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm")
 tsv_files = tsv_dir.glob("*0004*.tsv")
@@ -15,10 +21,11 @@ def plot_interpolation_results(dfs, labels, marker_name, output_path):
     指定されたマーカーの補間結果をプロットして保存する。
     補間ステップ2と3で新たに埋められた点を強調表示する。
     """
+    plt.style.use('seaborn-v0_8-whitegrid')
     fig, axes = plt.subplots(3, 1, figsize=(20, 15), sharex=True)
     coords = ['X', 'Y', 'Z']
 
-    original_df, step1_df, step2_df, step3_df, filt_df = dfs
+    original_df, step1_df, step1_2_df, step2_df, step3_df = dfs
 
     for i, coord in enumerate(coords):
         ax = axes[i]
@@ -29,48 +36,40 @@ def plot_interpolation_results(dfs, labels, marker_name, output_path):
             plt.close(fig)
             return
 
-        # 元のデータ(欠損あり)を点でプロット
+        # 1. 元のデータ(欠損あり)を点でプロット
         ax.plot(original_df.index, original_df[col_name], 'o', color='gray', label=labels[0], markersize=3, alpha=0.6)
 
-        # ステップ1の補間結果を基準線としてプロット
+        # 2. ステップ1の補間結果を基準線としてプロット
         newly_filled_step11 = step1_df[original_df[col_name].isna() & step1_df[col_name].notna()]
         if not newly_filled_step11.empty:
-            ax.plot(newly_filled_step11.index, newly_filled_step11[col_name], 'o', color='cyan',
-                    label=f'{labels[1]} (newly filled)', markersize=4)
+            ax.plot(newly_filled_step11.index, newly_filled_step11[col_name], 'o', color='orange',
+                    label=f'{labels[1]} (newly filled)', markersize=3)
+            
+        # ステップ1_2の補間結果を基準線としてプロット
+        ax.plot(step1_2_df.index, step1_2_df[col_name], '-', color='black', label=labels[1] + ' (butterworth)', alpha=0.2)
 
-        # ステップ2で「新たに」補間された点のみを抽出してプロット
+        # 3. ステップ2で「新たに」補間された点のみを抽出してプロット
         newly_filled_step2 = step2_df[step1_df[col_name].isna() & step2_df[col_name].notna()]
         if not newly_filled_step2.empty:
-            ax.plot(newly_filled_step2.index, newly_filled_step2[col_name], 'o', color='orange',
-                    label=f'{labels[2]} (newly filled)', markersize=5)
+            ax.plot(newly_filled_step2.index, newly_filled_step2[col_name], 'o', color='blue',
+                    label=f'{labels[2]} (newly filled)', markersize=3)
 
-        # ステップ3で「新たに」補間された点のみを抽出してプロット
+        # 4. ステップ3で「新たに」補間された点のみを抽出してプロット
         newly_filled_step3 = step3_df[step2_df[col_name].isna() & step3_df[col_name].notna()]
         if not newly_filled_step3.empty:
-            ax.plot(newly_filled_step3.index, newly_filled_step3[col_name], 'o', color='blue',
-                    label=f'{labels[3]} (newly filled)', markersize=4)
-            
-        # 平滑化したデータを薄い線でプロット
-        ax.plot(filt_df.index, filt_df[col_name], '-', color='black', label=labels[4] + ' (butterworth)', alpha=0.6)
+            ax.plot(newly_filled_step3.index, newly_filled_step3[col_name], 'o', color='red',
+                    label=f'{labels[3]} (newly filled)', markersize=3)
 
-        ax.set_title(f'{marker_name} - {coord} coordinate', fontsize=16) # タイトルを追加
-        ax.set_ylabel('Position (mm)', fontsize=16) # Y軸ラベルを追加
-        ax.legend(fontsize=12) # 凡例のフォントサイズを設定
+        ax.set_title(f'{marker_name} - {coord} coordinate', fontsize=14)
+        ax.set_ylabel('Position (mm)')
+        ax.legend(fontsize=12)
 
-        # 目盛りのフォントサイズを設定
-        ax.tick_params(axis='both', labelsize=14)
-
-        # 100フレームごとに主要な目盛りとグリッド線を設定
-        ax.xaxis.set_major_locator(mticker.MultipleLocator(100))
-        ax.grid(which='major', axis='x', linestyle='-', linewidth=0.8, color='lightgray')
-
-        # 20フレームごとに補助的な目盛りとグリッド線を設定
-        ax.xaxis.set_minor_locator(mticker.MultipleLocator(20))
-        ax.grid(which='minor', axis='x', linestyle=':', linewidth=0.8, color='lightgray', alpha=0.5)
+        # 20フレームごとに薄い縦のグリッド線を追加
+        ax.xaxis.set_major_locator(mticker.MultipleLocator(20))
+        ax.grid(which='major', axis='x', linestyle=':', linewidth=0.8, color='lightgray')
 
 
-
-    axes[-1].set_xlabel('Frame', fontsize=16) # X軸ラベルを追加
+    axes[-1].set_xlabel('Frame')
     fig.suptitle(f'Interpolation Step-by-Step Check for {marker_name}', fontsize=20)
     fig.tight_layout(rect=[0, 0.03, 1, 0.96])
 
@@ -86,15 +85,24 @@ def main():
         # print(f"target_df: {target_df}")
         nan_df = target_df.replace(0, np.nan)  #0をNaNに置き換え
         # 補間処理1 欠損が20フレーム以下の区間をスプライン補間
-        interpolated_df = moc.interpolate_short_gaps(nan_df, max_gap_size=20, method='spline', order=3)
+        interpolated1_df = moc.interpolate_short_gaps(nan_df, max_gap_size=20, method='spline', order=3)
+        
+        
+        
+        # 補間処理1_2 欠損がない範囲をbutterworthフィルタで平滑化
+        interpolated1_2_df = moc.butterworth_filter_no_nan_gaps(interpolated1_df, cutoff=6, order=4, fs=120) #4次のバターワースローパスフィルタ
+        
+        
         # 補間処理2 参考点が3点以上ある骨盤の座標を補間
         target_markers_to_fill = ['RASI', 'LASI', 'RPSI', 'LPSI']  # 補間したいターゲット
-        interpolated2_df = moc.interpolate_pelvis_rigid_body(interpolated_df, tpose_path, target_markers_to_fill)
+        interpolated2_df = moc.interpolate_pelvis_rigid_body(interpolated1_2_df, tpose_path, target_markers_to_fill)
         # 補間処理3 骨盤補間後に欠損が20フレーム以下の区間を再度スプライン補間
         interpolated3_df = moc.interpolate_short_gaps(interpolated2_df, max_gap_size=20, method='spline', order=3)
 
-        # 平滑化処理 バターワースフィルタ
-        butter_df = moc.butterworth_filter_no_nan_gaps(interpolated3_df, cutoff=6, order=4, fs=120) #4次のバターワースローパスフィルタ
+        interpolated3_df.to_csv(tsv_file.with_name(f"{tsv_file.stem}_interpolated.csv"))
+
+
+
 
 
 
@@ -104,8 +112,8 @@ def main():
 
 
         print("\n--- 補間結果のプロットを開始 ---")
-        plot_dfs = [nan_df, interpolated_df, interpolated2_df, interpolated3_df, butter_df]
-        plot_labels = ['Original Data (with Gaps)', 'Step 1: Spline Interpolation', 'Step 2: Rigid Body Fitting', 'Step 3: Final Spline Interpolation', 'Filtered Data (Butterworth)']
+        plot_dfs = [nan_df, interpolated1_df, interpolated1_2_df, interpolated2_df, interpolated3_df]
+        plot_labels = ['Original Data (with Gaps)', 'Step 1: Spline Interpolation', 'Step 1_2: Butterworth Filter', 'Step 2: Rigid Body Fitting', 'Step 3: Final Spline Interpolation']
 
         # プロットしたいマーカーをリストで指定
         markers_to_plot = ['RASI', 'LASI', 'RPSI', 'LPSI']
@@ -154,6 +162,17 @@ def main():
         else:
             print("警告: 全てのマーカーが揃っているフレームが1つもありません。角度計算をスキップします。")
             continue
+
+
+
+
+        # # フィルタ処理 バターワースローパスフィルタ
+        # butter_df = interpolated3_df.copy()
+        # butter_df = moc.butterworth_filter(butter_df, cutoff=6, order=4, fs=120) #4次のバターワースローパスフィルタ
+
+        # butter_df.to_csv(tsv_file.with_name(f"{tsv_file.stem}_interpolated_filtered.csv"))
+
+
 
         # 各有効範囲の角度計算結果を保存するリスト
         all_angle_dfs = []
@@ -296,11 +315,11 @@ def main():
                     rot_lfoot = np.array([e_x_lfoot, e_y_lfoot, e_z_lfoot]).T
 
                     # 相対回転行列の計算
-                    r_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_rthigh)  #骨盤節を基準とした大腿節の回転
+                    r_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_rthigh)
                     l_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_lthigh)
-                    r_knee_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rthigh)  #下腿節を基準とした大腿節の回転
+                    r_knee_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rthigh)
                     l_knee_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lthigh)
-                    r_ankle_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rfoot)  #下腿節を基準とした足節の回転
+                    r_ankle_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rfoot)
                     l_ankle_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lfoot)
 
                     r_hip_angle_rot = R.from_matrix(r_hip_realative_rotation)
@@ -328,106 +347,14 @@ def main():
                     l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
 
                     # 各角度について特定の範囲に変換
-                    r_hip_angle = 180 - r_hip_angle
-                    l_hip_angle = 180 - l_hip_angle
-                    r_knee_angle = 180 - r_knee_angle
-                    l_knee_angle = 180 - l_knee_angle
-                    r_ankle_angle = 90 - r_ankle_angle
-                    l_ankle_angle = 90 - l_ankle_angle
+                    r_hip_angle = 180 - r_hip_angle if r_hip_angle > 100 else r_hip_angle
+                    l_hip_angle = 180 - l_hip_angle if l_hip_angle > 100 else l_hip_angle
+                    r_knee_angle = 180 - r_knee_angle if r_knee_angle < 180 else r_knee_angle - 180
+                    l_knee_angle = 180 - l_knee_angle if l_knee_angle < 180 else l_knee_angle - 180
+                    r_ankle_angle = 90 - r_ankle_angle if r_ankle_angle < 180 else 270 - r_ankle_angle
+                    l_ankle_angle = 90 - l_ankle_angle if l_ankle_angle < 180 else 270 - l_ankle_angle
 
                     angle_list_range.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle])
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    plot_flag = True
-                    if plot_flag:
-                        if original_frame_num == 100:
-                            fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
-                            ax.set_xlabel("x")
-                            ax.set_ylabel("y")
-                            ax.set_zlabel("z")
-                            ax.set_xlim(-1000, 1000)
-                            ax.set_ylim(-1000, 1000)
-                            ax.set_zlim(0, 2000)
-                            #frame数を表示
-                            ax.text2D(0.5, 0.01, f"frame = {original_frame_num}", transform=ax.transAxes)
-                            #方向を設定
-                            ax.view_init(elev=0, azim=0)
-
-                            ax.scatter(rasi[frame_idx_in_range,:][0], rasi[frame_idx_in_range,:][1], rasi[frame_idx_in_range,:][2], label='rasi')
-                            ax.scatter(lasi[frame_idx_in_range,:][0], lasi[frame_idx_in_range,:][1], lasi[frame_idx_in_range,:][2], label='lasi')
-                            ax.scatter(rpsi[frame_idx_in_range,:][0], rpsi[frame_idx_in_range,:][1], rpsi[frame_idx_in_range,:][2], label='rpsi')
-                            ax.scatter(lpsi[frame_idx_in_range,:][0], lpsi[frame_idx_in_range,:][1], lpsi[frame_idx_in_range,:][2], label='lpsi')
-                            ax.scatter(rfoot[0], rfoot[1], rfoot[2], label='rfoot')
-                            ax.scatter(lfoot[0], lfoot[1], lfoot[2], label='lfoot')
-                            ax.scatter(rshank[0], rshank[1], rshank[2], label='rshank')
-                            ax.scatter(lshank[0], lshank[1], lshank[2], label='lshank')
-                            ax.scatter(rtoe[frame_idx_in_range,:][0], rtoe[frame_idx_in_range,:][1], rtoe[frame_idx_in_range,:][2], label='rtoe')
-                            ax.scatter(ltoe[frame_idx_in_range,:][0], ltoe[frame_idx_in_range,:][1], ltoe[frame_idx_in_range,:][2], label='ltoe')
-                            ax.scatter(rhee[frame_idx_in_range,:][0], rhee[frame_idx_in_range,:][1], rhee[frame_idx_in_range,:][2], label='rhee')
-                            ax.scatter(lhee[frame_idx_in_range, :][0], lhee[frame_idx_in_range, :][1], lhee[frame_idx_in_range, :][2], label='lhee')
-                            ax.scatter(lumbar[0], lumbar[1], lumbar[2], label='lumbar')
-                            ax.scatter(hip[0], hip[1], hip[2], label='hip')
-
-
-                            ax.plot([lhee[frame_idx_in_range, :][0]- hip[0]], [lhee[frame_idx_in_range, :][1]- hip[1]], [lhee[frame_idx_in_range, :][2]- hip[2]], color='red')
-
-                            # e_x_pelvis = e_x_pelvis * 0.1
-                            # e_y_pelvis = e_y_pelvis * 0.1
-                            # e_z_pelvis = e_z_pelvis * 0.1
-                            # e_x_rthigh = e_x_rthigh * 0.1
-                            # e_y_rthigh = e_y_rthigh * 0.1
-                            # e_z_rthigh = e_z_rthigh * 0.1
-                            # e_x_lthigh = e_x_lthigh * 0.1
-                            # e_y_lthigh = e_y_lthigh * 0.1
-                            # e_z_lthigh = e_z_lthigh * 0.1
-                            # e_x_rshank = e_x_rshank * 0.1
-                            # e_y_rshank = e_y_rshank * 0.1
-                            # e_z_rshank = e_z_rshank * 0.1
-                            # e_x_lshank = e_x_lshank * 0.1
-                            # e_y_lshank = e_y_lshank * 0.1
-                            # e_z_lshank = e_z_lshank * 0.1
-                            # e_x_rfoot = e_x_rfoot * 0.1
-                            # e_y_rfoot = e_y_rfoot * 0.1
-                            # e_z_rfoot = e_z_rfoot * 0.1
-                            # e_x_lfoot = e_x_lfoot * 0.1
-                            # e_y_lfoot = e_y_lfoot * 0.1
-                            # e_z_lfoot = e_z_lfoot * 0.1
-
-                            ax.plot([hip[0], hip[0] + e_x_pelvis[0]], [hip[1], hip[1] + e_x_pelvis[1]], [hip[2], hip[2] + e_x_pelvis[2]], color='red')
-                            ax.plot([hip[0], hip[0] + e_y_pelvis[0]], [hip[1], hip[1] + e_y_pelvis[1]], [hip[2], hip[2] + e_y_pelvis[2]], color='green')
-                            ax.plot([hip[0], hip[0] + e_z_pelvis[0]], [hip[1], hip[1] + e_z_pelvis[1]], [hip[2], hip[2] + e_z_pelvis[2]], color='blue')
-
-                            ax.plot([rthigh[0], rthigh[0] + e_x_rthigh[0]], [rthigh[1], rthigh[1] + e_x_rthigh[1]], [rthigh[2], rthigh[2] + e_x_rthigh[2]], color='red')
-                            ax.plot([rthigh[0], rthigh[0] + e_y_rthigh[0]], [rthigh[1], rthigh[1] + e_y_rthigh[1]], [rthigh[2], rthigh[2] + e_y_rthigh[2]], color='green')
-                            ax.plot([rthigh[0], rthigh[0] + e_z_rthigh[0]], [rthigh[1], rthigh[1] + e_z_rthigh[1]], [rthigh[2], rthigh[2] + e_z_rthigh[2]], color='blue')
-
-                            ax.plot([lthigh[0], lthigh[0] + e_x_lthigh[0]], [lthigh[1], lthigh[1] + e_x_lthigh[1]], [lthigh[2], lthigh[2] + e_x_lthigh[2]], color='red')
-                            ax.plot([lthigh[0], lthigh[0] + e_y_lthigh[0]], [lthigh[1], lthigh[1] + e_y_lthigh[1]], [lthigh[2], lthigh[2] + e_y_lthigh[2]], color='green')
-                            ax.plot([lthigh[0], lthigh[0] + e_z_lthigh[0]], [lthigh[1], lthigh[1] + e_z_lthigh[1]], [lthigh[2], lthigh[2] + e_z_lthigh[2]], color='blue')
-
-                            ax.plot([rshank[0], rshank[0] + e_x_rshank[0]], [rshank[1], rshank[1] + e_x_rshank[1]], [rshank[2], rshank[2] + e_x_rshank[2]], color='red')
-                            ax.plot([rshank[0], rshank[0] + e_y_rshank[0]], [rshank[1], rshank[1] + e_y_rshank[1]], [rshank[2], rshank[2] + e_y_rshank[2]], color='green')
-                            ax.plot([rshank[0], rshank[0] + e_z_rshank[0]], [rshank[1], rshank[1] + e_z_rshank[1]], [rshank[2], rshank[2] + e_z_rshank[2]], color='blue')
-
-                            ax.plot([lshank[0], lshank[0] + e_x_lshank[0]], [lshank[1], lshank[1] + e_x_lshank[1]], [lshank[2], lshank[2] + e_x_lshank[2]], color='red')
-                            ax.plot([lshank[0], lshank[0] + e_y_lshank[0]], [lshank[1], lshank[1] + e_y_lshank[1]], [lshank[2], lshank[2] + e_y_lshank[2]], color='green')
-                            ax.plot([lshank[0], lshank[0] + e_z_lshank[0]], [lshank[1], lshank[1] + e_z_lshank[1]], [lshank[2], lshank[2] + e_z_lshank[2]], color='blue')
-
-                            ax.plot([rfoot[0], rfoot[0] + e_x_rfoot[0]], [rfoot[1], rfoot[1] + e_x_rfoot[1]], [rfoot[2], rfoot[2] + e_x_rfoot[2]], color='red')
-                            ax.plot([rfoot[0], rfoot[0] + e_y_rfoot[0]], [rfoot[1], rfoot[1] + e_y_rfoot[1]], [rfoot[2], rfoot[2] + e_y_rfoot[2]], color='green')
-                            ax.plot([rfoot[0], rfoot[0] + e_z_rfoot[0]], [rfoot[1], rfoot[1] + e_z_rfoot[1]], [rfoot[2], rfoot[2] + e_z_rfoot[2]], color='blue')
-
-                            ax.plot([lfoot[0], lfoot[0] + e_x_lfoot[0]], [lfoot[1], lfoot[1] + e_x_lfoot[1]], [lfoot[2], lfoot[2] + e_x_lfoot[2]], color='red')
-                            ax.plot([lfoot[0], lfoot[0] + e_y_lfoot[0]], [lfoot[1], lfoot[1] + e_y_lfoot[1]], [lfoot[2], lfoot[2] + e_y_lfoot[2]], color='green')
-                            ax.plot([lfoot[0], lfoot[0] + e_z_lfoot[0]], [lfoot[1], lfoot[1] + e_z_lfoot[1]], [lfoot[2], lfoot[2] + e_z_lfoot[2]], color='blue')
-
-                            plt.legend()
-                            plt.show()
 
                 except Exception as e:
                     print(f"フレーム {original_frame_num} で予期せぬエラー: {e}。このフレームの角度をNaNとします。")
@@ -451,41 +378,41 @@ def main():
         angle_df.to_csv(tsv_file.with_name(f"{tsv_file.stem}_angles.csv"))
         print(f"角度データを保存しました: {tsv_file.with_name(f'{tsv_file.stem}_angles.csv')}")
         
+        
         # 左右股関節の屈曲伸展角度をプロット
-        plt.plot(angle_df['L_Hip'], label='Left Hip Flexion/Extension', color='orange')
         plt.plot(angle_df['R_Hip'], label='Right Hip Flexion/Extension', color='blue')
+        plt.plot(angle_df['L_Hip'], label='Left Hip Flexion/Extension', color='orange')
         plt.xlabel('Frame')
         plt.ylabel('Angle (degrees)')
         plt.title('Hip Flexion/Extension Angles Over Time')
-        plt.ylim(-40, 40)
-        plt.grid()
         plt.legend()
-        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Hip_L_Flexion_Extension.png"))
+        # plt.ylim(-50, 100)
+        plt.show()
         plt.close()
         
+        
         # 左右膝関節の屈曲伸展角度をプロット
-        plt.plot(angle_df['L_Knee'], label='Left Knee Flexion/Extension', color='orange')
         plt.plot(angle_df['R_Knee'], label='Right Knee Flexion/Extension', color='blue')
+        plt.plot(angle_df['L_Knee'], label='Left Knee Flexion/Extension', color='orange')
         plt.xlabel('Frame')
         plt.ylabel('Angle (degrees)')
         plt.title('Knee Flexion/Extension Angles Over Time')
-        plt.ylim(-10, 70)
-        plt.grid()
         plt.legend()
-        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Knee_L_Flexion_Extension.png"))
+        # plt.ylim(-10, 150)
+        plt.show()
         plt.close()
-
+        
         # 左右足関節の底屈背屈角度をプロット
-        plt.plot(angle_df['L_Ankle'], label='Left Ankle Plantarflexion/Dorsiflexion', color='orange')
         plt.plot(angle_df['R_Ankle'], label='Right Ankle Plantarflexion/Dorsiflexion', color='blue')
+        plt.plot(angle_df['L_Ankle'], label='Left Ankle Plantarflexion/Dorsiflexion', color='orange')
         plt.xlabel('Frame')
         plt.ylabel('Angle (degrees)')
         plt.title('Ankle Plantarflexion/Dorsiflexion Angles Over Time')
-        plt.ylim(-20, 60)
-        plt.grid()
         plt.legend()
-        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Ankle_L_Plantarflexion_Dorsiflexion.png"))
+        # plt.ylim(-50, 50)
+        plt.show()
         plt.close()
-        
+
+
 if __name__ == "__main__":
     main()

@@ -6,9 +6,9 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 
-tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm")
-tsv_files = tsv_dir.glob("*0004*.tsv")
-tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
+tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test")
+tsv_files = tsv_dir.glob("*com*.tsv")
+tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
 
 def plot_interpolation_results(dfs, labels, marker_name, output_path):
     """
@@ -85,14 +85,17 @@ def main():
         target_df = full_df.copy()
         # print(f"target_df: {target_df}")
         nan_df = target_df.replace(0, np.nan)  #0をNaNに置き換え
-        # 補間処理1 欠損が20フレーム以下の区間をスプライン補間
-        interpolated_df = moc.interpolate_short_gaps(nan_df, max_gap_size=20, method='spline', order=3)
-        # 補間処理2 参考点が3点以上ある骨盤の座標を補間
-        target_markers_to_fill = ['RASI', 'LASI', 'RPSI', 'LPSI']  # 補間したいターゲット
-        interpolated2_df = moc.interpolate_pelvis_rigid_body(interpolated_df, tpose_path, target_markers_to_fill)
-        # 補間処理3 骨盤補間後に欠損が20フレーム以下の区間を再度スプライン補間
-        interpolated3_df = moc.interpolate_short_gaps(interpolated2_df, max_gap_size=20, method='spline', order=3)
-
+        # # 補間処理1 欠損が20フレーム以下の区間をスプライン補間
+        # interpolated_df = moc.interpolate_short_gaps(nan_df, max_gap_size=20, method='spline', order=3)
+        # # 補間処理2 参考点が3点以上ある骨盤の座標を補間
+        # target_markers_to_fill = ['RASI', 'LASI', 'RPSI', 'LPSI']  # 補間したいターゲット
+        # interpolated2_df = moc.interpolate_pelvis_rigid_body(interpolated_df, tpose_path, target_markers_to_fill)
+        # # 補間処理3 骨盤補間後に欠損が20フレーム以下の区間を再度スプライン補間
+        # interpolated3_df = moc.interpolate_short_gaps(interpolated2_df, max_gap_size=20, method='spline', order=3)
+        
+        # お試し補間処理  欠損フレーム数関係なく3次スプライン補間
+        interpolated3_df = nan_df.interpolate(method='spline', order=3) 
+        
         # 平滑化処理 バターワースフィルタ
         butter_df = moc.butterworth_filter_no_nan_gaps(interpolated3_df, cutoff=6, order=4, fs=120) #4次のバターワースローパスフィルタ
 
@@ -103,20 +106,20 @@ def main():
 
 
 
-        print("\n--- 補間結果のプロットを開始 ---")
-        plot_dfs = [nan_df, interpolated_df, interpolated2_df, interpolated3_df, butter_df]
-        plot_labels = ['Original Data (with Gaps)', 'Step 1: Spline Interpolation', 'Step 2: Rigid Body Fitting', 'Step 3: Final Spline Interpolation', 'Filtered Data (Butterworth)']
+        # print("\n--- 補間結果のプロットを開始 ---")
+        # plot_dfs = [nan_df, interpolated_df, interpolated2_df, interpolated3_df, butter_df]
+        # plot_labels = ['Original Data (with Gaps)', 'Step 1: Spline Interpolation', 'Step 2: Rigid Body Fitting', 'Step 3: Final Spline Interpolation', 'Filtered Data (Butterworth)']
 
-        # プロットしたいマーカーをリストで指定
-        markers_to_plot = ['RASI', 'LASI', 'RPSI', 'LPSI']
+        # # プロットしたいマーカーをリストで指定
+        # markers_to_plot = ['RASI', 'LASI', 'RPSI', 'LPSI']
 
-        for marker in markers_to_plot:
-            if f'{marker} X' in full_df.columns:
-                output_filename = tsv_dir / f"{tsv_file.stem}_{marker}_interpolation_check.png"
-                plot_interpolation_results(plot_dfs, plot_labels, marker, output_filename)
-            else:
-                print(f"マーカー '{marker}' はファイルに存在しないため、プロットをスキップします。")
-        print("--- 補間結果のプロットが完了 ---\n")
+        # for marker in markers_to_plot:
+        #     if f'{marker} X' in full_df.columns:
+        #         output_filename = tsv_dir / f"{tsv_file.stem}_{marker}_interpolation_check.png"
+        #         plot_interpolation_results(plot_dfs, plot_labels, marker, output_filename)
+        #     else:
+        #         print(f"マーカー '{marker}' はファイルに存在しないため、プロットをスキップします。")
+        # print("--- 補間結果のプロットが完了 ---\n")
 
 
 
@@ -343,91 +346,91 @@ def main():
                     
                     
                     
-                    plot_flag = True
-                    if plot_flag:
-                        if original_frame_num == 100:
-                            fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
-                            ax.set_xlabel("x")
-                            ax.set_ylabel("y")
-                            ax.set_zlabel("z")
-                            ax.set_xlim(-1000, 1000)
-                            ax.set_ylim(-1000, 1000)
-                            ax.set_zlim(0, 2000)
-                            #frame数を表示
-                            ax.text2D(0.5, 0.01, f"frame = {original_frame_num}", transform=ax.transAxes)
-                            #方向を設定
-                            ax.view_init(elev=0, azim=0)
+                    # plot_flag = True
+                    # if plot_flag:
+                    #     if original_frame_num == 100:
+                    #         fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
+                    #         ax.set_xlabel("x")
+                    #         ax.set_ylabel("y")
+                    #         ax.set_zlabel("z")
+                    #         ax.set_xlim(-1000, 1000)
+                    #         ax.set_ylim(-1000, 1000)
+                    #         ax.set_zlim(0, 2000)
+                    #         #frame数を表示
+                    #         ax.text2D(0.5, 0.01, f"frame = {original_frame_num}", transform=ax.transAxes)
+                    #         #方向を設定
+                    #         ax.view_init(elev=0, azim=0)
 
-                            ax.scatter(rasi[frame_idx_in_range,:][0], rasi[frame_idx_in_range,:][1], rasi[frame_idx_in_range,:][2], label='rasi')
-                            ax.scatter(lasi[frame_idx_in_range,:][0], lasi[frame_idx_in_range,:][1], lasi[frame_idx_in_range,:][2], label='lasi')
-                            ax.scatter(rpsi[frame_idx_in_range,:][0], rpsi[frame_idx_in_range,:][1], rpsi[frame_idx_in_range,:][2], label='rpsi')
-                            ax.scatter(lpsi[frame_idx_in_range,:][0], lpsi[frame_idx_in_range,:][1], lpsi[frame_idx_in_range,:][2], label='lpsi')
-                            ax.scatter(rfoot[0], rfoot[1], rfoot[2], label='rfoot')
-                            ax.scatter(lfoot[0], lfoot[1], lfoot[2], label='lfoot')
-                            ax.scatter(rshank[0], rshank[1], rshank[2], label='rshank')
-                            ax.scatter(lshank[0], lshank[1], lshank[2], label='lshank')
-                            ax.scatter(rtoe[frame_idx_in_range,:][0], rtoe[frame_idx_in_range,:][1], rtoe[frame_idx_in_range,:][2], label='rtoe')
-                            ax.scatter(ltoe[frame_idx_in_range,:][0], ltoe[frame_idx_in_range,:][1], ltoe[frame_idx_in_range,:][2], label='ltoe')
-                            ax.scatter(rhee[frame_idx_in_range,:][0], rhee[frame_idx_in_range,:][1], rhee[frame_idx_in_range,:][2], label='rhee')
-                            ax.scatter(lhee[frame_idx_in_range, :][0], lhee[frame_idx_in_range, :][1], lhee[frame_idx_in_range, :][2], label='lhee')
-                            ax.scatter(lumbar[0], lumbar[1], lumbar[2], label='lumbar')
-                            ax.scatter(hip[0], hip[1], hip[2], label='hip')
+                    #         ax.scatter(rasi[frame_idx_in_range,:][0], rasi[frame_idx_in_range,:][1], rasi[frame_idx_in_range,:][2], label='rasi')
+                    #         ax.scatter(lasi[frame_idx_in_range,:][0], lasi[frame_idx_in_range,:][1], lasi[frame_idx_in_range,:][2], label='lasi')
+                    #         ax.scatter(rpsi[frame_idx_in_range,:][0], rpsi[frame_idx_in_range,:][1], rpsi[frame_idx_in_range,:][2], label='rpsi')
+                    #         ax.scatter(lpsi[frame_idx_in_range,:][0], lpsi[frame_idx_in_range,:][1], lpsi[frame_idx_in_range,:][2], label='lpsi')
+                    #         ax.scatter(rfoot[0], rfoot[1], rfoot[2], label='rfoot')
+                    #         ax.scatter(lfoot[0], lfoot[1], lfoot[2], label='lfoot')
+                    #         ax.scatter(rshank[0], rshank[1], rshank[2], label='rshank')
+                    #         ax.scatter(lshank[0], lshank[1], lshank[2], label='lshank')
+                    #         ax.scatter(rtoe[frame_idx_in_range,:][0], rtoe[frame_idx_in_range,:][1], rtoe[frame_idx_in_range,:][2], label='rtoe')
+                    #         ax.scatter(ltoe[frame_idx_in_range,:][0], ltoe[frame_idx_in_range,:][1], ltoe[frame_idx_in_range,:][2], label='ltoe')
+                    #         ax.scatter(rhee[frame_idx_in_range,:][0], rhee[frame_idx_in_range,:][1], rhee[frame_idx_in_range,:][2], label='rhee')
+                    #         ax.scatter(lhee[frame_idx_in_range, :][0], lhee[frame_idx_in_range, :][1], lhee[frame_idx_in_range, :][2], label='lhee')
+                    #         ax.scatter(lumbar[0], lumbar[1], lumbar[2], label='lumbar')
+                    #         ax.scatter(hip[0], hip[1], hip[2], label='hip')
 
 
-                            ax.plot([lhee[frame_idx_in_range, :][0]- hip[0]], [lhee[frame_idx_in_range, :][1]- hip[1]], [lhee[frame_idx_in_range, :][2]- hip[2]], color='red')
+                    #         ax.plot([lhee[frame_idx_in_range, :][0]- hip[0]], [lhee[frame_idx_in_range, :][1]- hip[1]], [lhee[frame_idx_in_range, :][2]- hip[2]], color='red')
 
-                            # e_x_pelvis = e_x_pelvis * 0.1
-                            # e_y_pelvis = e_y_pelvis * 0.1
-                            # e_z_pelvis = e_z_pelvis * 0.1
-                            # e_x_rthigh = e_x_rthigh * 0.1
-                            # e_y_rthigh = e_y_rthigh * 0.1
-                            # e_z_rthigh = e_z_rthigh * 0.1
-                            # e_x_lthigh = e_x_lthigh * 0.1
-                            # e_y_lthigh = e_y_lthigh * 0.1
-                            # e_z_lthigh = e_z_lthigh * 0.1
-                            # e_x_rshank = e_x_rshank * 0.1
-                            # e_y_rshank = e_y_rshank * 0.1
-                            # e_z_rshank = e_z_rshank * 0.1
-                            # e_x_lshank = e_x_lshank * 0.1
-                            # e_y_lshank = e_y_lshank * 0.1
-                            # e_z_lshank = e_z_lshank * 0.1
-                            # e_x_rfoot = e_x_rfoot * 0.1
-                            # e_y_rfoot = e_y_rfoot * 0.1
-                            # e_z_rfoot = e_z_rfoot * 0.1
-                            # e_x_lfoot = e_x_lfoot * 0.1
-                            # e_y_lfoot = e_y_lfoot * 0.1
-                            # e_z_lfoot = e_z_lfoot * 0.1
+                    #         # e_x_pelvis = e_x_pelvis * 0.1
+                    #         # e_y_pelvis = e_y_pelvis * 0.1
+                    #         # e_z_pelvis = e_z_pelvis * 0.1
+                    #         # e_x_rthigh = e_x_rthigh * 0.1
+                    #         # e_y_rthigh = e_y_rthigh * 0.1
+                    #         # e_z_rthigh = e_z_rthigh * 0.1
+                    #         # e_x_lthigh = e_x_lthigh * 0.1
+                    #         # e_y_lthigh = e_y_lthigh * 0.1
+                    #         # e_z_lthigh = e_z_lthigh * 0.1
+                    #         # e_x_rshank = e_x_rshank * 0.1
+                    #         # e_y_rshank = e_y_rshank * 0.1
+                    #         # e_z_rshank = e_z_rshank * 0.1
+                    #         # e_x_lshank = e_x_lshank * 0.1
+                    #         # e_y_lshank = e_y_lshank * 0.1
+                    #         # e_z_lshank = e_z_lshank * 0.1
+                    #         # e_x_rfoot = e_x_rfoot * 0.1
+                    #         # e_y_rfoot = e_y_rfoot * 0.1
+                    #         # e_z_rfoot = e_z_rfoot * 0.1
+                    #         # e_x_lfoot = e_x_lfoot * 0.1
+                    #         # e_y_lfoot = e_y_lfoot * 0.1
+                    #         # e_z_lfoot = e_z_lfoot * 0.1
 
-                            ax.plot([hip[0], hip[0] + e_x_pelvis[0]], [hip[1], hip[1] + e_x_pelvis[1]], [hip[2], hip[2] + e_x_pelvis[2]], color='red')
-                            ax.plot([hip[0], hip[0] + e_y_pelvis[0]], [hip[1], hip[1] + e_y_pelvis[1]], [hip[2], hip[2] + e_y_pelvis[2]], color='green')
-                            ax.plot([hip[0], hip[0] + e_z_pelvis[0]], [hip[1], hip[1] + e_z_pelvis[1]], [hip[2], hip[2] + e_z_pelvis[2]], color='blue')
+                    #         ax.plot([hip[0], hip[0] + e_x_pelvis[0]], [hip[1], hip[1] + e_x_pelvis[1]], [hip[2], hip[2] + e_x_pelvis[2]], color='red')
+                    #         ax.plot([hip[0], hip[0] + e_y_pelvis[0]], [hip[1], hip[1] + e_y_pelvis[1]], [hip[2], hip[2] + e_y_pelvis[2]], color='green')
+                    #         ax.plot([hip[0], hip[0] + e_z_pelvis[0]], [hip[1], hip[1] + e_z_pelvis[1]], [hip[2], hip[2] + e_z_pelvis[2]], color='blue')
 
-                            ax.plot([rthigh[0], rthigh[0] + e_x_rthigh[0]], [rthigh[1], rthigh[1] + e_x_rthigh[1]], [rthigh[2], rthigh[2] + e_x_rthigh[2]], color='red')
-                            ax.plot([rthigh[0], rthigh[0] + e_y_rthigh[0]], [rthigh[1], rthigh[1] + e_y_rthigh[1]], [rthigh[2], rthigh[2] + e_y_rthigh[2]], color='green')
-                            ax.plot([rthigh[0], rthigh[0] + e_z_rthigh[0]], [rthigh[1], rthigh[1] + e_z_rthigh[1]], [rthigh[2], rthigh[2] + e_z_rthigh[2]], color='blue')
+                    #         ax.plot([rthigh[0], rthigh[0] + e_x_rthigh[0]], [rthigh[1], rthigh[1] + e_x_rthigh[1]], [rthigh[2], rthigh[2] + e_x_rthigh[2]], color='red')
+                    #         ax.plot([rthigh[0], rthigh[0] + e_y_rthigh[0]], [rthigh[1], rthigh[1] + e_y_rthigh[1]], [rthigh[2], rthigh[2] + e_y_rthigh[2]], color='green')
+                    #         ax.plot([rthigh[0], rthigh[0] + e_z_rthigh[0]], [rthigh[1], rthigh[1] + e_z_rthigh[1]], [rthigh[2], rthigh[2] + e_z_rthigh[2]], color='blue')
 
-                            ax.plot([lthigh[0], lthigh[0] + e_x_lthigh[0]], [lthigh[1], lthigh[1] + e_x_lthigh[1]], [lthigh[2], lthigh[2] + e_x_lthigh[2]], color='red')
-                            ax.plot([lthigh[0], lthigh[0] + e_y_lthigh[0]], [lthigh[1], lthigh[1] + e_y_lthigh[1]], [lthigh[2], lthigh[2] + e_y_lthigh[2]], color='green')
-                            ax.plot([lthigh[0], lthigh[0] + e_z_lthigh[0]], [lthigh[1], lthigh[1] + e_z_lthigh[1]], [lthigh[2], lthigh[2] + e_z_lthigh[2]], color='blue')
+                    #         ax.plot([lthigh[0], lthigh[0] + e_x_lthigh[0]], [lthigh[1], lthigh[1] + e_x_lthigh[1]], [lthigh[2], lthigh[2] + e_x_lthigh[2]], color='red')
+                    #         ax.plot([lthigh[0], lthigh[0] + e_y_lthigh[0]], [lthigh[1], lthigh[1] + e_y_lthigh[1]], [lthigh[2], lthigh[2] + e_y_lthigh[2]], color='green')
+                    #         ax.plot([lthigh[0], lthigh[0] + e_z_lthigh[0]], [lthigh[1], lthigh[1] + e_z_lthigh[1]], [lthigh[2], lthigh[2] + e_z_lthigh[2]], color='blue')
 
-                            ax.plot([rshank[0], rshank[0] + e_x_rshank[0]], [rshank[1], rshank[1] + e_x_rshank[1]], [rshank[2], rshank[2] + e_x_rshank[2]], color='red')
-                            ax.plot([rshank[0], rshank[0] + e_y_rshank[0]], [rshank[1], rshank[1] + e_y_rshank[1]], [rshank[2], rshank[2] + e_y_rshank[2]], color='green')
-                            ax.plot([rshank[0], rshank[0] + e_z_rshank[0]], [rshank[1], rshank[1] + e_z_rshank[1]], [rshank[2], rshank[2] + e_z_rshank[2]], color='blue')
+                    #         ax.plot([rshank[0], rshank[0] + e_x_rshank[0]], [rshank[1], rshank[1] + e_x_rshank[1]], [rshank[2], rshank[2] + e_x_rshank[2]], color='red')
+                    #         ax.plot([rshank[0], rshank[0] + e_y_rshank[0]], [rshank[1], rshank[1] + e_y_rshank[1]], [rshank[2], rshank[2] + e_y_rshank[2]], color='green')
+                    #         ax.plot([rshank[0], rshank[0] + e_z_rshank[0]], [rshank[1], rshank[1] + e_z_rshank[1]], [rshank[2], rshank[2] + e_z_rshank[2]], color='blue')
 
-                            ax.plot([lshank[0], lshank[0] + e_x_lshank[0]], [lshank[1], lshank[1] + e_x_lshank[1]], [lshank[2], lshank[2] + e_x_lshank[2]], color='red')
-                            ax.plot([lshank[0], lshank[0] + e_y_lshank[0]], [lshank[1], lshank[1] + e_y_lshank[1]], [lshank[2], lshank[2] + e_y_lshank[2]], color='green')
-                            ax.plot([lshank[0], lshank[0] + e_z_lshank[0]], [lshank[1], lshank[1] + e_z_lshank[1]], [lshank[2], lshank[2] + e_z_lshank[2]], color='blue')
+                    #         ax.plot([lshank[0], lshank[0] + e_x_lshank[0]], [lshank[1], lshank[1] + e_x_lshank[1]], [lshank[2], lshank[2] + e_x_lshank[2]], color='red')
+                    #         ax.plot([lshank[0], lshank[0] + e_y_lshank[0]], [lshank[1], lshank[1] + e_y_lshank[1]], [lshank[2], lshank[2] + e_y_lshank[2]], color='green')
+                    #         ax.plot([lshank[0], lshank[0] + e_z_lshank[0]], [lshank[1], lshank[1] + e_z_lshank[1]], [lshank[2], lshank[2] + e_z_lshank[2]], color='blue')
 
-                            ax.plot([rfoot[0], rfoot[0] + e_x_rfoot[0]], [rfoot[1], rfoot[1] + e_x_rfoot[1]], [rfoot[2], rfoot[2] + e_x_rfoot[2]], color='red')
-                            ax.plot([rfoot[0], rfoot[0] + e_y_rfoot[0]], [rfoot[1], rfoot[1] + e_y_rfoot[1]], [rfoot[2], rfoot[2] + e_y_rfoot[2]], color='green')
-                            ax.plot([rfoot[0], rfoot[0] + e_z_rfoot[0]], [rfoot[1], rfoot[1] + e_z_rfoot[1]], [rfoot[2], rfoot[2] + e_z_rfoot[2]], color='blue')
+                    #         ax.plot([rfoot[0], rfoot[0] + e_x_rfoot[0]], [rfoot[1], rfoot[1] + e_x_rfoot[1]], [rfoot[2], rfoot[2] + e_x_rfoot[2]], color='red')
+                    #         ax.plot([rfoot[0], rfoot[0] + e_y_rfoot[0]], [rfoot[1], rfoot[1] + e_y_rfoot[1]], [rfoot[2], rfoot[2] + e_y_rfoot[2]], color='green')
+                    #         ax.plot([rfoot[0], rfoot[0] + e_z_rfoot[0]], [rfoot[1], rfoot[1] + e_z_rfoot[1]], [rfoot[2], rfoot[2] + e_z_rfoot[2]], color='blue')
 
-                            ax.plot([lfoot[0], lfoot[0] + e_x_lfoot[0]], [lfoot[1], lfoot[1] + e_x_lfoot[1]], [lfoot[2], lfoot[2] + e_x_lfoot[2]], color='red')
-                            ax.plot([lfoot[0], lfoot[0] + e_y_lfoot[0]], [lfoot[1], lfoot[1] + e_y_lfoot[1]], [lfoot[2], lfoot[2] + e_y_lfoot[2]], color='green')
-                            ax.plot([lfoot[0], lfoot[0] + e_z_lfoot[0]], [lfoot[1], lfoot[1] + e_z_lfoot[1]], [lfoot[2], lfoot[2] + e_z_lfoot[2]], color='blue')
+                    #         ax.plot([lfoot[0], lfoot[0] + e_x_lfoot[0]], [lfoot[1], lfoot[1] + e_x_lfoot[1]], [lfoot[2], lfoot[2] + e_x_lfoot[2]], color='red')
+                    #         ax.plot([lfoot[0], lfoot[0] + e_y_lfoot[0]], [lfoot[1], lfoot[1] + e_y_lfoot[1]], [lfoot[2], lfoot[2] + e_y_lfoot[2]], color='green')
+                    #         ax.plot([lfoot[0], lfoot[0] + e_z_lfoot[0]], [lfoot[1], lfoot[1] + e_z_lfoot[1]], [lfoot[2], lfoot[2] + e_z_lfoot[2]], color='blue')
 
-                            plt.legend()
-                            plt.show()
+                    #         plt.legend()
+                    #         plt.show()
 
                 except Exception as e:
                     print(f"フレーム {original_frame_num} で予期せぬエラー: {e}。このフレームの角度をNaNとします。")
@@ -481,7 +484,7 @@ def main():
         plt.xlabel('Frame')
         plt.ylabel('Angle (degrees)')
         plt.title('Ankle Plantarflexion/Dorsiflexion Angles Over Time')
-        plt.ylim(-20, 60)
+        plt.ylim(-30, 50)
         plt.grid()
         plt.legend()
         plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Ankle_L_Plantarflexion_Dorsiflexion.png"))

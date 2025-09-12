@@ -81,9 +81,9 @@ def plot_marker_data(markers: dict, output_path: Path):
 
 
 def main():
-    tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm")
+    tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test")
     # Tポーズファイルを対象とする
-    tsv_files_list = list(tsv_dir.glob("*0001*.tsv"))
+    tsv_files_list = list(tsv_dir.glob("*tpose*.tsv"))
     num_files = len(tsv_files_list)
     
     if num_files == 0:
