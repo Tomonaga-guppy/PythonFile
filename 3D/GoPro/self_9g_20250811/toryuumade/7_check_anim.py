@@ -393,7 +393,7 @@ def plot_3d_stick_figure(points_3d, keypoint_indices, keypoint_names, metadata,
 
 def create_3d_animation(animation_data, global_bounds, 
                        show_keypoint_labels=False, show_keypoint_numbers=False,
-                       save_path=None, figsize=(12, 9)):
+                       save_path=None, figsize=(12, 9), view_name="sagittal", elev=0, azim=90):
     """
     3Dスティックフィギュアのアニメーションを作成（歩行向け座標系）
     
@@ -404,6 +404,9 @@ def create_3d_animation(animation_data, global_bounds,
         show_keypoint_numbers: キーポイント番号を表示するか
         save_path: 保存パス（Noneの場合は表示のみ）
         figsize: 図のサイズ
+        view_name: 視点の名前
+        elev: elevation角度
+        azim: azimuth角度
     
     Returns:
         ani: アニメーションオブジェクト
@@ -456,9 +459,9 @@ def create_3d_animation(animation_data, global_bounds,
     ax.plot([0, 0], [y_plane_start, y_plane_end], [ground_z, ground_z],
             color='red', linewidth=3, alpha=0.8, label='X-axis (sideways)', zorder=2)
     
-    # ビューアングルを歩行観察に適した角度に設定
-    ax.view_init(elev=10, azim=45)
-    
+    # ビューアングルを設定
+    ax.view_init(elev=elev, azim=azim)
+
     # 軸ラベルを設定
     ax.set_xlabel('Z coordinate (mm)', fontsize=12)
     ax.set_ylabel('X coordinate (mm)', fontsize=12)
@@ -557,7 +560,7 @@ def create_3d_animation(animation_data, global_bounds,
                 line.set_data_3d([], [], [])
         
         # タイトル更新
-        title = f"3D Walking Animation - {metadata.get('subject', 'Unknown')}/{metadata.get('therapist', 'Unknown')}"
+        title = f"3D Walking Animation ({view_name}) - {metadata.get('subject', 'Unknown')}/{metadata.get('therapist', 'Unknown')}"
         if 'triangulation_method' in metadata:
             title += f" ({metadata['triangulation_method']})"
         title_text.set_text(title)
@@ -591,7 +594,7 @@ def create_3d_animation(animation_data, global_bounds,
     fps = 60
     interval = 1000 / fps  # ミリ秒
     
-    print(f"歩行アニメーション作成中... ({total_frames} フレーム)")
+    print(f"歩行アニメーション作成中... ({total_frames} フレーム, {view_name}視点)")
     
     ani = animation.FuncAnimation(
         fig, update_frame, frames=total_frames,
@@ -604,7 +607,7 @@ def create_3d_animation(animation_data, global_bounds,
         # MP4で保存（ffmpegが必要）
         try:
             writer = animation.FFMpegWriter(fps=fps, metadata=dict(artist='3D Walking Animation'), bitrate=1800)
-            ani.save(save_path, writer=writer, progress_callback=lambda i, n: print(f'保存進捗: {i}/{n}'))
+            ani.save(save_path, writer=writer, progress_callback=lambda i, n: print(f'保存進捗 ({view_name}): {i}/{n}'))
             print(f"アニメーション保存完了: {save_path}")
         except Exception as e:
             print(f"MP4保存エラー: {e}")
@@ -649,6 +652,50 @@ def extract_frame_number(file_path):
     if match:
         return int(match.group(1))
     return 0
+
+def parse_selection(input_str, max_num):
+    """
+    ユーザー入力を解析して選択された番号のリストを返す
+    
+    Args:
+        input_str: ユーザー入力文字列（例: "1,3,5" または "1-3" または "all"）
+        max_num: 最大番号
+    
+    Returns:
+        selected_numbers: 選択された番号のリスト（0ベース）
+    """
+    input_str = input_str.strip().lower()
+    
+    # "all" の場合は全て選択
+    if input_str == "all":
+        return list(range(max_num))
+    
+    selected = set()
+    parts = input_str.split(',')
+    
+    for part in parts:
+        part = part.strip()
+        if '-' in part:
+            # 範囲指定（例: "1-3"）
+            try:
+                start, end = part.split('-')
+                start_num = int(start) - 1  # 0ベースに変換
+                end_num = int(end) - 1      # 0ベースに変換
+                for i in range(start_num, end_num + 1):
+                    if 0 <= i < max_num:
+                        selected.add(i)
+            except ValueError:
+                continue
+        else:
+            # 単一選択（例: "1"）
+            try:
+                num = int(part) - 1  # 0ベースに変換
+                if 0 <= num < max_num:
+                    selected.add(num)
+            except ValueError:
+                continue
+    
+    return sorted(list(selected))
 
 def interactive_animation_creator():
     """
@@ -696,256 +743,163 @@ def interactive_animation_creator():
         file_groups[group_key] = sorted(file_groups[group_key], key=extract_frame_number)
     
     # グループを表示
+    sorted_groups = sorted(file_groups.keys())
     print("\n利用可能な被験者/セラピストの組み合わせ:")
-    for i, group_key in enumerate(sorted(file_groups.keys())):
+    for i, group_key in enumerate(sorted_groups):
         file_count = len(file_groups[group_key])
         print(f"  {i+1}. {group_key} ({file_count} フレーム)")
     
-    # グループ選択
+    # 複数グループ選択
+    print("\n選択方法:")
+    print("  - 単一選択: 1")
+    print("  - 複数選択: 1,3,5")
+    print("  - 範囲選択: 1-3")
+    print("  - 組み合わせ: 1-3,5,7")
+    print("  - 全て選択: all")
+    
     while True:
         try:
-            group_choice = int(input(f"\n組み合わせを選択してください (1-{len(file_groups)}): ")) - 1
-            if 0 <= group_choice < len(file_groups):
+            selection_input = input(f"\n組み合わせを選択してください: ").strip()
+            selected_indices = parse_selection(selection_input, len(sorted_groups))
+            
+            if selected_indices:
                 break
             else:
-                print("無効な選択です。")
-        except ValueError:
-            print("数字を入力してください。")
+                print("無効な選択です。再度入力してください。")
+        except Exception as e:
+            print(f"入力エラー: {e}")
     
-    selected_group = sorted(file_groups.keys())[group_choice]
-    selected_files = file_groups[selected_group]
+    # 選択されたグループを表示
+    selected_groups = [sorted_groups[i] for i in selected_indices]
+    print(f"\n選択されたグループ ({len(selected_groups)}個):")
+    total_files = 0
     
-    print(f"\n選択されたグループ: {selected_group}")
-    print(f"利用可能なフレーム数: {len(selected_files)}")
-
-    files_to_use = selected_files
-
-    print(f"使用フレーム数: {len(files_to_use)}")
+    for group in selected_groups:
+        frame_count = len(file_groups[group])
+        print(f"  - {group} ({frame_count} フレーム)")
+        total_files += frame_count
+    
+    print(f"\n合計ファイル数: {total_files}")
+    print("※各グループごとに個別の動画ファイルを作成します")
     
     # アニメーション設定
-    # show_labels = input("キーポイント名を表示しますか？ (y/n): ").lower() == 'y'
-    # show_numbers = input("キーポイント番号を表示しますか？ (y/n): ").lower() == 'y'
-    # save_animation = input("アニメーションを保存しますか？ (y/n): ").lower() == 'y'
-    
-    print("キーポイント名は表示しません")
-    print("キーポイント番号は表示しません")
-    print("アニメーションは保存します")
+    print("\nアニメーション設定:")
+    print("- キーポイント名: 表示しません")
+    print("- キーポイント番号: 表示しません")
+    print("- アニメーション: 保存します")
     
     show_labels = False
     show_numbers = False
     save_animation = True
     
-    # 保存設定
-    save_path = None
-    if save_animation:
-        save_dir = root_dir / "3d_walking_animations"
-        save_dir.mkdir(exist_ok=True)
-        
-        # ファイル名生成
-        safe_group_name = selected_group.replace('/', '_')
-        filename = f"3d_walking_animation_{safe_group_name}_frames{len(files_to_use)}.mp4"
-        save_path = save_dir / filename
-        print(f"保存先: {save_path}")
+    # 視点選択
+    view_options = {
+        1: {"name": "sagittal", "elev": 0, "azim": 90, "description": "矢状面（横から）"},
+        2: {"name": "frontal", "elev": 0, "azim": 0, "description": "前額面（正面から）"},
+        3: {"name": "oblique", "elev": 10, "azim": 45, "description": "斜め視点（デフォルト）"}
+    }
     
-    # アニメーションデータを読み込み
-    animation_data, global_bounds = load_animation_sequence(files_to_use)
+    print("\n視点選択:")
+    for key, view in view_options.items():
+        print(f"  {key}. {view['description']}")
+    print("  4. 全ての視点（1,2,3すべて）")
     
-    if not animation_data:
-        print("有効なアニメーションデータがありません。")
-        return
-    
-    # アニメーション作成
-    print("\n歩行アニメーション作成中...")
-    ani = create_3d_animation(
-        animation_data, global_bounds,
-        show_keypoint_labels=show_labels,
-        show_keypoint_numbers=show_numbers,
-        save_path=save_path,
-    )
-    
-    if ani:
-        print("歩行アニメーション作成完了！")
-        if not save_animation:
-            print("アニメーションを表示します...")
-            plt.show()
-    else:
-        print("アニメーション作成に失敗しました。")
-
-def interactive_frame_selector():
-    """
-    インタラクティブにフレームを選択して可視化
-    """
-    # --- パラメータ設定 ---
-    root_dir = Path(r"G:\gait_pattern\20250811_br")
-    
-    print("3D歩行ポーズスティックフィギュア可視化プログラム")
-    print(f"検索ディレクトリ: {root_dir}")
-    print("=" * 60)
-    
-    # 3Dポーズファイルを検索
-    pose_files = find_3d_pose_files(root_dir)
-    
-    if not pose_files:
-        print("3Dポーズ結果ファイルが見つかりません。")
-        return
-    
-    print(f"見つかった3Dポーズファイル数: {len(pose_files)}")
-    
-    # ファイルをグループ化（被験者/セラピスト別）
-    file_groups = {}
-    for file_path in pose_files:
-        # パスから被験者とセラピスト情報を抽出
-        parts = file_path.parts
-        subject = None
-        therapist = None
-        
-        for part in parts:
-            if part.startswith('sub'):
-                subject = part
-            elif part.startswith('thera'):
-                therapist = part
-        
-        if subject and therapist:
-            group_key = f"{subject}/{therapist}"
-            if group_key not in file_groups:
-                file_groups[group_key] = []
-            file_groups[group_key].append(file_path)
-    
-    # グループを表示
-    print("\n利用可能な被験者/セラピストの組み合わせ:")
-    for i, group_key in enumerate(sorted(file_groups.keys())):
-        file_count = len(file_groups[group_key])
-        print(f"  {i+1}. {group_key} ({file_count} フレーム)")
-    
-    # グループ選択
     while True:
         try:
-            group_choice = int(input(f"\n組み合わせを選択してください (1-{len(file_groups)}): ")) - 1
-            if 0 <= group_choice < len(file_groups):
+            view_input = input("\n視点を選択してください（複数選択の場合はカンマ区切り、例: 1,3）: ")
+            if view_input.strip() == "4":
+                selected_views = [1, 2, 3]
                 break
             else:
-                print("無効な選択です。")
-        except ValueError:
-            print("数字を入力してください。")
-    
-    selected_group = sorted(file_groups.keys())[group_choice]
-    selected_files = file_groups[selected_group]
-    
-    print(f"\n選択されたグループ: {selected_group}")
-    print(f"利用可能なフレーム数: {len(selected_files)}")
-    
-    # フレーム一覧表示（最初の10個）
-    print("\nフレーム一覧（最初の10個）:")
-    for i, file_path in enumerate(selected_files[:10]):
-        frame_name = file_path.name.replace('3d_pose_', '').replace('.json', '')
-        print(f"  {i+1}. {frame_name}")
-    
-    if len(selected_files) > 10:
-        print(f"  ... (他 {len(selected_files) - 10} フレーム)")
-    
-    # フレーム選択オプション
-    print("\nオプション:")
-    print("  1. 特定のフレーム番号を指定")
-    print("  2. ランダムに5フレーム表示")
-    print("  3. 最初の5フレームを表示")
-    print("  4. 最後の5フレームを表示")
-    print("  5. アニメーション作成")
-    
-    print("  5のアニメーション作成を行います")
-    option = 5
-    
-    # while True:
-    #     try:
-    #         option = int(input("オプションを選択してください (1-5): "))
-    #         if 1 <= option <= 5:
-    #             break
-    #         else:
-    #             print("無効な選択です。")
-    #     except ValueError:
-    #         print("数字を入力してください。")
-    
-    if option == 5:
-        # アニメーション作成に分岐
-        interactive_animation_creator()
-        return
-    
-    # 可視化オプション
-    # show_labels = input("\nキーポイント名を表示しますか？ (y/n): ").lower() == 'y'
-    # show_numbers = input("キーポイント番号を表示しますか？ (y/n): ").lower() == 'y'
-    # save_images = input("画像を保存しますか？ (y/n): ").lower() == 'y'
-    
-    show_labels = False
-    show_numbers = False
-    save_images = True
-    
-    # 保存ディレクトリ
-    if save_images:
-        save_dir = root_dir / "3d_walking_stick_figures"
-        save_dir.mkdir(exist_ok=True)
-    else:
-        save_dir = None
-    
-    # 選択されたオプションに応じて処理
-    files_to_process = []
-    
-    if option == 1:
-        # 特定のフレーム番号を指定
-        while True:
-            try:
-                frame_num = int(input(f"フレーム番号を入力してください (1-{len(selected_files)}): ")) - 1
-                if 0 <= frame_num < len(selected_files):
-                    files_to_process = [selected_files[frame_num]]
+                view_selections = parse_selection(view_input, 3)
+                if view_selections:
+                    selected_views = [i + 1 for i in view_selections]  # 1ベースに戻す
                     break
                 else:
-                    print("無効なフレーム番号です。")
-            except ValueError:
-                print("数字を入力してください。")
-    
-    elif option == 2:
-        # ランダムに5フレーム
-        import random
-        files_to_process = random.sample(selected_files, min(5, len(selected_files)))
-    
-    elif option == 3:
-        # 最初の5フレーム
-        files_to_process = selected_files[:5]
-    
-    elif option == 4:
-        # 最後の5フレーム
-        files_to_process = selected_files[-5:]
-    
-    # 可視化実行
-    print(f"\n{len(files_to_process)} フレームを可視化中...")
-    
-    for i, file_path in enumerate(files_to_process):
-        print(f"\n処理中 ({i+1}/{len(files_to_process)}): {file_path.name}")
-        
-        try:
-            # 3Dポーズデータを読み込み
-            points_3d, keypoint_indices, keypoint_names, metadata = load_3d_pose_json(file_path)
-            
-            # 保存パスを設定
-            save_path = None
-            if save_dir:
-                save_path = save_dir / f"{file_path.stem}_walking_stick_figure.png"
-            
-            # スティックフィギュアをプロット
-            fig, ax = plot_3d_stick_figure(
-                points_3d, keypoint_indices, keypoint_names, metadata,
-                show_keypoint_labels=show_labels,
-                show_keypoint_numbers=show_numbers,
-                save_path=save_path
-            )
-            
-            print(f"  キーポイント数: {len(points_3d)}")
-            print(f"  検出されたキーポイント: {', '.join(keypoint_names[:5])}{'...' if len(keypoint_names) > 5 else ''}")
-            
+                    print("無効な選択です。1-4の数字を入力してください。")
         except Exception as e:
-            print(f"  エラー: {e}")
+            print(f"入力エラー: {e}")
     
-    print(f"\n可視化完了！")
-    if save_dir:
-        print(f"画像保存先: {save_dir}")
+    print(f"選択された視点: {[view_options[v]['description'] for v in selected_views]}")
+    
+    # 各グループごとにアニメーション作成
+    all_animations = []
+    total_combinations = len(selected_groups) * len(selected_views)
+    current_combination = 0
+    
+    print(f"\n歩行アニメーション作成開始")
+    print(f"作成予定: {len(selected_groups)} グループ × {len(selected_views)} 視点 = {total_combinations} 個の動画")
+    print("=" * 60)
+    
+    for group_idx, group in enumerate(selected_groups):
+        print(f"\nグループ {group_idx+1}/{len(selected_groups)}: {group}")
+        
+        # グループのファイルリストを取得
+        group_files = sorted(file_groups[group], key=extract_frame_number)
+        print(f"フレーム数: {len(group_files)}")
+        
+        # アニメーションデータを読み込み
+        print(f"データ読み込み中...")
+        animation_data, global_bounds = load_animation_sequence(group_files)
+        
+        if not animation_data:
+            print(f"有効なアニメーションデータがありません: {group}")
+            continue
+        
+        # 保存ディレクトリを設定
+        first_file_path = group_files[0]
+        thera_folder = None
+        for part in first_file_path.parts:
+            if part.startswith('thera'):
+                thera_index = first_file_path.parts.index(part)
+                thera_folder = Path(*first_file_path.parts[:thera_index+1])
+                break
+        
+        if thera_folder:
+            save_dir = thera_folder
+        else:
+            save_dir = root_dir / "3d_walking_animations"
+        
+        save_dir.mkdir(exist_ok=True)
+        
+        # 各視点でアニメーション作成
+        for view_id in selected_views:
+            current_combination += 1
+            view_config = view_options[view_id]
+            
+            print(f"\n進捗 {current_combination}/{total_combinations}: {group} - {view_config['description']}")
+            
+            # ファイル名生成（グループごと）
+            safe_group_name = group.replace('/', '_')
+            filename = f"3d_walking_animation_{safe_group_name}_{view_config['name']}_frames{len(group_files)}.mp4"
+            save_path = save_dir / filename
+            
+            print(f"保存先: {save_path}")
+            
+            try:
+                ani = create_3d_animation(
+                    animation_data, global_bounds,
+                    show_keypoint_labels=show_labels,
+                    show_keypoint_numbers=show_numbers,
+                    save_path=save_path,
+                    view_name=view_config['name'],
+                    elev=view_config['elev'],
+                    azim=view_config['azim']
+                )
+                
+                if ani:
+                    all_animations.append(ani)
+                    print(f"✓ 完了: {save_path.name}")
+                
+            except Exception as e:
+                print(f"✗ エラー: {save_path.name} - {e}")
+                continue
+    
+    print(f"\n歩行アニメーション作成完了！")
+    print(f"作成された動画数: {len(all_animations)}")
+    print("=" * 60)
+    
+    return all_animations
 
 def main():
     """
@@ -954,29 +908,8 @@ def main():
     print("3D歩行ポーズスティックフィギュア可視化プログラム")
     print("=" * 60)
     
-    print("モード選択:")
-    print("  1. 静止画可視化")
-    print("  2. アニメーション作成")
-    
-    print("  2のアニメーション作成を行います")
-    mode = 2
-    
-    # while True:
-    #     try:
-    #         mode = int(input("モードを選択してください (1-2): "))
-    #         if mode in [1, 2]:
-    #             break
-    #         else:
-    #             print("無効な選択です。")
-    #     except ValueError:
-    #         print("数字を入力してください。")
-    
-    if mode == 1:
-        # 静止画モードで実行
-        interactive_frame_selector()
-    else:
-        # アニメーションモードで実行
-        interactive_animation_creator()
+    # アニメーションモード
+    interactive_animation_creator()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
