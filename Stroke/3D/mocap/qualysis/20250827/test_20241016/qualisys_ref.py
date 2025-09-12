@@ -1,3 +1,7 @@
+"""
+元々の結果と意図的にRASIを削除して補間した結果を比較するためのスクリプト
+"""
+
 import module_mocap as moc
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -7,7 +11,8 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 
 tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
-tsv_files = tsv_dir.glob("*com*deleted*.tsv")
+ori_tsv_file = tsv_dir / "sub4_com_nfpa0001.tsv"  #もともとのtsvファイル（膝や足首の欠損はある）
+deleted_tsv_file = tsv_dir / "sub4_com_nfpa0001_deleted_allSpline.tsv"  #RASIを削除して補間したtsvファイル
 tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
 
 def plot_interpolation_results(dfs, labels, marker_name, output_path):
