@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt # グラフ描画ライブラリをインポート
 from pathlib import Path
 import csv
+import json
 
 def find_bottom_frame_by_aruco(video_path):
     """
@@ -149,7 +150,10 @@ def find_bottom_frame_by_aruco(video_path):
         print("グラフを描画するためのマーカーデータがありませんでした。")
         
 
-# --- 実行 ---
-# ここにあなたの動画ファイルパスを指定してください
+# LED発光を0フレーム目として切り抜いた動画を処理（今は切り抜き前を使用）
 video_file = Path(r"G:\gait_pattern\20250915_synctest\1.MP4")
 find_bottom_frame_by_aruco(video_file)
+
+gopro_trim_info_path = video_file.parent / "gopro_trimming_info.json"
+with open(gopro_trim_info_path, 'r') as f:
+    gopro_trim_info = json.load(f)
