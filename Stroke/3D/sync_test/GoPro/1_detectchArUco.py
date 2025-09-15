@@ -4,8 +4,9 @@ import matplotlib.pyplot as plt # グラフ描画ライブラリをインポー�
 from pathlib import Path
 import csv
 import json
+import glob
 
-def find_bottom_frame_by_aruco(video_path):
+def find_bottom_frame_by_aruco(video_path, start_frame_rel):
     """
     ArUcoマーカーを用いて、動画内でマーカーが最も下に到達したフレームを特定し、
     y座標の推移をグラフで可視化する。
@@ -40,12 +41,10 @@ def find_bottom_frame_by_aruco(video_path):
         aruco_params = cv2.aruco.DetectorParameters()
         detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
 
-        current_frame_number = 0
 
-        start_frame_skip = 0
-        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame_skip)
-        current_frame_number = start_frame_skip
-        
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        current_frame_number = start_frame_rel
+
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -73,7 +72,7 @@ def find_bottom_frame_by_aruco(video_path):
                 mini_frame = cv2.resize(frame, (frame.shape[1]//4, frame.shape[0]//4))
                 cv2.imshow("Frame with ArUco", mini_frame)
                 cv2.waitKey(1)
-                print(f"検出成功: Frame {current_frame_number}: Marker center Y = {center_y}")
+                print(f"検出成功Frame {current_frame_number}: Marker center Y = {center_y}")
 
             center_y_pre = center_y
             current_frame_number += 1
@@ -101,6 +100,7 @@ def find_bottom_frame_by_aruco(video_path):
     vy_threshold = 5  # Y座標の変化量の閾値
     y_coords_threshold = 10  # 一定位置よりも動いていることを確認する閾値
     y_coords_median = np.median(y_coords_list) if y_coords_list else 0
+    vy_diff_list = np.diff(y_coords_list, prepend=y_coords_list[0] if y_coords_list else 0)
     # print(f"Y座標の中央値: {y_coords_median}")
     
     impact_frame = -1  # 最下点フレームの初期値
@@ -111,7 +111,7 @@ def find_bottom_frame_by_aruco(video_path):
         # print(f"フレーム {frame_numbers_list[i]}: vy_diff:{vy_diff}, vy_diff_pre:{vy_diff_pre}, y_coords:{y_coords_list[i]}, y_coords_median:{y_coords_median}")
         # print(f"    vy_diff <= 0_bool: {vy_diff <= 0}, vy_diff_pre > 0_bool: {vy_diff_pre > 0},vy_diff_pre > vy_threshold_bool: {vy_diff_pre > vy_threshold},  y_coord_bool: {abs(y_coords_list[i-1]-y_coords_median)<y_coords_threshold}")
         # 最下点の条件: 速度が正から負に変わる、かつ前の速度が閾値以上、かつy座標が中央値付近
-        if vy_diff <= 0 and vy_diff_pre > 0 and vy_diff_pre > vy_threshold and abs(y_coords_list[i-1] - y_coords_median) < y_coords_threshold:
+        if vy_diff <= vy_threshold and vy_diff_pre > 0 and vy_diff_pre > vy_threshold and abs(y_coords_list[i-1] - y_coords_median) < y_coords_threshold:
             impact_frame = frame_numbers_list[i-1]  #増加から減少に転じた直前のフレームが最下点
             print(f"最下点フレーム: {impact_frame} (Y座標: {y_coords_list[i-1]})")
         
@@ -134,26 +134,59 @@ def find_bottom_frame_by_aruco(video_path):
             
     # グラフを描画して保存する
     if frame_numbers_list:  # データが記録されている場合のみグラフを作成
-        plt.figure(figsize=(12, 6))
-        plt.plot(frame_numbers_list, y_coords_list, marker='.', linestyle='-', label='Marker Y-coordinate')
-        plt.axvline(x=impact_frame, color='r', linestyle='--', label='Impact Frame')
-        plt.title('Marker Center Y-coordinate over Frames')
-        plt.xlabel('Frame Number')
-        plt.ylabel('Y-coordinate')
-        plt.grid(True)
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+        fig.suptitle('Marker Center Y-coordinate and Velocity over Frames', fontsize=16)
+
+        ax1.plot(frame_numbers_list, y_coords_list, marker='.', linestyle='-', label='Marker Y-coordinate', color = "tab:blue")
+        ax1.axvline(x=impact_frame, color='r', linestyle='--', label='Impact Frame')
+        ax1.set_title('Marker Center Y-coordinate over Frames')
+        ax1.set_xlabel('Frame Number')
+        ax1.set_ylabel('Y-coordinate')
+        ax1.grid(True)
+
+        ax2.plot(frame_numbers_list, vy_diff_list, marker='.', linestyle='-', label='Marker Y-velocity', color="tab:orange")
+        ax2.axvline(x=impact_frame, color='r', linestyle='--', label='Impact Frame')
+        ax2.set_title('Marker Center Y-velocity over Frames')
+        ax2.set_xlabel('Frame Number')
+        ax2.set_ylabel('Y-velocity')
+        ax2.grid(True)
 
         plt.legend()
-        graph_filename = str(video_path.parent / "marker_y_coordinate_graph.png")
+        graph_filename = str(video_path.parent / f"{video_path.stem}_marker_y_coordinate_graph.png")
         plt.savefig(graph_filename)
         print(f"グラフを '{graph_filename}' として保存しました。")
+        plt.show()
+        plt.close()
+
     else:
         print("グラフを描画するためのマーカーデータがありませんでした。")
-        
+    
+    return impact_frame
 
-# LED発光を0フレーム目として切り抜いた動画を処理（今は切り抜き前を使用）
-video_file = Path(r"G:\gait_pattern\20250915_synctest\1.MP4")
-find_bottom_frame_by_aruco(video_file)
+# LED発光を0フレーム目として切り抜いた動画を処理
+video_file_dir = Path(r"G:\gait_pattern\20250915_synctest\GoPro")
+video_file_path = Path(glob.glob(str(video_file_dir / "*6*trimed*.mp4"))[0])
 
-gopro_trim_info_path = video_file.parent / "gopro_trimming_info.json"
+gopro_trim_info_path = video_file_path.parent / f"{video_file_path.stem.split('_')[0]}_gopro_trimming_info.json"
 with open(gopro_trim_info_path, 'r') as f:
     gopro_trim_info = json.load(f)
+    print(f"読み込んだトリミング情報: {gopro_trim_info}")
+
+fps = gopro_trim_info['original_video_info']['fps']
+led_flash_frame = gopro_trim_info['trimming_settings']['reference_frame']
+start_frame_rel = gopro_trim_info['trimming_settings']['start_frame_relative']
+end_frame_rel = gopro_trim_info['trimming_settings']['end_frame_relative']
+print(f"動画のFPS: {fps}, LED発光フレーム: {led_flash_frame}, 開始フレーム(相対値): {start_frame_rel}, 終了フレーム(相対値): {end_frame_rel}")
+
+impact_frame = find_bottom_frame_by_aruco(video_file_path, start_frame_rel)
+impact_time = impact_frame / fps if impact_frame != -1 else -1
+print(f"impact_frame: {impact_frame}, impact_time: {impact_time:.2f}秒")
+
+gopro_impact_info = {
+    "impact_frame_ledbase": int(impact_frame) if impact_frame != -1 else None,
+    "impact_time_ledbase": impact_time
+}
+gopro_impact_info_path = video_file_path.parent.with_name(f"{video_file_path.stem.split('_')[0]}_gopro_impact_info.json")
+with open(gopro_impact_info_path, 'w', encoding='utf-8') as f:
+    json.dump(gopro_impact_info, f, indent=4)
+print(f"{gopro_impact_info_path}を保存しました。")
