@@ -324,7 +324,7 @@ def save_trimming_info(video_path, detected_frame_num, start_frame_rel, end_fram
     """
     # JSONファイル名を生成
     json_filename = "gopro_trimming_info.json"
-    json_path = video_path.parent.with_name(json_filename)
+    json_path = video_path.with_name(json_filename)
 
     # 動画情報を取得
     cap = cv2.VideoCapture(str(video_path))
@@ -666,7 +666,7 @@ def main():
     """
     メイン処理
     """
-    VIDEO_PATH = Path(r"G:\gait_pattern\20250815_synctest\2.MP4")
+    VIDEO_PATH = Path(r"G:\gait_pattern\20250915_synctest\1.MP4")
 
     # ★★★ 既にtrimedファイルが存在するかチェック ★★★
     parent_dir = VIDEO_PATH.parent
