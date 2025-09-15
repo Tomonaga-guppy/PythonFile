@@ -205,7 +205,7 @@ def read_entry(ser, entry_number, port):
 def save_to_csv(accel_gyro_data, geomagnetic_data, extension_data, filename):
     with open(filename, mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["Type", "Timestamp_Acc", "Acc_X 0.1[mG]", "Acc_Y 0.1[mG]", "Acc_Z 0.1[mG]", "Gyro_X 0.01[dps]", "Gyro_Y 0.01[dps]", "Gyro_Z 0.01[dps]", "Type", "Timestamp_Mag", "Mag_X 0.1[μT]", "Mag_Y 0.1[μT]", "Mag_Z 0.1[μT]", "Type", "Timestamp_Ext", "Port 0", "Port1", "Port2", "Port3", "AD0", "AD1"])
+        writer.writerow(["Type", "Timestamp_Acc", "Acc_X 0.1[mG]", "Acc_Y 0.1[mG]", "Acc_Z 0.1[mG]", "Gyro_X 0.01[dps]", "Gyro_Y 0.01[dps]", "Gyro_Z 0.01[dps]", "Type", "Timestamp_Mag", "Mag_X 0.1[μT]", "Mag_Y 0.1[μT]", "Mag_Z 0.1[μT]", "Type", "Timestamp_Ext", "Port0", "Port1", "Port2", "Port3", "AD0", "AD1"])
         max_len = max(len(accel_gyro_data), len(geomagnetic_data), len(extension_data))
         for i in range(max_len):
             ag_data = ["ags"] + accel_gyro_data[i] if i < len(accel_gyro_data) else ["ags", "", "", "", "", "", "", ""]
