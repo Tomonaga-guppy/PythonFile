@@ -371,7 +371,7 @@ def save_to_csv(accel_gyro_data, geomagnetic_data, extension_data, filename):
         writer.writerow([
             "Type", "Timestamp_Acc", "Acc_X 0.1[mG]", "Acc_Y 0.1[mG]", "Acc_Z 0.1[mG]", "Gyro_X 0.01[dps]", "Gyro_Y 0.01[dps]", "Gyro_Z 0.01[dps]",
             "Type", "Timestamp_Mag", "Mag_X 0.1[μT]", "Mag_Y 0.1[μT]", "Mag_Z 0.1[μT]",
-            "Type", "Timestamp_Ext", "Port 0", "Port1", "Port2", "Port3", "AD0", "AD1"
+            "Type", "Timestamp_Ext", "Port0", "Port1", "Port2", "Port3", "AD0", "AD1"
         ])
 
         # 加速度・角速度データと地磁気データ、拡張データの最大長を取得
