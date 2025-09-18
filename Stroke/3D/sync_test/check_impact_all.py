@@ -13,7 +13,7 @@ def load_json(json_path):
 
 def main():
     root_dir = Path(r"G:\gait_pattern\20250915_synctest")
-    check_id_list = ["3","4","6"]
+    check_id_list = ["3","5","6"]
     for id in check_id_list:
         print(f"\n=== ID: {id} の衝突フレーム情報 ===")
         

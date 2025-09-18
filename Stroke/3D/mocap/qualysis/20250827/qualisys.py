@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 
 tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm")
-tsv_files = tsv_dir.glob("*0004*.tsv")
+tsv_files = tsv_dir.glob("*0003*.tsv")
 tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
 
 def plot_interpolation_results(dfs, labels, marker_name, output_path):

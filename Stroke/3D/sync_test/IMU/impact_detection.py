@@ -2,6 +2,7 @@ import pandas as pd
 import json
 import numpy as np
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 def analyze_sync_data(csv_file):
     """
@@ -58,6 +59,8 @@ def find_sharp_increase(df, acc_column_name, threshold=10000):
     加速度の急激な増加点を検出する関数
     """
     acc_diff = df[acc_column_name].diff()
+    plt.plot(df['Timestamp_Acc'], acc_diff, label='Acceleration')
+    plt.show()
     sharp_increase_points = df[acc_diff > threshold]
     if sharp_increase_points.empty:
         print("-> 急激な増加は見つかりませんでした。")
@@ -69,7 +72,7 @@ def find_sharp_increase(df, acc_column_name, threshold=10000):
 
 # --- メイン処理 ---
 if __name__ == "__main__":
-    csv_dir = Path(r'G:\gait_pattern\20250915_synctest\IMU\sub1\thera0-3\IMU')
+    csv_dir = Path(r'G:\gait_pattern\20250915_synctest\IMU\sub1\thera0-6\IMU')
     csv_path = list(csv_dir.glob("*sync*.csv"))[0]
     imu_df, p0_ts, p1_ts, ags_ts, diff_port0to1_frame = analyze_sync_data(csv_path)
     print(f"p0_ts: {p0_ts}, p1_ts: {p1_ts}, ags_ts: {ags_ts}, diff_port0to1_frame: {diff_port0to1_frame}")
@@ -78,14 +81,24 @@ if __name__ == "__main__":
     
     if acc_z_series is not None:
         acc_threshold = 10000
-        result_increase = find_sharp_increase(acc_z_series, 'Acc_Y 0.1[mG]', threshold=acc_threshold)
+        impact_frame_number = acc_z_series["Acc_Y 0.1[mG]"].idxmax()
+        impact_y = acc_z_series["Acc_Y 0.1[mG]"].max()
+        impact_timestamp = acc_z_series.loc[impact_frame_number, 'Timestamp_Acc']
+        print(f"衝突検出フレーム: {impact_frame_number}, 衝突時タイムスタンプ: {impact_timestamp}, 衝突時Y加速度: {impact_y}")
+        
+        plt.plot(acc_z_series.index, acc_z_series['Acc_Y 0.1[mG]'], label='Acc_Y 0.1[mG]')
+        plt.axvline(x=impact_frame_number, color='r', linestyle='--', label='Impact Frame')
+        plt.title('Acc_Y 0.1[mG] over Frames')
+        plt.xlabel('Frame Number')
+        plt.ylabel('Acc_Y 0.1[mG]')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(csv_path.parent / f"{csv_path.stem}_AccY_graph.png")
+        # plt.show()
 
-        if result_increase is not None and result_increase[0] is not None:
-            impact_frame_number, impact_timestamp = result_increase
-            elapsed_time_ms = (impact_timestamp - ags_ts)
-            print(f"衝突検出フレーム(100Hz): {impact_frame_number}, 経過時間: {elapsed_time_ms}ms, 衝突時タイムスタンプ: {impact_timestamp}")
-        else:
-            impact_frame_number, impact_timestamp, elapsed_time_ms = None, None, None
+        elapsed_time_ms = (impact_timestamp - ags_ts)
+        print(f"衝突検出フレーム(100Hz): {impact_frame_number}, 経過時間: {elapsed_time_ms}ms, 衝突時タイムスタンプ: {impact_timestamp}")
 
         impact_frame_number_py = int(impact_frame_number) if impact_frame_number is not None else None
         impact_timestamp_py = float(impact_timestamp) if impact_timestamp is not None else None
