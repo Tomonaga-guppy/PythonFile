@@ -7,8 +7,8 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 
 tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
-tsv_files = tsv_dir.glob("*sub4_tpose*.tsv")
-# tsv_files = tsv_dir.glob("*sub4_com_nfpa*.tsv")
+# tsv_files = tsv_dir.glob("*sub4_tpose*.tsv")
+tsv_files = tsv_dir.glob("*sub4_com_nfpa*.tsv")
 tsv_files = list(tsv_files)
 tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
 
@@ -82,6 +82,7 @@ def plot_interpolation_results(dfs, labels, marker_name, output_path):
 
 def main():
     angle_dict = {}
+    pelvis_dict = {}
     for itsv, tsv_file in enumerate(tsv_files):
         # 各TSVファイルに対する角度計算のための辞書を初期化
         angle_dict[tsv_file.stem] = {}
@@ -132,17 +133,25 @@ def main():
         butter_df = moc.butterworth_filter_no_nan_gaps(interpolated3_df, cutoff=6, order=4, fs=120) #4次のバターワースローパスフィルタ
 
 
-
-
-        nan_df = nan_df.iloc[:390, :]  #デバッグ用にフレームを限定
-        interpolated_df = interpolated_df.iloc[:390, :]
-        interpolated2_df = interpolated2_df.iloc[:390, :]
-        interpolated3_df = interpolated3_df.iloc[:390, :]
-        butter_df = butter_df.iloc[:390, :]
-
-
-
-
+        # frame_max = None
+        frame_max = 389
+        if frame_max is not None:
+            nan_df = nan_df.iloc[:frame_max, :]  #デバッグ用にフレームを限定
+            interpolated_df = interpolated_df.iloc[:frame_max, :]
+            interpolated2_df = interpolated2_df.iloc[:frame_max, :]
+            interpolated3_df = interpolated3_df.iloc[:frame_max, :]
+            butter_df = butter_df.iloc[:frame_max, :]
+        else:
+            nan_df = nan_df
+            interpolated_df = interpolated_df
+            interpolated2_df = interpolated2_df
+            interpolated3_df = interpolated3_df
+            butter_df = butter_df
+            
+        
+        # 削除した場合としない場合を比較する用のプロット
+        pelvis_dict[tsv_file.stem] = butter_df
+        print(f"pelvis_dict[{tsv_file.stem}]: {pelvis_dict[tsv_file.stem]}")
 
         print("\n--- 補間結果のプロットを開始 ---")
         plot_dfs = [nan_df, interpolated_df, interpolated2_df, interpolated3_df, butter_df]
@@ -438,6 +447,41 @@ def main():
         
         angle_dict[tsv_file.stem] = angle_df
         
+        
+    # 削除前後での座標データの比較
+    pelvis_dict_keys = list(pelvis_dict.keys())
+    if len(pelvis_dict_keys) == 2:
+        def plot_pelvis_comparison(pelvis_dict):
+            keys = list(pelvis_dict.keys())
+            df1 = pelvis_dict[keys[0]]
+            df2 = pelvis_dict[keys[1]]
+            
+            # 共通のフレーム範囲を特定
+            common_index = df1.index.intersection(df2.index)
+            df1_common = df1.loc[common_index]
+            df2_common = df2.loc[common_index]
+            
+            markers = ['RASI', 'LASI', 'RPSI', 'LPSI']
+            coords = ['X', 'Y', 'Z']
+            
+            for marker in markers:
+                plt.figure(figsize=(15, 10))
+                for i, coord in enumerate(coords):
+                    plt.subplot(3, 1, i+1)
+                    plt.plot(df1_common.index, df1_common[f'{marker} {coord}'], label=f'Original', color='tab:blue')
+                    plt.plot(df2_common.index, df2_common[f'{marker} {coord}'], label=f'Rigid Transformation', color='tab:orange', alpha=0.7)
+                    plt.title(f'{marker} - {coord} Coordinate Comparison')
+                    plt.xlabel('Frame')
+                    plt.ylabel('Position (mm)')
+                    plt.grid()
+                    plt.legend()
+                plt.tight_layout()
+                save_path = tsv_dir / f"{keys[0]}_{keys[1]}_{marker}_Pelvis_Comparison.png"
+                plt.savefig(save_path)
+                plt.close()
+        plot_pelvis_comparison(pelvis_dict)  #骨盤マーカーの座標比較をプロット
+        
+        
     print(f"angle_dict: {angle_dict}")
     # 各被験者の角度データをプロット，RMSEを計算
     if len(angle_dict) == 2:
@@ -463,8 +507,8 @@ def main():
                     else:
                         color = "tab:blue"
                     col_name = f"{side}_{joint}"
-                    plt.plot(df1_common.index, df1_common[col_name], label=f'Original', color=color, linestyle='-', linewidth=2)
-                    plt.plot(df2_common.index, df2_common[col_name], label=f'Rigid Transformation', color=color, linewidth=1, alpha=0.1)
+                    plt.plot(df1_common.index, df1_common[col_name], label=f'Original', color=color)
+                    plt.plot(df2_common.index, df2_common[col_name], label=f'Rigid Transformation', color=color, linewidth=3, alpha=0.3)
                     # plt.plot(df1_common.index, df1_common[col_name], label=f'Original', color=color)
                     # plt.plot(df2_common.index, df2_common[col_name], label=f'Rigid Transformation', linestyle='--', color=color)
 
