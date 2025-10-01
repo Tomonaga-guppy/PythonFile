@@ -73,17 +73,20 @@ if __name__ == "__main__":
 
     # 出力ファイル名
     output_file = r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016\sub4_com_nfpa0001_deleted.tsv"
+    
+    
 
     # nanに置換したいフレーム範囲をリストで指定
-    frame_ranges_to_nan = [
-        (10, 20),
-        (100, 200),
-        (340, 355),
-        (390, 500),
-        (600, 800),
-        (850, 900),
-        (1000, 1100)
-    ]
+    frame_ranges_to_nan = [(17, 36), (46, 55), (67, 94), (180, 197), (204, 213), (240, 269), (286, 305), (308, 317), (377, 386)]
+    # frame_ranges_to_nan = [
+    #     (10, 20),
+    #     (100, 200),
+    #     (340, 355),
+    #     (390, 500),
+    #     (600, 800),
+    #     (850, 900),
+    #     (1000, 1100)
+    # ]
 
     # 関数を実行
     process_tsv_file(input_file, output_file, frame_ranges_to_nan)

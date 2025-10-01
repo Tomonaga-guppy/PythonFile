@@ -4,8 +4,94 @@ import matplotlib.pyplot as plt # グラフ描画ライブラリをインポー�
 from pathlib import Path
 import csv
 import json
+import glob
+import pandas as pd
 
-def find_bottom_frame_by_aruco(video_path):
+# ==============================================================================
+# ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼【ここを修正】▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+# ==============================================================================
+# 引数に start_frame_rel を追加
+def create_annotated_video(video_path, df, output_path, start_frame_rel, impact_frame=None):
+    """
+    マーカーの検出位置をフレーム上に描画した動画を生成する。
+
+    Args:
+        video_path (Path): 元となる動画ファイルのパス。
+        df (pd.DataFrame): フレーム番号をインデックスとし、'CenterX', 'CenterY'列を持つデータフレーム。
+        output_path (Path): 生成する動画の保存先パス。
+        start_frame_rel (int): 処理の開始フレーム番号（オフセット）。
+        impact_frame (int, optional): 特にハイライトするフレーム番号. Defaults to None.
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        print(f"エラー: 動画ファイル '{video_path}' を開けません。")
+        return
+
+    # 動画のプロパティを取得
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # 動画書き出しの設定
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v') # コーデック
+    out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
+
+    print(f"マーカー位置を描画した動画の生成を開始します... -> {output_path}")
+
+    frame_num = 0 # トリミング後の動画のフレームカウンター (0, 1, 2, ...)
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # 座標検索用のフレーム番号を計算（オフセットを追加）
+        lookup_frame_num = frame_num + start_frame_rel
+
+        # 座標データが存在するか確認
+        if lookup_frame_num in df.index:
+            # 座標を取得
+            center_x = int(df.loc[lookup_frame_num, 'X'])
+            center_y = int(df.loc[lookup_frame_num, 'Y'])
+
+            # マーカー位置に円を描画
+            cv2.circle(frame, (center_x, center_y), 20, (0, 255, 0), -1) # 緑色の塗りつぶした円
+            
+            # 座標テキストを描画
+            text = f"({center_x}, {center_y})"
+            cv2.putText(frame, text, (center_x + 15, center_y + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+        # フレーム番号を描画（動画内の番号と、全体での相対番号を両方表示）
+        frame_text = f"Frame: {frame_num} (Rel: {lookup_frame_num})"
+        cv2.putText(frame, frame_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        
+        # 着地フレームの場合、特別なテキストを描画
+        if lookup_frame_num == impact_frame:
+            impact_text = "IMPACT FRAME"
+            text_size = cv2.getTextSize(impact_text, cv2.FONT_HERSHEY_SIMPLEX, 2, 3)[0]
+            text_x = (width - text_size[0]) // 2
+            text_y = (height + text_size[1]) // 2
+            cv2.putText(frame, impact_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)
+
+        # フレームを動画に書き込む
+        out.write(frame)
+        
+        # 進捗表示
+        if frame_num % 100 == 0:
+            print(f"  処理中... {frame_num} / {total_frames} フレーム")
+
+        frame_num += 1
+
+    print("動画の生成が完了しました。")
+    # リソースを解放
+    cap.release()
+    out.release()
+# ==============================================================================
+# ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲【修正ここまで】▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+# ==============================================================================
+
+
+def find_bottom_frame_by_aruco(video_path, start_frame_rel):
     """
     ArUcoマーカーを用いて、動画内でマーカーが最も下に到達したフレームを特定し、
     y座標の推移をグラフで可視化する。
@@ -15,145 +101,205 @@ def find_bottom_frame_by_aruco(video_path):
 
     Returns:
         int: 最下点のフレーム番号。見つからない場合は-1。
+        pd.DataFrame: マーカー座標のデータフレーム。
     """
     
-    skip_detection = False
     y_csv_path = video_path.parent / f"{video_path.stem}_coordinates.csv"
     
     # グラフ用のデータを保存するリストを初期化
     frame_numbers_list = []
     y_coords_list = []
+    x_coords_list = []
     
-        
+    # --- ① データ読み込みセクション ---
     if y_csv_path.exists():
         print(f"既存のCSVファイルが見つかりました: {y_csv_path}")
-        print("この動画の処理をスキップします。\n")
-        skip_detection = True
+        try:
+            with open(y_csv_path, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                header = next(reader)
+                try:
+                    # ヘッダー名からXとYの列番号を自動で特定
+                    x_col_index = header.index('CenterX')
+                    y_col_index = header.index('CenterY')
+                except ValueError:
+                    print("エラー: CSVのヘッダーに 'CenterX' または 'CenterY' が見つかりません。")
+                    return -1, pd.DataFrame() # 古いフォーマットの場合は処理を中断
+
+                for row in reader:
+                    frame_numbers_list.append(int(row[0]))
+                    x_coords_list.append(float(row[x_col_index])) # X座標を読み込む
+                    y_coords_list.append(float(row[y_col_index])) # Y座標を読み込む
+            print(f"CSVファイル '{y_csv_path}' からデータを読み込みました。")
+        except IOError as e:
+            print(f"エラー: CSVファイル '{y_csv_path}' の読み込みに失敗しました。 {e}")
+            return -1, pd.DataFrame()
     else:
+        print("CSVファイルが見つからないため、動画からマーカーを検出します。")
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
             print(f"エラー: 動画ファイル '{video_path}' を開けません。")
-            return -1
+            return -1, pd.DataFrame()
 
-        # ArUcoマーカーの辞書を定義
         aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
         aruco_params = cv2.aruco.DetectorParameters()
         detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
-
-        current_frame_number = 0
-
-        start_frame_skip = 0
-        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame_skip)
-        current_frame_number = start_frame_skip
         
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        current_frame_number = start_frame_rel
+
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
 
-            # フレームからマーカーを検出
             corners, ids, rejected = detector.detectMarkers(frame)
 
-            # マーカーが検出された場合
             if ids is not None:
-                # 最初のマーカーを対象とする
                 marker_corners = corners[0][0]
-                
-                # マーカーの中心Y座標を計算
                 center_y = np.mean(marker_corners[:, 1])
                 center_x = np.mean(marker_corners[:, 0])
-
-                # フレーム番号とy座標をリストに追加
                 frame_numbers_list.append(current_frame_number)
+                x_coords_list.append(center_x)
                 y_coords_list.append(center_y)
-                
-                # マーカーの中心を描画
-                cv2.circle(frame, (int(center_x), int(center_y)), 5, (0, 255, 0), -1)
-                cv2.aruco.drawDetectedMarkers(frame, corners, ids)
-                mini_frame = cv2.resize(frame, (frame.shape[1]//4, frame.shape[0]//4))
-                cv2.imshow("Frame with ArUco", mini_frame)
-                cv2.waitKey(1)
-                print(f"検出成功: Frame {current_frame_number}: Marker center Y = {center_y}")
-
-            center_y_pre = center_y
+                print(f"検出成功Frame {current_frame_number}: Marker center Y = {center_y}")
+            
             current_frame_number += 1
 
         cap.release()
-        cv2.destroyAllWindows() # 表示ウィンドウを閉じる処理
-    
-    if skip_detection:  #既存のCSVがある場合はそこからフレームとy座標を読み込む
-        try:
-            with open(y_csv_path, 'r', newline='', encoding='utf-8') as f:
-                reader = csv.reader(f)
-                next(reader)  # ヘッダー行をスキップ
-                for row in reader:
-                    frame_numbers_list.append(int(row[0]))
-                    y_coords_list.append(float(row[1]))
-            print(f"CSVファイル '{y_csv_path}' からデータを読み込みました。")
-        except IOError as e:
-            print(f"エラー: CSVファイル '{y_csv_path}' の読み込みに失敗しました。 {e}")
-            return -1
-        
-    
-    # 地面に到達したフレームを算出
-    center_y_pre = None  # 前の座標と比較用
-    vy_diff_pre = 0
-    vy_threshold = 5  # Y座標の変化量の閾値
-    y_coords_threshold = 10  # 一定位置よりも動いていることを確認する閾値
-    y_coords_median = np.median(y_coords_list) if y_coords_list else 0
-    # print(f"Y座標の中央値: {y_coords_median}")
-    
-    impact_frame = -1  # 最下点フレームの初期値
+        cv2.destroyAllWindows()
 
-    for i in range(len(frame_numbers_list)):
-        vy_diff = y_coords_list[i] - center_y_pre if center_y_pre is not None else 0
-        center_y_pre = y_coords_list[i]
-        # print(f"フレーム {frame_numbers_list[i]}: vy_diff:{vy_diff}, vy_diff_pre:{vy_diff_pre}, y_coords:{y_coords_list[i]}, y_coords_median:{y_coords_median}")
-        # print(f"    vy_diff <= 0_bool: {vy_diff <= 0}, vy_diff_pre > 0_bool: {vy_diff_pre > 0},vy_diff_pre > vy_threshold_bool: {vy_diff_pre > vy_threshold},  y_coord_bool: {abs(y_coords_list[i-1]-y_coords_median)<y_coords_threshold}")
-        # 最下点の条件: 速度が正から負に変わる、かつ前の速度が閾値以上、かつy座標が中央値付近
-        if vy_diff <= 0 and vy_diff_pre > 0 and vy_diff_pre > vy_threshold and abs(y_coords_list[i-1] - y_coords_median) < y_coords_threshold:
-            impact_frame = frame_numbers_list[i-1]  #増加から減少に転じた直前のフレームが最下点
-            print(f"最下点フレーム: {impact_frame} (Y座標: {y_coords_list[i-1]})")
-        
-        vy_diff_pre = vy_diff
-
-    # 検出結果をCSVファイルに保存
-    if skip_detection == False and frame_numbers_list:
-        csv_filename = str(video_path.parent / f"{video_path.stem}_coordinates.csv")
+        # 検出した座標データを新しいCSVファイルに保存
         try:
-            with open(csv_filename, 'w', newline='', encoding='utf-8') as f:
+            with open(y_csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                # ヘッダーを書き込む
-                writer.writerow(['Frame', 'CenterY'])
-                # データを書き込む
+                writer.writerow(['Frame', 'CenterX', 'CenterY'])
                 for i in range(len(frame_numbers_list)):
-                    writer.writerow([frame_numbers_list[i], y_coords_list[i]])
-            print(f"座標データを '{csv_filename}' として保存しました。")
+                    writer.writerow([frame_numbers_list[i], x_coords_list[i], y_coords_list[i]])
+            print(f"座標データを '{y_csv_path}' として保存しました。")
         except IOError as e:
-            print(f"エラー: CSVファイル '{csv_filename}' の書き込みに失敗しました。 {e}")
-            
-    # グラフを描画して保存する
-    if frame_numbers_list:  # データが記録されている場合のみグラフを作成
-        plt.figure(figsize=(12, 6))
-        plt.plot(frame_numbers_list, y_coords_list, marker='.', linestyle='-', label='Marker Y-coordinate')
-        plt.axvline(x=impact_frame, color='r', linestyle='--', label='Impact Frame')
-        plt.title('Marker Center Y-coordinate over Frames')
-        plt.xlabel('Frame Number')
-        plt.ylabel('Y-coordinate')
-        plt.grid(True)
+            print(f"エラー: CSVファイル '{y_csv_path}' の書き込みに失敗しました。 {e}")
 
-        plt.legend()
-        graph_filename = str(video_path.parent / "marker_y_coordinate_graph.png")
-        plt.savefig(graph_filename)
-        print(f"グラフを '{graph_filename}' として保存しました。")
-    else:
-        print("グラフを描画するためのマーカーデータがありませんでした。")
+    # --- ② データ分析セクション ---
+    if not frame_numbers_list:
+        print("分析するデータがありません。")
+        return -1, pd.DataFrame()
         
+    # 地面に到達したフレームを算出
+    df = pd.DataFrame(
+        {'X': x_coords_list, 'Y': y_coords_list}, 
+        index=frame_numbers_list
+    )
+    df.index.name = 'Frame'
 
-# LED発光を0フレーム目として切り抜いた動画を処理（今は切り抜き前を使用）
-video_file = Path(r"G:\gait_pattern\20250915_synctest\1.MP4")
-find_bottom_frame_by_aruco(video_file)
+    print(f"作成されたDataFrame:\n{df.head()}")
 
-gopro_trim_info_path = video_file.parent / "gopro_trimming_info.json"
+    df['Y_diff'] = df['Y'].diff()
+    df['Y_diff_diff'] = df['Y_diff'].diff()
+
+    # 条件1: X座標が中央値から100ピクセル以内
+    x_median = df['X'].median()
+    print(f"X座標の中央値: {x_median}")
+    pos_x_threshold = 100
+    print(df['X'] - x_median)
+    cond1 = (df['X'] - x_median).abs() <= pos_x_threshold
+    
+    # cond1がFalseのフレーム（外れ値）を特定
+    is_outlier = ~cond1
+
+    # 外れ値とその前後1フレームをまとめて除外対象とする
+    # window=3: 自分と前後1フレームの3つを見る
+    # center=True: 自分を中心に見る
+    # 3フレームの窓の中の合計値を計算し、その合計が0より大きい（＝少なくとも1つのフレームが外れ値である）場合にTrueを返す
+    exclude_frames_mask = is_outlier.rolling(window=5, center=True, min_periods=1).sum() > 0
+
+    # 最終的に候補とするフレームの条件（除外対象の逆）
+    final_cond = ~exclude_frames_mask
+
+    candidate_frames = df.loc[final_cond]
+    print(f"X座標の条件を満たす候補フレーム数: {len(candidate_frames)}")
+
+    # 候補の中からY軸加速度が最大のものを探す
+    if not candidate_frames.empty and not candidate_frames['Y_diff_diff'].isnull().all():
+        impact_frame = candidate_frames['Y_diff_diff'].idxmax()
+        print(f"最終的な衝突フレーム: {impact_frame}")
+    else:
+        impact_frame = None
+        print("衝突フレームが見つかりませんでした。")
+
+    # --- ③ グラフ描画セクション ---
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 10), sharex=True)
+    fig.suptitle('Marker Center Y-coordinate and Velocity over Frames', fontsize=16)
+
+    ax1.plot(df.index, df['Y'], marker='.', linestyle='-', label='Marker Y-coordinate', color = "tab:blue")
+    if impact_frame is not None:
+        ax1.axvline(x=impact_frame, color='r', linestyle='--', label='Impact Frame')
+    ax1.set_title('Marker Center Y-coordinate over Frames')
+    ax1.set_xlabel('Frame Number')
+    ax1.set_ylabel('Y-coordinate')
+    ax1.grid(True)
+    ax1.legend()
+
+    ax2.plot(df.index, df['Y_diff'], marker='.', linestyle='-', label='Marker Y-velocity', color="tab:orange")
+    if impact_frame is not None:
+        ax2.axvline(x=impact_frame, color='r', linestyle='--', label='Impact Frame')
+    ax2.set_title('Marker Center Y-velocity over Frames')
+    ax2.set_xlabel('Frame Number')
+    ax2.set_ylabel('Y-velocity')
+    ax2.grid(True)
+    ax2.legend()
+    
+    ax3.plot(df.index, df['Y_diff_diff'], marker='.', linestyle='-', label='Marker Y-acceleration', color="tab:green")
+    if impact_frame is not None:
+        ax3.axvline(x=impact_frame, color='r', linestyle='--', label='Impact Frame')
+    ax3.set_title('Marker Center Y-acceleration over Frames')
+    ax3.set_xlabel('Frame Number')
+    ax3.set_ylabel('Y-acceleration')
+    ax3.grid(True)
+    ax3.legend()
+
+    graph_filename = str(video_path.parent / f"{video_path.stem}_marker_y_coordinate_graph.png")
+    plt.savefig(graph_filename)
+    print(f"グラフを '{graph_filename}' として保存しました。")
+    plt.show() # GUI表示をコメントアウトすると自動実行時に止まらなくなる
+    plt.close()
+    
+    return impact_frame, df
+
+# LED発光を0フレーム目として切り抜いた動画を処理
+video_file_dir = Path(r"G:\gait_pattern\20250915_synctest\GoPro")
+video_file_path = Path(glob.glob(str(video_file_dir / "*5*trimed*.mp4"))[0])
+
+gopro_trim_info_path = video_file_path.parent / f"{video_file_path.stem.split('_')[0]}_gopro_trimming_info.json"
 with open(gopro_trim_info_path, 'r') as f:
     gopro_trim_info = json.load(f)
+    print(f"読み込んだトリミング情報: {gopro_trim_info}")
+
+fps = gopro_trim_info['original_video_info']['fps']
+led_flash_frame = gopro_trim_info['trimming_settings']['reference_frame']
+start_frame_rel = gopro_trim_info['trimming_settings']['start_frame_relative']
+end_frame_rel = gopro_trim_info['trimming_settings']['end_frame_relative']
+print(f"動画のFPS: {fps}, LED発光フレーム: {led_flash_frame}, 開始フレーム(相対値): {start_frame_rel}, 終了フレーム(相対値): {end_frame_rel}")
+
+impact_frame, df_coords = find_bottom_frame_by_aruco(video_file_path, start_frame_rel)
+
+impact_time = impact_frame / fps if impact_frame is not None and impact_frame != -1 else -1
+print(f"impact_frame: {impact_frame}, impact_time: {impact_time:.2f}秒")
+
+# データフレームが空でない場合のみ、動画を生成
+if not df_coords.empty:
+    output_video_path = video_file_path.parent / f"{video_file_path.stem}_annotated.mp4"
+    # 引数に start_frame_rel を追加
+    create_annotated_video(video_file_path, df_coords, output_video_path, start_frame_rel, impact_frame)
+else:
+    print("座標データがないため、アノテーション付き動画は生成されませんでした。")
+
+gopro_impact_info = {
+    "impact_frame_ledbase": int(impact_frame) if impact_frame is not None and impact_frame != -1 else None,
+    "impact_time_ledbase": impact_time
+}
+# JSONファイル名を修正（with_nameは親ディレクトリを維持しつつファイル名部分だけを変更する）
+gopro_impact_info_path = video_file_path.with_name(f"{video_file_path.stem.split('_')[0]}_gopro_impact_info.json")
+with open(gopro_impact_info_path, 'w', encoding='utf-8') as f:
+    json.dump(gopro_impact_info, f, indent=4)
+print(f"{gopro_impact_info_path}を保存しました。")

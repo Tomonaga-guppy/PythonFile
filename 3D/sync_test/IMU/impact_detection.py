@@ -2,6 +2,7 @@ import pandas as pd
 import json
 import numpy as np
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 def analyze_sync_data(csv_file):
     """
@@ -16,19 +17,27 @@ def analyze_sync_data(csv_file):
         print("-> Port0が1から0に変化するイベントは見つかりませんでした。")
         return None, None, None, None
     port0_ext_event_timestamp = port0_change_df['Timestamp_Ext'].iloc[0]
+    port0_ext_event_index = port0_change_df.index[0]
 
     port1_change_df = df[(df['Port1'] == 1) & (df['Port1'].shift(1) == 0)]
     if port1_change_df.empty:
         print("-> Port1が0から1に変化するイベントは見つかりませんでした。")
         return None, None, None, None
     port1_ext_event_timestamp = port1_change_df['Timestamp_Ext'].iloc[0]
+    port1_ext_event_index = port1_change_df.index[0]
+    
+    print(f"Port0の変化イベント (1→0) のタイムスタンプ (Timestamp_Ext): {int(port0_ext_event_timestamp)} (Index: {port0_ext_event_index})")
+    print(f"Port1の変化イベント (0→1) のタイムスタンプ (Timestamp_Ext): {int(port1_ext_event_timestamp)} (Index: {port1_ext_event_index})")
+    diff_port0to1_frame = port1_ext_event_index - port0_ext_event_index
+    diff_port0to1_time = diff_port0to1_frame * 10  # 100Hzなので10ms刻み
+    print(f"Port0イベントからPort1イベントまでのフレーム数: {diff_port0to1_frame} フレーム,  {diff_port0to1_time} ms")
 
     time_difference = (df['Timestamp_Acc'] - port0_ext_event_timestamp).abs()
     closest_index = time_difference.idxmin()
     ags_closest_timestamp = df.loc[closest_index, 'Timestamp_Acc']
     print(f"最も近い 'ags' のタイムスタンプ (Timestamp_Acc): {int(ags_closest_timestamp)}")
 
-    return df, port0_ext_event_timestamp, port1_ext_event_timestamp, ags_closest_timestamp
+    return df, port0_ext_event_timestamp, port1_ext_event_timestamp, ags_closest_timestamp, diff_port0to1_frame
 
 def extract_data_from_timestamp(df, start_timestamp, acc_column_name):
     """
@@ -50,6 +59,8 @@ def find_sharp_increase(df, acc_column_name, threshold=10000):
     加速度の急激な増加点を検出する関数
     """
     acc_diff = df[acc_column_name].diff()
+    plt.plot(df['Timestamp_Acc'], acc_diff, label='Acceleration')
+    plt.show()
     sharp_increase_points = df[acc_diff > threshold]
     if sharp_increase_points.empty:
         print("-> 急激な増加は見つかりませんでした。")
@@ -61,35 +72,51 @@ def find_sharp_increase(df, acc_column_name, threshold=10000):
 
 # --- メイン処理 ---
 if __name__ == "__main__":
-    # r'...' の部分はご自身の環境に合わせてください
-    csv_path = Path(r'G:\gait_pattern\20250915_synctest\IMU\sub0\thera0-4\IMU\sync_2025-9-15-8-44-1.csv')
-    imu_df, p0_ts, p1_ts, ags_ts = analyze_sync_data(csv_path)
-    print(f"p0_ts: {p0_ts}, p1_ts: {p1_ts}, ags_ts: {ags_ts}")
-    
-    acc_z_series = extract_data_from_timestamp(imu_df, ags_ts, 'Acc_Z 0.1[mG]')
+    csv_dir = Path(r'G:\gait_pattern\20250915_synctest\IMU\sub1\thera0-6\IMU')
+    csv_path = list(csv_dir.glob("*sync*.csv"))[0]
+    imu_df, p0_ts, p1_ts, ags_ts, diff_port0to1_frame = analyze_sync_data(csv_path)
+    print(f"p0_ts: {p0_ts}, p1_ts: {p1_ts}, ags_ts: {ags_ts}, diff_port0to1_frame: {diff_port0to1_frame}")
+
+    acc_z_series = extract_data_from_timestamp(imu_df, ags_ts, 'Acc_Y 0.1[mG]')
     
     if acc_z_series is not None:
         acc_threshold = 10000
-        result_increase = find_sharp_increase(acc_z_series, 'Acc_Z 0.1[mG]', threshold=acc_threshold)
+        impact_frame_number = acc_z_series["Acc_Y 0.1[mG]"].idxmax()
+        impact_y = acc_z_series["Acc_Y 0.1[mG]"].max()
+        impact_timestamp = acc_z_series.loc[impact_frame_number, 'Timestamp_Acc']
+        print(f"衝突検出フレーム: {impact_frame_number}, 衝突時タイムスタンプ: {impact_timestamp}, 衝突時Y加速度: {impact_y}")
         
-        if result_increase is not None and result_increase[0] is not None:
-            impact_frame_number, impact_timestamp = result_increase
-            elapsed_time_ms = (impact_timestamp - ags_ts)
-            print(f"衝突検出フレーム(100Hz): {impact_frame_number}, 経過時間: {elapsed_time_ms}ms, 衝突時タイムスタンプ: {impact_timestamp}")
-        else:
-            impact_frame_number, impact_timestamp, elapsed_time_ms = None, None, None
+        plt.plot(acc_z_series.index, acc_z_series['Acc_Y 0.1[mG]'], label='Acc_Y 0.1[mG]')
+        plt.axvline(x=impact_frame_number, color='r', linestyle='--', label='Impact Frame')
+        plt.title('Acc_Y 0.1[mG] over Frames')
+        plt.xlabel('Frame Number')
+        plt.ylabel('Acc_Y 0.1[mG]')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(csv_path.parent / f"{csv_path.stem}_AccY_graph.png")
+        # plt.show()
+
+        elapsed_time_ms = (impact_timestamp - ags_ts)
+        print(f"衝突検出フレーム(100Hz): {impact_frame_number}, 経過時間: {elapsed_time_ms}ms, 衝突時タイムスタンプ: {impact_timestamp}")
 
         impact_frame_number_py = int(impact_frame_number) if impact_frame_number is not None else None
         impact_timestamp_py = float(impact_timestamp) if impact_timestamp is not None else None
         elapsed_time_ms_py = float(elapsed_time_ms) if elapsed_time_ms is not None else None
+        diff_port0to1_frame = int(diff_port0to1_frame) if diff_port0to1_frame is not None else None
         
         json_data = {
             "impact_frame_number": impact_frame_number_py,
             "impact_timestamp": impact_timestamp_py,
-            "elapsed_time_ms": elapsed_time_ms_py
+            "elapsed_time_ms": elapsed_time_ms_py,
+            "diff_port0to1_frame": diff_port0to1_frame,
+            "diff_port0to1_time_ms": diff_port0to1_frame * 10
         }
-        
-        output_json_path = csv_path.parent.with_name(f"imu_impact_info.json")
+
+        id = csv_path.parent.parent.stem.split('-')[1]
+        if len(id.split('_')) > 1:
+            id = id.split('_')[0]
+        output_json_path = csv_path.parent.parent.parent.parent.with_name(f"{id}_imu_impact_info.json")
 
         with open(output_json_path, 'w', encoding='utf-8') as f: # Pathオブジェクトをそのまま渡せる
             json.dump(json_data, f, indent=4)
