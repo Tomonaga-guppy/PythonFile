@@ -10,14 +10,14 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 
-tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\psub_label2")
+# tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\psub_label2")
 # tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm")
-# tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
-tsv_files = tsv_dir.glob("*0001*.tsv")
-# tsv_files = tsv_dir.glob("*sub4_tpose*.tsv")
+tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
+# tsv_files = tsv_dir.glob("*0003*.tsv")
+tsv_files = tsv_dir.glob("*sub4_com*.tsv")
 tsv_files = list(tsv_files)
-# tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
-tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
+tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
+# tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
 
 
 def plot_interpolation_results(dfs, labels, marker_name, output_path):
@@ -256,40 +256,74 @@ def main():
                     c = 0.115 * d_leg - 0.0153
                     x_dis = 0.1288 * d_leg - 0.04856
 
-                    # skycom + davis
-                    x_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
-                    x_lthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
-                    y_rthigh = +(c * np.sin(theta) - d_asi/2)
-                    y_lthigh = -(c * np.sin(theta)- d_asi/2)
-                    z_rthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
-                    z_lthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
+
+
+                    """
+                    以前まで 
+                    """
+                    # # skycom + davis
+                    # x_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+                    # x_lthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+                    # y_rthigh = +(c * np.sin(theta) - d_asi/2)
+                    # y_lthigh = -(c * np.sin(theta)- d_asi/2)
                     # z_rthigh = -(x_dis + r) * np.sin(beta) + c * np.cos(theta) * np.cos(beta)
                     # z_lthigh = -(x_dis + r) * np.sin(beta) + c * np.cos(theta) * np.cos(beta)
+                    # rthigh_pelvis = np.array([x_rthigh, y_rthigh, z_rthigh]).T
+                    # lthigh_pelvis = np.array([x_lthigh, y_lthigh, z_lthigh]).T
+
+                    # # 仮の骨盤中心 ASISの中点
+                    # hip_0 = (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2
+                    # # 腰椎節原点
+                    # lumbar = (0.47 * (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2 + 0.53 * (rpsi[frame_idx_in_range,:] + lpsi[frame_idx_in_range,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
+
+                    # #骨盤節座標系（原点はhip）
+                    # e_y0_pelvis_0 = lasi[frame_idx_in_range,:] - rasi[frame_idx_in_range,:]
+                    # e_z_pelvis_0 = (lumbar - hip_0)/np.linalg.norm(lumbar - hip_0)
+                    # e_x_pelvis_0 = np.cross(e_y0_pelvis_0, e_z_pelvis_0)/np.linalg.norm(np.cross(e_y0_pelvis_0, e_z_pelvis_0))
+                    # e_y_pelvis_0 = np.cross(e_z_pelvis_0, e_x_pelvis_0)
+
+
+
+
+                    """
+                    変更中
+                    """
+                    # skycom + davis
+                    y_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+                    y_lthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+                    x_rthigh = +(c * np.sin(theta) - d_asi/2)
+                    x_lthigh = -(c * np.sin(theta)- d_asi/2)
+                    z_rthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
+                    z_lthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
                     rthigh_pelvis = np.array([x_rthigh, y_rthigh, z_rthigh]).T
                     lthigh_pelvis = np.array([x_lthigh, y_lthigh, z_lthigh]).T
 
-                    # 仮の骨盤中心 ASISの中点
+                    # 骨盤原点1 ASISの中点
                     hip_0 = (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2
-                    # 腰椎節原点
-                    lumbar = (0.47 * (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2 + 0.53 * (rpsi[frame_idx_in_range,:] + lpsi[frame_idx_in_range,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
+                    # 仙骨 PSISの中点
+                    sacrum = (rpsi[frame_idx_in_range,:] + lpsi[frame_idx_in_range,:]) / 2
 
-                    #骨盤節座標系（原点はhip）
-                    e_y0_pelvis_0 = lasi[frame_idx_in_range,:] - rasi[frame_idx_in_range,:]
-                    e_z_pelvis_0 = (lumbar - hip_0)/np.linalg.norm(lumbar - hip_0)
-                    e_x_pelvis_0 = np.cross(e_y0_pelvis_0, e_z_pelvis_0)/np.linalg.norm(np.cross(e_y0_pelvis_0, e_z_pelvis_0))
-                    e_y_pelvis_0 = np.cross(e_z_pelvis_0, e_x_pelvis_0)
+                    #骨盤節座標系1（原点はhip_0）
+                    e_x0_pelvis_0 = (rasi[frame_idx_in_range,:] - lasi[frame_idx_in_range,:])/np.linalg.norm(rasi[frame_idx_in_range,:] - lasi[frame_idx_in_range,:])
+                    e_y_pelvis_0 = (hip_0 - sacrum)/np.linalg.norm(hip_0 - sacrum)
+                    e_z_pelvis_0 = np.cross(e_x0_pelvis_0, e_y_pelvis_0)/np.linalg.norm(np.cross(e_x0_pelvis_0, e_y_pelvis_0))
+                    e_x_pelvis_0 = np.cross(e_y_pelvis_0, e_z_pelvis_0)
     
                     transformation_matrix = np.array([[e_x_pelvis_0[0], e_y_pelvis_0[0], e_z_pelvis_0[0], hip_0[0]],
                                                         [e_x_pelvis_0[1], e_y_pelvis_0[1], e_z_pelvis_0[1], hip_0[1]],
                                                         [e_x_pelvis_0[2], e_y_pelvis_0[2], e_z_pelvis_0[2], hip_0[2]],
                                                         [0,       0,       0,       1]])
 
+
                     #モーキャプの座標系に変換してもう一度計算
                     rthigh = np.dot(transformation_matrix, np.append(rthigh_pelvis, 1))[:3]
                     lthigh = np.dot(transformation_matrix, np.append(lthigh_pelvis, 1))[:3]
                     hip = (rthigh + lthigh) / 2
 
-                    e_y0_pelvis = lthigh - rthigh
+                    # 腰椎節原点
+                    lumbar = (0.47 * (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2 + 0.53 * (rpsi[frame_idx_in_range,:] + lpsi[frame_idx_in_range,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
+
+                    e_y0_pelvis = (lthigh - rthigh)/np.linalg.norm(lthigh - rthigh)
                     e_z_pelvis = (lumbar - hip)/np.linalg.norm(lumbar - hip)
                     e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
                     e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
@@ -376,22 +410,22 @@ def main():
                     r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
                     l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
 
-                    # 角度範囲を調整
-                    # 角度が負の場合は360を足して正の値に変換
-                    r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
-                    l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
-                    r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
-                    l_knee_angle = 360 + l_knee_angle if l_knee_angle < 0 else l_knee_angle
-                    r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
-                    l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
+                    # # 角度範囲を調整
+                    # # 角度が負の場合は360を足して正の値に変換
+                    # r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
+                    # l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
+                    # r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
+                    # l_knee_angle = 360 + l_knee_angle if l_knee_angle < 0 else l_knee_angle
+                    # r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
+                    # l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
 
-                    # 各角度について特定の範囲に変換
-                    r_hip_angle = 180 - r_hip_angle
-                    l_hip_angle = 180 - l_hip_angle
-                    r_knee_angle = 180 - r_knee_angle
-                    l_knee_angle = 180 - l_knee_angle
-                    r_ankle_angle = 90 - r_ankle_angle
-                    l_ankle_angle = 90 - l_ankle_angle
+                    # # 各角度について特定の範囲に変換
+                    # r_hip_angle = 180 - r_hip_angle
+                    # l_hip_angle = 180 - l_hip_angle
+                    # r_knee_angle = 180 - r_knee_angle
+                    # l_knee_angle = 180 - l_knee_angle
+                    # r_ankle_angle = 90 - r_ankle_angle
+                    # l_ankle_angle = 90 - l_ankle_angle
 
                     angle_list_range.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle])
 
