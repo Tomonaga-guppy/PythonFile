@@ -1,3 +1,7 @@
+"""
+中身はtest20241016のqualysis_refと同じ
+"""
+
 import module_mocap as moc
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -6,11 +10,15 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 
+# tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\psub_label2")
+# tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm")
 tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
-# tsv_files = tsv_dir.glob("*sub4_tpose*.tsv")
-tsv_files = tsv_dir.glob("*sub4_com_nfpa*.tsv")
+# tsv_files = tsv_dir.glob("*0003*.tsv")
+tsv_files = tsv_dir.glob("*sub4_com*.tsv")
 tsv_files = list(tsv_files)
 tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
+# tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
+
 
 def plot_interpolation_results(dfs, labels, marker_name, output_path):
     """
@@ -82,7 +90,6 @@ def plot_interpolation_results(dfs, labels, marker_name, output_path):
 
 def main():
     angle_dict = {}
-    pelvis_dict = {}
     for itsv, tsv_file in enumerate(tsv_files):
         # 各TSVファイルに対する角度計算のための辞書を初期化
         angle_dict[tsv_file.stem] = {}
@@ -133,8 +140,10 @@ def main():
         butter_df = moc.butterworth_filter_no_nan_gaps(interpolated3_df, cutoff=6, order=4, fs=120) #4次のバターワースローパスフィルタ
 
 
-        # frame_max = None
-        frame_max = 389
+
+        
+        frame_max = None
+        # frame_max = 390
         if frame_max is not None:
             nan_df = nan_df.iloc[:frame_max, :]  #デバッグ用にフレームを限定
             interpolated_df = interpolated_df.iloc[:frame_max, :]
@@ -147,11 +156,6 @@ def main():
             interpolated2_df = interpolated2_df
             interpolated3_df = interpolated3_df
             butter_df = butter_df
-            
-        
-        # 削除した場合としない場合を比較する用のプロット
-        pelvis_dict[tsv_file.stem] = butter_df
-        print(f"pelvis_dict[{tsv_file.stem}]: {pelvis_dict[tsv_file.stem]}")
 
         print("\n--- 補間結果のプロットを開始 ---")
         plot_dfs = [nan_df, interpolated_df, interpolated2_df, interpolated3_df, butter_df]
@@ -243,45 +247,83 @@ def main():
                     d_leg = (np.linalg.norm(rank[frame_idx_in_range,:] - rasi[frame_idx_in_range,:]) + np.linalg.norm(lank[frame_idx_in_range, :] - lasi[frame_idx_in_range,:]) / 2)
                     r = 0.012 #使用したマーカー径
 
-                    h = 1.76 #被験者(kasa)の身長
+                    h = 1.70 #被験者の身長
+                    # h = 1.76 #被験者(kasa)の身長
 
                     k = h/1.7
                     beta = 0.1 * np.pi #[rad]
                     theta = 0.496 #[rad]
-                    c = 0.115 * d_leg - 0.00153
+                    c = 0.115 * d_leg - 0.0153
                     x_dis = 0.1288 * d_leg - 0.04856
 
+
+
+                    """
+                    以前まで 
+                    """
+                    # # skycom + davis
+                    # x_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+                    # x_lthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+                    # y_rthigh = +(c * np.sin(theta) - d_asi/2)
+                    # y_lthigh = -(c * np.sin(theta)- d_asi/2)
+                    # z_rthigh = -(x_dis + r) * np.sin(beta) + c * np.cos(theta) * np.cos(beta)
+                    # z_lthigh = -(x_dis + r) * np.sin(beta) + c * np.cos(theta) * np.cos(beta)
+                    # rthigh_pelvis = np.array([x_rthigh, y_rthigh, z_rthigh]).T
+                    # lthigh_pelvis = np.array([x_lthigh, y_lthigh, z_lthigh]).T
+
+                    # # 仮の骨盤中心 ASISの中点
+                    # hip_0 = (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2
+                    # # 腰椎節原点
+                    # lumbar = (0.47 * (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2 + 0.53 * (rpsi[frame_idx_in_range,:] + lpsi[frame_idx_in_range,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
+
+                    # #骨盤節座標系（原点はhip）
+                    # e_y0_pelvis_0 = lasi[frame_idx_in_range,:] - rasi[frame_idx_in_range,:]
+                    # e_z_pelvis_0 = (lumbar - hip_0)/np.linalg.norm(lumbar - hip_0)
+                    # e_x_pelvis_0 = np.cross(e_y0_pelvis_0, e_z_pelvis_0)/np.linalg.norm(np.cross(e_y0_pelvis_0, e_z_pelvis_0))
+                    # e_y_pelvis_0 = np.cross(e_z_pelvis_0, e_x_pelvis_0)
+
+
+
+
+                    """
+                    変更中
+                    """
                     # skycom + davis
-                    x_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
-                    x_lthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
-                    y_rthigh = +(c * np.sin(theta) - d_asi/2)
-                    y_lthigh = -(c * np.sin(theta)- d_asi/2)
-                    z_rthigh = -(x_dis + r) * np.sin(beta) + c * np.cos(theta) * np.cos(beta)
-                    z_lthigh = -(x_dis + r) * np.sin(beta) + c * np.cos(theta) * np.cos(beta)
+                    y_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+                    y_lthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+                    x_rthigh = +(c * np.sin(theta) - d_asi/2)
+                    x_lthigh = -(c * np.sin(theta)- d_asi/2)
+                    z_rthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
+                    z_lthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
                     rthigh_pelvis = np.array([x_rthigh, y_rthigh, z_rthigh]).T
                     lthigh_pelvis = np.array([x_lthigh, y_lthigh, z_lthigh]).T
 
+                    # 骨盤原点1 ASISの中点
                     hip_0 = (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2
-                    lumbar = (0.47 * (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2 + 0.53 * (rpsi[frame_idx_in_range,:] + lpsi[frame_idx_in_range,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
+                    # 仙骨 PSISの中点
+                    sacrum = (rpsi[frame_idx_in_range,:] + lpsi[frame_idx_in_range,:]) / 2
 
-                    #骨盤節座標系（原点はhip）
-                    e_y0_pelvis = lasi[frame_idx_in_range,:] - rasi[frame_idx_in_range,:]
-                    e_z_pelvis = (lumbar - hip_0)/np.linalg.norm(lumbar - hip_0)
-                    e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
-                    e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
-                    rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
-
-                    transformation_matrix = np.array([[e_x_pelvis[0], e_y_pelvis[0], e_z_pelvis[0], hip_0[0]],
-                                                        [e_x_pelvis[1], e_y_pelvis[1], e_z_pelvis[1], hip_0[1]],
-                                                        [e_x_pelvis[2], e_y_pelvis[2], e_z_pelvis[2], hip_0[2]],
+                    #骨盤節座標系1（原点はhip_0）
+                    e_x0_pelvis_0 = (rasi[frame_idx_in_range,:] - lasi[frame_idx_in_range,:])/np.linalg.norm(rasi[frame_idx_in_range,:] - lasi[frame_idx_in_range,:])
+                    e_y_pelvis_0 = (hip_0 - sacrum)/np.linalg.norm(hip_0 - sacrum)
+                    e_z_pelvis_0 = np.cross(e_x0_pelvis_0, e_y_pelvis_0)/np.linalg.norm(np.cross(e_x0_pelvis_0, e_y_pelvis_0))
+                    e_x_pelvis_0 = np.cross(e_y_pelvis_0, e_z_pelvis_0)
+    
+                    transformation_matrix = np.array([[e_x_pelvis_0[0], e_y_pelvis_0[0], e_z_pelvis_0[0], hip_0[0]],
+                                                        [e_x_pelvis_0[1], e_y_pelvis_0[1], e_z_pelvis_0[1], hip_0[1]],
+                                                        [e_x_pelvis_0[2], e_y_pelvis_0[2], e_z_pelvis_0[2], hip_0[2]],
                                                         [0,       0,       0,       1]])
+
 
                     #モーキャプの座標系に変換してもう一度計算
                     rthigh = np.dot(transformation_matrix, np.append(rthigh_pelvis, 1))[:3]
                     lthigh = np.dot(transformation_matrix, np.append(lthigh_pelvis, 1))[:3]
                     hip = (rthigh + lthigh) / 2
 
-                    e_y0_pelvis = lthigh - rthigh
+                    # 腰椎節原点
+                    lumbar = (0.47 * (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2 + 0.53 * (rpsi[frame_idx_in_range,:] + lpsi[frame_idx_in_range,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
+
+                    e_y0_pelvis = (lthigh - rthigh)/np.linalg.norm(lthigh - rthigh)
                     e_z_pelvis = (lumbar - hip)/np.linalg.norm(lumbar - hip)
                     e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
                     e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
@@ -368,25 +410,130 @@ def main():
                     r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
                     l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
 
-                    # 角度範囲を調整
-                    # 角度が負の場合は360を足して正の値に変換
-                    r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
-                    l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
-                    r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
-                    l_knee_angle = 360 + l_knee_angle if l_knee_angle < 0 else l_knee_angle
-                    r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
-                    l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
+                    # # 角度範囲を調整
+                    # # 角度が負の場合は360を足して正の値に変換
+                    # r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
+                    # l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
+                    # r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
+                    # l_knee_angle = 360 + l_knee_angle if l_knee_angle < 0 else l_knee_angle
+                    # r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
+                    # l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
 
-                    # 各角度について特定の範囲に変換
-                    r_hip_angle = 180 - r_hip_angle
-                    l_hip_angle = 180 - l_hip_angle
-                    r_knee_angle = 180 - r_knee_angle
-                    l_knee_angle = 180 - l_knee_angle
-                    r_ankle_angle = 90 - r_ankle_angle
-                    l_ankle_angle = 90 - l_ankle_angle
+                    # # 各角度について特定の範囲に変換
+                    # r_hip_angle = 180 - r_hip_angle
+                    # l_hip_angle = 180 - l_hip_angle
+                    # r_knee_angle = 180 - r_knee_angle
+                    # l_knee_angle = 180 - l_knee_angle
+                    # r_ankle_angle = 90 - r_ankle_angle
+                    # l_ankle_angle = 90 - l_ankle_angle
 
                     angle_list_range.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle])
-                    
+
+
+                    plot_flag = True
+                    if plot_flag:
+                        if original_frame_num == 0:
+                            fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
+                            ax.set_xlabel("x")
+                            ax.set_ylabel("y")
+                            ax.set_zlabel("z")
+                            ax.set_xlim(-1000, 1000)
+                            ax.set_ylim(-1000, 1000)
+                            ax.set_zlim(0, 2000)
+                            #frame数を表示
+                            ax.text2D(0.5, 0.01, f"frame = {original_frame_num}", transform=ax.transAxes)
+                            #方向を設定
+                            ax.view_init(elev=0, azim=0)
+
+                            ax.scatter(rasi[frame_idx_in_range,:][0], rasi[frame_idx_in_range,:][1], rasi[frame_idx_in_range,:][2], label='rasi')
+                            ax.scatter(lasi[frame_idx_in_range,:][0], lasi[frame_idx_in_range,:][1], lasi[frame_idx_in_range,:][2], label='lasi')
+                            ax.scatter(rpsi[frame_idx_in_range,:][0], rpsi[frame_idx_in_range,:][1], rpsi[frame_idx_in_range,:][2], label='rpsi')
+                            ax.scatter(lpsi[frame_idx_in_range,:][0], lpsi[frame_idx_in_range,:][1], lpsi[frame_idx_in_range,:][2], label='lpsi')
+                            ax.scatter(rfoot[0], rfoot[1], rfoot[2], label='rfoot')
+                            ax.scatter(lfoot[0], lfoot[1], lfoot[2], label='lfoot')
+                            ax.scatter(rshank[0], rshank[1], rshank[2], label='rshank')
+                            ax.scatter(lshank[0], lshank[1], lshank[2], label='lshank')
+                            ax.scatter(rtoe[frame_idx_in_range,:][0], rtoe[frame_idx_in_range,:][1], rtoe[frame_idx_in_range,:][2], label='rtoe')
+                            ax.scatter(ltoe[frame_idx_in_range,:][0], ltoe[frame_idx_in_range,:][1], ltoe[frame_idx_in_range,:][2], label='ltoe')
+                            ax.scatter(rhee[frame_idx_in_range,:][0], rhee[frame_idx_in_range,:][1], rhee[frame_idx_in_range,:][2], label='rhee')
+                            ax.scatter(lhee[frame_idx_in_range, :][0], lhee[frame_idx_in_range, :][1], lhee[frame_idx_in_range, :][2], label='lhee')
+                            ax.scatter(lumbar[0], lumbar[1], lumbar[2], label='lumbar')
+                            ax.scatter(hip[0], hip[1], hip[2], label='hip')
+                            ax.scatter(rthigh[0], rthigh[1], rthigh[2], label='rthigh')
+                            ax.scatter(lthigh[0], lthigh[1], lthigh[2], label='lthigh')
+                            ax.scatter(hip_0[0], hip_0[1], hip_0[2], label='hip_0')
+                            ax.scatter(lthigh_pelvis[0], lthigh_pelvis[1], lthigh_pelvis[2], label='lthigh_0')
+                            ax.scatter(rthigh_pelvis[0], rthigh_pelvis[1], rthigh_pelvis[2], label='rthigh_0')
+                            ax.scatter((rthigh_pelvis[0] + lthigh_pelvis[0])/2, (rthigh_pelvis[1] + lthigh_pelvis[1])/2, (rthigh_pelvis[2] + lthigh_pelvis[2])/2, label='mid_thigh')
+                            ax.scatter(0, 0, 0, label='origin')
+
+
+                            ax.plot([lhee[frame_idx_in_range, :][0]- hip[0]], [lhee[frame_idx_in_range, :][1]- hip[1]], [lhee[frame_idx_in_range, :][2]- hip[2]], color='red')
+
+
+                            plot_scale = 50
+                            e_x_pelvis = e_x_pelvis * plot_scale
+                            e_y_pelvis = e_y_pelvis * plot_scale
+                            e_z_pelvis = e_z_pelvis * plot_scale
+                            e_x_rthigh = e_x_rthigh * plot_scale
+                            e_y_rthigh = e_y_rthigh * plot_scale
+                            e_z_rthigh = e_z_rthigh * plot_scale
+                            e_x_lthigh = e_x_lthigh * plot_scale
+                            e_y_lthigh = e_y_lthigh * plot_scale
+                            e_z_lthigh = e_z_lthigh * plot_scale
+                            e_x_rshank = e_x_rshank * plot_scale
+                            e_y_rshank = e_y_rshank * plot_scale
+                            e_z_rshank = e_z_rshank * plot_scale
+                            e_x_lshank = e_x_lshank * plot_scale
+                            e_y_lshank = e_y_lshank * plot_scale
+                            e_z_lshank = e_z_lshank * plot_scale
+                            e_x_rfoot = e_x_rfoot * plot_scale
+                            e_y_rfoot = e_y_rfoot * plot_scale
+                            e_z_rfoot = e_z_rfoot * plot_scale
+                            e_x_lfoot = e_x_lfoot * plot_scale
+                            e_y_lfoot = e_y_lfoot * plot_scale
+                            e_z_lfoot = e_z_lfoot * plot_scale
+                            
+                            e_x_pelvis_0 = e_x_pelvis_0 * plot_scale
+                            e_y_pelvis_0 = e_y_pelvis_0 * plot_scale
+                            e_z_pelvis_0 = e_z_pelvis_0 * plot_scale
+
+                            ax.plot([hip[0], hip[0] + e_x_pelvis[0]], [hip[1], hip[1] + e_x_pelvis[1]], [hip[2], hip[2] + e_x_pelvis[2]], color='red')
+                            ax.plot([hip[0], hip[0] + e_y_pelvis[0]], [hip[1], hip[1] + e_y_pelvis[1]], [hip[2], hip[2] + e_y_pelvis[2]], color='green')
+                            ax.plot([hip[0], hip[0] + e_z_pelvis[0]], [hip[1], hip[1] + e_z_pelvis[1]], [hip[2], hip[2] + e_z_pelvis[2]], color='blue')
+
+                            ax.plot([rthigh[0], rthigh[0] + e_x_rthigh[0]], [rthigh[1], rthigh[1] + e_x_rthigh[1]], [rthigh[2], rthigh[2] + e_x_rthigh[2]], color='red')
+                            ax.plot([rthigh[0], rthigh[0] + e_y_rthigh[0]], [rthigh[1], rthigh[1] + e_y_rthigh[1]], [rthigh[2], rthigh[2] + e_y_rthigh[2]], color='green')
+                            ax.plot([rthigh[0], rthigh[0] + e_z_rthigh[0]], [rthigh[1], rthigh[1] + e_z_rthigh[1]], [rthigh[2], rthigh[2] + e_z_rthigh[2]], color='blue')
+
+                            ax.plot([lthigh[0], lthigh[0] + e_x_lthigh[0]], [lthigh[1], lthigh[1] + e_x_lthigh[1]], [lthigh[2], lthigh[2] + e_x_lthigh[2]], color='red')
+                            ax.plot([lthigh[0], lthigh[0] + e_y_lthigh[0]], [lthigh[1], lthigh[1] + e_y_lthigh[1]], [lthigh[2], lthigh[2] + e_y_lthigh[2]], color='green')
+                            ax.plot([lthigh[0], lthigh[0] + e_z_lthigh[0]], [lthigh[1], lthigh[1] + e_z_lthigh[1]], [lthigh[2], lthigh[2] + e_z_lthigh[2]], color='blue')
+
+                            ax.plot([rshank[0], rshank[0] + e_x_rshank[0]], [rshank[1], rshank[1] + e_x_rshank[1]], [rshank[2], rshank[2] + e_x_rshank[2]], color='red')
+                            ax.plot([rshank[0], rshank[0] + e_y_rshank[0]], [rshank[1], rshank[1] + e_y_rshank[1]], [rshank[2], rshank[2] + e_y_rshank[2]], color='green')
+                            ax.plot([rshank[0], rshank[0] + e_z_rshank[0]], [rshank[1], rshank[1] + e_z_rshank[1]], [rshank[2], rshank[2] + e_z_rshank[2]], color='blue')
+
+                            ax.plot([lshank[0], lshank[0] + e_x_lshank[0]], [lshank[1], lshank[1] + e_x_lshank[1]], [lshank[2], lshank[2] + e_x_lshank[2]], color='red')
+                            ax.plot([lshank[0], lshank[0] + e_y_lshank[0]], [lshank[1], lshank[1] + e_y_lshank[1]], [lshank[2], lshank[2] + e_y_lshank[2]], color='green')
+                            ax.plot([lshank[0], lshank[0] + e_z_lshank[0]], [lshank[1], lshank[1] + e_z_lshank[1]], [lshank[2], lshank[2] + e_z_lshank[2]], color='blue')
+
+                            ax.plot([rfoot[0], rfoot[0] + e_x_rfoot[0]], [rfoot[1], rfoot[1] + e_x_rfoot[1]], [rfoot[2], rfoot[2] + e_x_rfoot[2]], color='red')
+                            ax.plot([rfoot[0], rfoot[0] + e_y_rfoot[0]], [rfoot[1], rfoot[1] + e_y_rfoot[1]], [rfoot[2], rfoot[2] + e_y_rfoot[2]], color='green')
+                            ax.plot([rfoot[0], rfoot[0] + e_z_rfoot[0]], [rfoot[1], rfoot[1] + e_z_rfoot[1]], [rfoot[2], rfoot[2] + e_z_rfoot[2]], color='blue')
+
+                            ax.plot([lfoot[0], lfoot[0] + e_x_lfoot[0]], [lfoot[1], lfoot[1] + e_x_lfoot[1]], [lfoot[2], lfoot[2] + e_x_lfoot[2]], color='red')
+                            ax.plot([lfoot[0], lfoot[0] + e_y_lfoot[0]], [lfoot[1], lfoot[1] + e_y_lfoot[1]], [lfoot[2], lfoot[2] + e_y_lfoot[2]], color='green')
+                            ax.plot([lfoot[0], lfoot[0] + e_z_lfoot[0]], [lfoot[1], lfoot[1] + e_z_lfoot[1]], [lfoot[2], lfoot[2] + e_z_lfoot[2]], color='blue')
+                            
+                            ax.plot([hip_0[0], hip_0[0] + e_x_pelvis_0[0]], [hip_0[1], hip_0[1] + e_x_pelvis_0[1]], [hip_0[2], hip_0[2] + e_x_pelvis_0[2]], color='red', linestyle='dashed')
+                            ax.plot([hip_0[0], hip_0[0] + e_y_pelvis_0[0]], [hip_0[1], hip_0[1] + e_y_pelvis_0[1]], [hip_0[2], hip_0[2] + e_y_pelvis_0[2]], color='green', linestyle='dashed')
+                            ax.plot([hip_0[0], hip_0[0] + e_z_pelvis_0[0]], [hip_0[1], hip_0[1] + e_z_pelvis_0[1]], [hip_0[2], hip_0[2] + e_z_pelvis_0[2]], color='blue', linestyle='dashed')
+
+                            plt.legend()
+                            plt.show()
+
+ 
                 except Exception as e:
                     print(f"フレーム {original_frame_num} で予期せぬエラー: {e}。このフレームの角度をNaNとします。")
                     angle_list_range.append([np.nan] * 6) # 6つの角度すべてをNaNに
@@ -415,7 +562,7 @@ def main():
         plt.xlabel('Frame')
         plt.ylabel('Angle (degrees)')
         plt.title('Hip Flexion/Extension Angles Over Time')
-        plt.ylim(-40, 40)
+        # plt.ylim(-40, 40)
         plt.grid()
         plt.legend()
         plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Hip_L_Flexion_Extension.png"))
@@ -427,7 +574,7 @@ def main():
         plt.xlabel('Frame')
         plt.ylabel('Angle (degrees)')
         plt.title('Knee Flexion/Extension Angles Over Time')
-        plt.ylim(-10, 70)
+        # plt.ylim(-10, 70)
         plt.grid()
         plt.legend()
         plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Knee_L_Flexion_Extension.png"))
@@ -439,48 +586,13 @@ def main():
         plt.xlabel('Frame')
         plt.ylabel('Angle (degrees)')
         plt.title('Ankle Plantarflexion/Dorsiflexion Angles Over Time')
-        plt.ylim(-20, 60)
+        # plt.ylim(-20, 60)
         plt.grid()
         plt.legend()
         plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Ankle_L_Plantarflexion_Dorsiflexion.png"))
         plt.close()
         
         angle_dict[tsv_file.stem] = angle_df
-        
-        
-    # 削除前後での座標データの比較
-    pelvis_dict_keys = list(pelvis_dict.keys())
-    if len(pelvis_dict_keys) == 2:
-        def plot_pelvis_comparison(pelvis_dict):
-            keys = list(pelvis_dict.keys())
-            df1 = pelvis_dict[keys[0]]
-            df2 = pelvis_dict[keys[1]]
-            
-            # 共通のフレーム範囲を特定
-            common_index = df1.index.intersection(df2.index)
-            df1_common = df1.loc[common_index]
-            df2_common = df2.loc[common_index]
-            
-            markers = ['RASI', 'LASI', 'RPSI', 'LPSI']
-            coords = ['X', 'Y', 'Z']
-            
-            for marker in markers:
-                plt.figure(figsize=(15, 10))
-                for i, coord in enumerate(coords):
-                    plt.subplot(3, 1, i+1)
-                    plt.plot(df1_common.index, df1_common[f'{marker} {coord}'], label=f'Original', color='tab:blue')
-                    plt.plot(df2_common.index, df2_common[f'{marker} {coord}'], label=f'Rigid Transformation', color='tab:orange', alpha=0.7)
-                    plt.title(f'{marker} - {coord} Coordinate Comparison')
-                    plt.xlabel('Frame')
-                    plt.ylabel('Position (mm)')
-                    plt.grid()
-                    plt.legend()
-                plt.tight_layout()
-                save_path = tsv_dir / f"{keys[0]}_{keys[1]}_{marker}_Pelvis_Comparison.png"
-                plt.savefig(save_path)
-                plt.close()
-        plot_pelvis_comparison(pelvis_dict)  #骨盤マーカーの座標比較をプロット
-        
         
     print(f"angle_dict: {angle_dict}")
     # 各被験者の角度データをプロット，RMSEを計算
@@ -507,8 +619,8 @@ def main():
                     else:
                         color = "tab:blue"
                     col_name = f"{side}_{joint}"
-                    plt.plot(df1_common.index, df1_common[col_name], label=f'Original', color=color)
-                    plt.plot(df2_common.index, df2_common[col_name], label=f'Rigid Transformation', color=color, linewidth=3, alpha=0.3)
+                    plt.plot(df1_common.index, df1_common[col_name], label=f'Original', color=color, linestyle='-', linewidth=2)
+                    plt.plot(df2_common.index, df2_common[col_name], label=f'Rigid Transformation', color=color, linewidth=1, alpha=0.1)
                     # plt.plot(df1_common.index, df1_common[col_name], label=f'Original', color=color)
                     # plt.plot(df2_common.index, df2_common[col_name], label=f'Rigid Transformation', linestyle='--', color=color)
 

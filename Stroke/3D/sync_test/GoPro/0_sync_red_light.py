@@ -276,7 +276,7 @@ def clip_video_segment(video_path, detected_frame_num, start_frame_rel, end_fram
     total_output_frames = actual_end_frame - actual_start_frame + 1
 
     # 出力ファイル名を生成
-    output_filename = f"trimed_f{actual_start_frame}-{actual_end_frame}.mp4"
+    output_filename = f"{video_path.stem}_trimed_f{actual_start_frame}-{actual_end_frame}.mp4"
     output_path = video_path.parent / output_filename
 
     # VideoWriterを初期化
@@ -323,7 +323,7 @@ def save_trimming_info(video_path, detected_frame_num, start_frame_rel, end_fram
     動画切り出し情報をJSONファイルで保存する
     """
     # JSONファイル名を生成
-    json_filename = "gopro_trimming_info.json"
+    json_filename = f"{video_path.stem}_gopro_trimming_info.json"
     json_path = video_path.with_name(json_filename)
 
     # 動画情報を取得
@@ -666,7 +666,7 @@ def main():
     """
     メイン処理
     """
-    VIDEO_PATH = Path(r"G:\gait_pattern\20250915_synctest\1.MP4")
+    VIDEO_PATH = Path(r"G:\gait_pattern\20250915_synctest\GoPro\6.MP4")
 
     # ★★★ 既にtrimedファイルが存在するかチェック ★★★
     parent_dir = VIDEO_PATH.parent
