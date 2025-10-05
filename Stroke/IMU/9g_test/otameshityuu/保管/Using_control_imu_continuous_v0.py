@@ -1,15 +1,25 @@
+"""
+いったん動きはするが，時刻がおかしくなりやすい
+
+初回計測時には加速度や地磁気+時刻の設定を行い．
+次回以降は時刻設定のみ行う
+書き出し時はポートを一度切断して再接続
+"""
+
 import serial
 import time
 import struct
 import ctypes
 import csv
-import multiprocessing
+# multiprocessingをthreadingに変更し、連続計測のためにポートを開いたままにする
+import threading
+import queue
 from datetime import datetime
 from pathlib import Path
 import json
 
-#各スレッドで終了をするためのイベント
-stop_event = multiprocessing.Event()
+#各スレッドで終了をするためのイベント (threading.Eventに変更)
+stop_event = threading.Event()
 
 def set_device_time(ser):
     # ヘッダとコマンドコードを定義
@@ -234,6 +244,12 @@ def stop_measurement(ser, port):
     # コマンド送信
     ser.read(100)
     ser.write(command)
+    # --- 変更点：コマンドの応答を読み込んでバッファをクリアする ---
+    time.sleep(0.1)  # デバイスが応答するのを少し待つ
+    # バッファにあるデータをすべて読み捨てる
+    if ser.in_waiting > 0:
+        ser.read(ser.in_waiting)
+    # ----------------------------------------------------
     print(f"計測を停止しました {port}")
 
 def read_3byte_signed(ser):
@@ -264,18 +280,20 @@ def get_entry_count(ser, port):
     command = bytearray([header, cmd, option, check])
 
     # コマンド送信
-    ser.read(100)
+    # --- 変更点：コマンド送信前に受信バッファをリセットする ---
+    ser.reset_input_buffer()
+    # ----------------------------------------------------
     ser.write(command)
     response = ser.readline()
 
     time.sleep(0.1)  # データの受信を待つ
     # print(f"エントリ件数レスポンス: {response} {port}")
-    if response[1] == 0xB6:
+    if response and len(response) > 2 and response[1] == 0xB6:
         entry_count = response[2]
         # print(f"有効なエントリの件数: {entry_count} {port}")
         return entry_count
     else:
-        print("エントリ件数の取得に失敗しました {port}")
+        print(f"エントリ件数の取得に失敗しました {port}")
         return 0
 
 def read_entry(ser, entry_number, port):
@@ -443,50 +461,47 @@ def clear_measurement_data(ser):
     else:
         print("レスポンスが正しくありません。")
 
-
-
-def run_imu_on_port(port, barrier, start_queue):
-    ser = serial.Serial()
-    ser.port = port
-    ser.timeout = 1.0
-    ser.baudrate = 115200
-    start_time = ""
-    
-    i = 1
-    while not ser.is_open:
-        if i == 10:
-            print(f"シリアルポートを開くことができませんでした。 ({port})")
-            return
-        try:
-            ser.open()
-        except:
-            time.sleep(0.1)
-        # print(f"{i}回目の接続 {port}")
-        i += 1
-
-    print(f"{port} のポートを開きました。")
-
-    try :
-        # 時刻の設定
-        set_device_time(ser)
+# --- ★★★変更点: 初回設定用の関数を新設★★★ ---
+def initial_imu_setup(ser, port):
+    """
+    初回に一度だけ実行するIMUの基本設定
+    """
+    try:
         # 加速度の設定
         flag = configure_accelgyro(ser, port)
         if not flag:
-            raise Exception(f"加速度の設定に失敗しました。 計測を終了します({port})")
+            raise Exception(f"加速度の設定に失敗しました。({port})")
         # 地磁気の設定
         flag = configure_magnetic(ser, port)
         if not flag:
-            raise Exception(f"地磁気の設定に失敗しました。 計測を終了します({port})")
+            raise Exception(f"地磁気の設定に失敗しました。({port})")
 
         # 外部拡張端子の出力設定
         set_expantion_terminal(ser)  # 拡張端子の出力記録
         # AD入力を有効にするため、端子3,4を10:AD入力に設定
         # 端子1をHigh出力(9)、端子2を入力(1)に設定
         set_voltage(ser, params=[9, 1, 10, 10]) 
-        print(f"拡張端子の設定が完了しました")
+        print(f"拡張端子の設定が完了しました ({port})")
+
+        print(f"{port} の初回設定が完了しました。")
+        return True
+    except Exception as e:
+        print(f"エラー: {port} の初回設定中にエラーが発生しました: {e}")
+        return False
+# --- ★★★変更ここまで★★★ ---
 
 
-        print(f"{port} IMUの設定が完了しました。")
+# run_imu_on_portをrun_imu_threadに変更。開いているポートオブジェクトを引数で受け取る
+def run_imu_thread(port, ser, barrier, start_queue):
+    start_time = ""
+    
+    try :
+        # --- ★★★変更点: 時刻設定のみを毎回実行する★★★ ---
+        # 時刻の設定
+        set_device_time(ser)
+        # --- ★★★変更ここまで★★★ ---
+
+        print(f"{port} の時刻を同期しました。計測待機中...")
 
         barrier.wait(timeout=60)  # 他のスレッドと同期
 
@@ -507,62 +522,71 @@ def run_imu_on_port(port, barrier, start_queue):
         except KeyboardInterrupt:
             raise Exception
 
-    except Exception:
+    except Exception as e:
+        print(f"スレッド内でエラーが発生しました ({port}): {e}")
+    finally:
         # 終了時に端子1をHighに戻す
         set_voltage(ser, params=[9, 1, 0, 0])
         stop_measurement(ser, port)
         start_queue.put((port, start_time))
-        ser.close()
+        # ser.close() # ポートはメインループで閉じるので、ここでは閉じない
 
-def read_save_memory(port, port_dict, start_time_dict, save_path):
-    ser = serial.Serial()
-    ser.port = port
-    ser.timeout = 1.0
-    ser.baudrate = 115200
+# read_save_memoryをread_and_save_all_imusに変更し、全てのIMUのデータを読み出す
+def read_and_save_all_imus(serial_objects, port_dict, start_time_dict, save_dir):
+    print(f"\nメモリの書き出しを{len(serial_objects)}台分行います 少々お待ちください")
+    start = time.time()
+    
+    for i, (port, ser_obj) in enumerate(serial_objects.items()):
+        
+        if port not in start_time_dict:
+            print(f'{i+1}/{len(serial_objects)} 計測開始時刻が不明なため、データを保存できませんでした {port}')
+            continue
 
-    i = 1
-    while not ser.is_open:
+        save_path = save_dir / f'{port_dict[port]}_{start_time_dict.get(port, "unknown_time")}.csv'
+        
+        # --- ★★★変更点：データ読み出しの直前にポートを再接続する★★★ ---
         try:
-            ser.open()
-        except:
-            time.sleep(1)
-        # print(f"{i}回目の接続")
-        i += 1
+            if ser_obj.is_open:
+                ser_obj.close()
+                time.sleep(0.2) # ポートが完全に閉じるのを待つ
+            ser_obj.open()
+            time.sleep(0.2) # ポートが開くのを待つ
+            print(f"{port} のポートを再接続しました。")
+        except serial.SerialException as e:
+            print(f"エラー: {port} のポートを再接続できませんでした: {e}")
+            continue
+        # --- ★★★変更ここまで★★★ ---
+        
+        # 最新の計測記録を取得し、CSVに保存
+        entry_count = get_entry_count(ser_obj, port)
+        if entry_count > 0:
+            accel_gyro_data, geomagnetic_data, extension_data = read_entry(ser_obj, entry_count, port)
+            # CSVに保存
+            save_to_csv(accel_gyro_data, geomagnetic_data, extension_data, save_path)
+            del accel_gyro_data, geomagnetic_data, extension_data
+            print(f'{i+1}/{len(serial_objects)} 計測データを "{save_path}" に保存しました {port}')
+        else:
+            print(f'{i+1}/{len(serial_objects)} 計測データは保存できませんでした {port}')
 
-    while ser.in_waiting > 0:  # バッファ内のデータをクリア 重要！
-        ser.readline()
-        time.sleep(0.01)
 
-    # 最新の計測記録を取得し、CSVに保存
-    entry_count = get_entry_count(ser, port)
-    if entry_count > 0:
-        accel_gyro_data, geomagnetic_data, extension_data = read_entry(ser, entry_count, port)
-        # CSVに保存
-        save_to_csv(accel_gyro_data, geomagnetic_data, extension_data, save_path)
-        del accel_gyro_data, geomagnetic_data, extension_data
-        # print(f"計測データをCSVに保存しました。 ({port})")
-
-    # # 計測データの記録をクリア
-    # if entry_count > 40:
-    #     clear_measurement_data(ser)
-
-    # シリアルポートを閉じる
-    ser.close()
-    # print(f"計測を終了し、シリアルポートを閉じました。 ({port})"
-
+    end = time.time()
+    # print(f"保存にかかった時間: {end - start}秒")
+    print("\n全てのIMUで書き出しを終了しました")
     return True
 
-def main(ports, port_dict, save_dir):
+# main関数を1回の計測サイクルを実行する関数に変更
+def perform_measurement_cycle(serial_objects, port_dict, save_dir):
     #計測用の変数を初期化
+    stop_event.clear() # イベントをリセット
     threads = []
-    barrier = multiprocessing.Barrier(len(ports))  # スレッド間の同期のためのバリアを作成
-    start_queue = multiprocessing.Queue()  # 開始時刻を取得するためのキューを作成
+    barrier = threading.Barrier(len(serial_objects))
+    start_queue = queue.Queue()
     start_time_dict = {}
 
     ### 計測処理 ########################################################################################
     # 各シリアルポートに対してスレッドを作成し、実行
-    for port in ports:
-        thread = multiprocessing.Process(target=run_imu_on_port, args=(port, barrier, start_queue, ))
+    for port, ser in serial_objects.items():
+        thread = threading.Thread(target=run_imu_thread, args=(port, ser, barrier, start_queue, ))
         threads.append(thread)
 
     try:
@@ -573,6 +597,7 @@ def main(ports, port_dict, save_dir):
         while any(thread.is_alive() for thread in threads):
             time.sleep(0.00001)  # 少し待機しながらスレッドの終了を待つ
     except KeyboardInterrupt:
+        print("\nCTRL+Cを検出しました。計測を停止します...")
         stop_event.set()  # 終了のイベントをセット
 
         for thread in threads:  #全てのスレッドが終了するまで待機
@@ -581,39 +606,24 @@ def main(ports, port_dict, save_dir):
         while not start_queue.empty():
             port, start_time = start_queue.get()
             start_time_dict[port] = start_time
+    
+    # 待機時間を追加して、IMUが安定するのを待つ
+    print("\nIMUがコマンドモードに安定して移行するまで1秒待機します...")
+    time.sleep(1.0)
+    
+    if not start_time_dict:
+        print("計測が正常に開始されませんでした。")
+        return
 
     ### 内部メモリの書き出し##############################################################################
-
-    print("メモリの書き出しを5台分行います 少々お待ちください")
-    start = time.time()
-    for i, port in enumerate(ports):
-        # start_time_dictにportが存在しない場合のエラーを回避
-        if port not in start_time_dict:
-            print(f'{i+1}/{len(ports)} 計測開始時刻が不明なため、データを保存できませんでした {port}')
-            continue
-        save_path = save_dir / f'{port_dict[port]}_{start_time_dict[port]}.csv'
-        flag = read_save_memory(port, port_dict, start_time_dict, save_path)
-        if flag:
-            print(f'{i+1}/{len(ports)} 計測データを "{save_path}" に保存しました {port}')
-        else:
-            print(f'{i+1}/{len(ports)} 計測データは保存できませんでした {port}')
-
-    end = time.time()
-    # print(f"保存にかかった時間: {end - start}秒")
-    print("\n全てのIMUで書き出しを終了しました ウィンドウを閉じて終了してください")
-
-    try:
-        while True:
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        pass
+    read_and_save_all_imus(serial_objects, port_dict, start_time_dict, save_dir)
 
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
+    # multiprocessing.freeze_support() # threadingでは不要だが、互換性のために残す
 
-    # 入力はメインプロセスでのみ実行
-    if multiprocessing.current_process().name == "MainProcess":
+    # メインスレッドでのみ実行
+    if threading.current_thread().name == 'MainThread':
         root_dir = Path(r"C:\Users\zutom\Desktop\IMUtool\test_data")
         # root_dir = Path(r"C:\Users\BRLAB\Desktop\data")  #tkrzk
         # root_dir = Path(r"C:\Users\tus\Desktop\data")  #ota
@@ -627,10 +637,10 @@ if __name__ == "__main__":
                         port_dict = json.load(file)
                     ports = list(port_dict.keys())
                     sync_port = ports[0]
-                    # sub_port = ports[1]
-                    # thera_port = ports[2]
-                    # thera_rhand_port = ports[3]
-                    # thera_lhand_port = ports[4]
+                    sub_port = ports[1]
+                    thera_port = ports[2]
+                    thera_rhand_port = ports[3]
+                    thera_lhand_port = ports[4]
                 except (FileNotFoundError, json.decoder.JSONDecodeError):
                     print("前回のポート番号が正常に読み込めませんでした。nを選択してポート番号を入力してください")
                     reuse_port_flag = "n" #
@@ -639,31 +649,31 @@ if __name__ == "__main__":
             if reuse_port_flag == "n":  #新たにポート番号を入力
                 # otの場合
                 sync_port_num = input("同期用IMU AP0421533 のポート番号を入力:COM")
-                # sub_port_num = input("患者腰用IMU AP0421538 のポート番号を入力:COM")
-                # thera_port_num = input("療法士腰用IMU AP04215339 のポート番号を入力:COM")
-                # thera_rhand_port_num = input("療法士右手用IMU AP0421540 のポート番号を入力:COM")
-                # thera_lhand_port_num = input("療法士左手用IMU AP0421541 のポート番号を入力:COM")
+                sub_port_num = input("患者腰用IMU AP0421538 のポート番号を入力:COM")
+                thera_port_num = input("療法士腰用IMU AP04215339 のポート番号を入力:COM")
+                thera_rhand_port_num = input("療法士右手用IMU AP0421540 のポート番号を入力:COM")
+                thera_lhand_port_num = input("療法士左手用IMU AP0421541 のポート番号を入力:COM")
 
                 sync_port = "COM" + sync_port_num
-                # sub_port = "COM" + sub_port_num
-                # thera_port = "COM" + thera_port_num
-                # thera_rhand_port = "COM" + thera_rhand_port_num
-                # thera_lhand_port = "COM" + thera_lhand_port_num
+                sub_port = "COM" + sub_port_num
+                thera_port = "COM" + thera_port_num
+                thera_rhand_port = "COM" + thera_rhand_port_num
+                thera_lhand_port = "COM" + thera_lhand_port_num
 
-                ports = [sync_port]
-                ports_name = ["sync"]
-                # ports = [sync_port, sub_port, thera_port, thera_rhand_port, thera_lhand_port]
-                # ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
+                # ports = [sync_port]
+                # ports_name = ["sync"]
+                ports = [sync_port, sub_port, thera_port, thera_rhand_port, thera_lhand_port]
+                ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
                 port_dict = dict(zip(ports, ports_name))
         
         check_port = "a"
         while check_port != "y":
             print("\nポート番号の確認")
             print(f"    同期用IMU AP0421533 : {sync_port}")
-            # print(f"    患者腰用IMU AP0421538 : {sub_port}")
-            # print(f"    療法士腰用IMU AP0421539 : {thera_port}")
-            # print(f"    療法士右手用IMU AP0421540 : {thera_rhand_port}")
-            # print(f"    療法士左手用IMU AP0421541 : {thera_lhand_port}")
+            print(f"    患者腰用IMU AP0421538 : {sub_port}")
+            print(f"    療法士腰用IMU AP0421539 : {thera_port}")
+            print(f"    療法士右手用IMU AP0421540 : {thera_rhand_port}")
+            print(f"    療法士左手用IMU AP0421541 : {thera_lhand_port}")
             check_port = input("上記のポート番号で正しいですか？(y/n): ")
             
             if check_port == "y":
@@ -671,21 +681,21 @@ if __name__ == "__main__":
             elif check_port == "n":
                 # 9gの場合
                 sync_port_num = input("同期用IMU AP04212533 のポート番号を入力:COM")
-                # sub_port_num = input("患者腰用IMU AP0421538 のポート番号を入力:COM")
-                # thera_port_num = input("療法士腰用IMU AP0421539 のポート番号を入力:COM")
-                # thera_rhand_port_num = input("療法士右手用IMU AP0421540 のポート番号を入力:COM")
-                # thera_lhand_port_num = input("療法士左手用IMU AP0421541 のポート番号を入力:COM")
+                sub_port_num = input("患者腰用IMU AP0421538 のポート番号を入力:COM")
+                thera_port_num = input("療法士腰用IMU AP0421539 のポート番号を入力:COM")
+                thera_rhand_port_num = input("療法士右手用IMU AP0421540 のポート番号を入力:COM")
+                thera_lhand_port_num = input("療法士左手用IMU AP0421541 のポート番号を入力:COM")
 
                 sync_port = "COM" + sync_port_num
-                # sub_port = "COM" + sub_port_num
-                # thera_port = "COM" + thera_port_num
-                # thera_rhand_port = "COM" + thera_rhand_port_num
-                # thera_lhand_port = "COM" + thera_lhand_port_num
+                sub_port = "COM" + sub_port_num
+                thera_port = "COM" + thera_port_num
+                thera_rhand_port = "COM" + thera_rhand_port_num
+                thera_lhand_port = "COM" + thera_lhand_port_num
 
-                ports = [sync_port]
-                ports_name = ["sync"]
-                # ports = [sync_port, sub_port, thera_port, thera_rhand_port, thera_lhand_port]
-                # ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
+                # ports = [sync_port]
+                # ports_name = ["sync"]
+                ports = [sync_port, sub_port, thera_port, thera_rhand_port, thera_lhand_port]
+                ports_name = ["sync", "sub", "thera", "thera_rhand", "thera_lhand"]
                 port_dict = dict(zip(ports, ports_name))
             else:
                 print("yまたはnを入力してください")
@@ -694,39 +704,89 @@ if __name__ == "__main__":
         port_dict_file = root_dir / "port_dict.json"
         with open(port_dict_file, "w") as file:
             json.dump(port_dict, file, indent=4, ensure_ascii=False)
-
-        # 計測条件の入力、保存先のディレクトリを作成
-        current_date = datetime.now().strftime('%Y%m%d')
-        sub_num = "sub" + input("被験者番号を入力してください: sub")
-        thera_num = "thera" + input("介助者番号を入力してください（介助なしの場合は0を入力）: thera")
-        record_num = "-" + input("この条件での撮影回数を入力してください :")
-        save_dir = root_dir / current_date / sub_num / (thera_num+record_num)
-
-        new_save_dir = save_dir
-        i = 2
-        while new_save_dir.exists():
-            new_save_dir = save_dir.with_name(f"{thera_num+record_num}_{i}")
-            i += 1
-        new_save_dir.mkdir(parents=True, exist_ok=False)
-
-        print(f"データは{new_save_dir}に保存されます")
-
-        imu_save_folder = new_save_dir / "IMU"
-        imu_save_folder.mkdir(parents=True, exist_ok=True)
         
-        #IMU用のフォルダを作成
-        # gopro_fl_path = new_save_dir / "fl"
-        # gopro_fr_path = new_save_dir / "fr"
-        # gopro_front_path = new_save_dir / "front"
-        # gopro_sagi_path = new_save_dir / "sagi"
-        # gopro_fl_path.mkdir(parents=True, exist_ok=True)
-        # gopro_fr_path.mkdir(parents=True, exist_ok=True)
-        # gopro_front_path.mkdir(parents=True, exist_ok=True)
-        # gopro_sagi_path.mkdir(parents=True, exist_ok=True)
+        # 最初に一度だけポートを開く
+        serial_objects = {}
+        try:
+            print("\nシリアルポートを開いています...")
+            for port in ports:
+                ser = serial.Serial(port=port, baudrate=115200, timeout=1.0)
+                if not ser.is_open:
+                    raise serial.SerialException(f"{port}を開けませんでした。")
+                serial_objects[port] = ser
+                print(f"{port} のポートを開きました。")
+        except serial.SerialException as e:
+            print(f"エラー: {e}")
+            print("ポートが他のプログラムで使用されていないか確認してください。")
+            for ser in serial_objects.values():
+                if ser.is_open:
+                    ser.close()
+            exit()
+        
+        # --- ★★★変更点: 初回設定を一度だけ実行★★★ ---
+        print("\nIMUの初回設定を行っています...")
+        setup_success = True
+        for port, ser in serial_objects.items():
+            if not initial_imu_setup(ser, port):
+                setup_success = False
+                break
+        
+        if not setup_success:
+            print("IMUの初回設定に失敗したため、プログラムを終了します。")
+            for ser in serial_objects.values():
+                if ser.is_open:
+                    ser.close()
+            exit()
+        # --- ★★★変更ここまで★★★ ---
 
-        # アプリで書き出したIMUデータとの照合のために出力
-        port_dict_file2 = imu_save_folder / f"port_dict_check.json"
-        with open(port_dict_file2, "w") as file:
-            json.dump(port_dict, file, indent=4, ensure_ascii=False)
+        # メインの計測ループ
+        try:
+            while True:
+                # 計測条件の入力、保存先のディレクトリを作成
+                current_date = datetime.now().strftime('%Y%m%d')
+                sub_num = "sub" + input("\n被験者番号を入力してください: sub")
+                thera_num = "thera" + input("介助者番号を入力してください（介助なしの場合は0を入力）: thera")
+                record_num = "-" + input("この条件での撮影回数を入力してください :")
+                save_dir = root_dir / current_date / sub_num / (thera_num+record_num)
 
-        main(ports, port_dict, imu_save_folder)
+                new_save_dir = save_dir
+                i = 2
+                while new_save_dir.exists():
+                    new_save_dir = save_dir.with_name(f"{thera_num+record_num}_{i}")
+                    i += 1
+                new_save_dir.mkdir(parents=True, exist_ok=False)
+
+                print(f"データは{new_save_dir}に保存されます")
+
+                imu_save_folder = new_save_dir / "IMU"
+                imu_save_folder.mkdir(parents=True, exist_ok=True)
+                
+                port_dict_file2 = imu_save_folder / f"port_dict_check.json"
+                with open(port_dict_file2, "w") as file:
+                    json.dump(port_dict, file, indent=4, ensure_ascii=False)
+
+                # 1回の計測サイクルを実行
+                perform_measurement_cycle(serial_objects, port_dict, imu_save_folder)
+
+                # 連続計測の確認
+                continue_choice = ""
+                while continue_choice.lower() not in ['y', 'n']:
+                    continue_choice = input("\n連続で計測を続けますか？(y/n): ")
+                
+                if continue_choice.lower() == 'n':
+                    break
+                
+                print("--------------------------------次の計測を開始します----------------------------")
+        
+        except Exception as e:
+            print(f"予期せぬエラーが発生しました: {e}")
+        
+        finally:
+            # 最後にすべてのポートを閉じる
+            print("\nすべてのシリアルポートを閉じています...")
+            for port, ser in serial_objects.items():
+                if ser.is_open:
+                    # stop_measurement(ser, port) # 閉じる前に再度stopを送る必要はない
+                    ser.close()
+                    print(f"{port} のポートを閉じました。")
+            print("スクリプトを終了します。")
