@@ -637,7 +637,7 @@ if __name__ == "__main__":
                     pass
 
             if reuse_port_flag == "n":  #新たにポート番号を入力
-                # otの場合
+                # tkrzkの場合
                 sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
                 sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
                 thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
@@ -668,7 +668,7 @@ if __name__ == "__main__":
             if check_port == "y":
                 pass
             elif check_port == "n":
-                # tkzkの場合
+                # tkrzkの場合
                 sync_port_num = input("同期用IMU AP09181356 のポート番号を入力:COM")
                 sub_port_num = input("患者腰用IMU AP09182459 のポート番号を入力:COM")
                 thera_port_num = input("療法士腰用IMU AP09182460 のポート番号を入力:COM")
