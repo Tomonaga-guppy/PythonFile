@@ -13,7 +13,7 @@ import matplotlib.ticker as mticker
 # tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\psub_label2")
 # tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm")
 tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
-# tsv_files = tsv_dir.glob("*0003*.tsv")
+# tsv_files = tsv_dir.glob("*0001*.tsv")
 tsv_files = tsv_dir.glob("*sub4_com*.tsv")
 tsv_files = list(tsv_files)
 tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
@@ -157,20 +157,20 @@ def main():
             interpolated3_df = interpolated3_df
             butter_df = butter_df
 
-        print("\n--- 補間結果のプロットを開始 ---")
-        plot_dfs = [nan_df, interpolated_df, interpolated2_df, interpolated3_df, butter_df]
-        plot_labels = ['Original Data (with Gaps)', 'Step 1: Spline Interpolation', 'Step 2: Rigid Body Fitting', 'Step 3: Final Spline Interpolation', 'Filtered Data (Butterworth)']
+        # print("\n--- 補間結果のプロットを開始 ---")
+        # plot_dfs = [nan_df, interpolated_df, interpolated2_df, interpolated3_df, butter_df]
+        # plot_labels = ['Original Data (with Gaps)', 'Step 1: Spline Interpolation', 'Step 2: Rigid Body Fitting', 'Step 3: Final Spline Interpolation', 'Filtered Data (Butterworth)']
 
-        # プロットしたいマーカーをリストで指定
-        markers_to_plot = ['RASI', 'LASI', 'RPSI', 'LPSI']
+        # # プロットしたいマーカーをリストで指定
+        # markers_to_plot = ['RASI', 'LASI', 'RPSI', 'LPSI']
 
-        for marker in markers_to_plot:
-            if f'{marker} X' in full_df.columns:
-                output_filename = tsv_dir / f"{tsv_file.stem}_{marker}_interpolation_check.png"
-                plot_interpolation_results(plot_dfs, plot_labels, marker, output_filename)
-            else:
-                print(f"マーカー '{marker}' はファイルに存在しないため、プロットをスキップします。")
-        print("--- 補間結果のプロットが完了 ---\n")
+        # for marker in markers_to_plot:
+        #     if f'{marker} X' in full_df.columns:
+        #         output_filename = tsv_dir / f"{tsv_file.stem}_{marker}_interpolation_check.png"
+        #         plot_interpolation_results(plot_dfs, plot_labels, marker, output_filename)
+        #     else:
+        #         print(f"マーカー '{marker}' はファイルに存在しないため、プロットをスキップします。")
+        # print("--- 補間結果のプロットが完了 ---\n")
 
 
 
@@ -237,14 +237,27 @@ def main():
                 continue
 
             angle_list_range = []
+            # 前フレームの角度を保存する変数
+            prev_r_hip_angle, prev_l_hip_angle, prev_r_knee_angle, prev_l_knee_angle, prev_r_ankle_angle, prev_l_ankle_angle = None, None, None, None, None, None
 
             # ループの範囲を現在の有効範囲 '_range' に限定
             for frame_idx_in_range, original_frame_num in enumerate(_range):
                 try:
                     # 座標系定義の計算 (インデックスは範囲内でのインデックス frame_idx_in_range を使用)
                     # print(f"Frame {frame}:")
-                    d_asi = np.linalg.norm(rasi[frame_idx_in_range,:] - lasi[frame_idx_in_range,:])
-                    d_leg = (np.linalg.norm(rank[frame_idx_in_range,:] - rasi[frame_idx_in_range,:]) + np.linalg.norm(lank[frame_idx_in_range, :] - lasi[frame_idx_in_range,:]) / 2)
+                    d_asi = np.linalg.norm(rasi[frame_idx_in_range,:] - lasi[frame_idx_in_range,:])  #ASIS間距離
+                    """
+                    修正前
+                    # d_leg_bef = (np.linalg.norm(rank[frame_idx_in_range,:] - rasi[frame_idx_in_range,:]) + np.linalg.norm(lank[frame_idx_in_range, :] - lasi[frame_idx_in_range,:]) / 2)  #大腿長の平均
+                    """
+                    # 修正後
+                    d_leg = (np.linalg.norm(rank[frame_idx_in_range,:] - rasi[frame_idx_in_range,:]) + np.linalg.norm(lank[frame_idx_in_range, :] - lasi[frame_idx_in_range,:])) / 2  #大腿長の平均
+                    
+                    """
+                    print(f"d_asi: {d_asi}, d_leg_bef: {d_leg_bef}, d_leg: {d_leg}")
+                    d_leg_bef: 1316.5442363768009, d_leg: 879.4018044930382
+                    """
+
                     r = 0.012 #使用したマーカー径
 
                     h = 1.70 #被験者の身長
@@ -308,7 +321,8 @@ def main():
                     e_y_pelvis_0 = (hip_0 - sacrum)/np.linalg.norm(hip_0 - sacrum)
                     e_z_pelvis_0 = np.cross(e_x0_pelvis_0, e_y_pelvis_0)/np.linalg.norm(np.cross(e_x0_pelvis_0, e_y_pelvis_0))
                     e_x_pelvis_0 = np.cross(e_y_pelvis_0, e_z_pelvis_0)
-    
+
+                    #######################################
                     transformation_matrix = np.array([[e_x_pelvis_0[0], e_y_pelvis_0[0], e_z_pelvis_0[0], hip_0[0]],
                                                         [e_x_pelvis_0[1], e_y_pelvis_0[1], e_z_pelvis_0[1], hip_0[1]],
                                                         [e_x_pelvis_0[2], e_y_pelvis_0[2], e_z_pelvis_0[2], hip_0[2]],
@@ -410,24 +424,26 @@ def main():
                     r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
                     l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
 
-                    # # 角度範囲を調整
-                    # # 角度が負の場合は360を足して正の値に変換
-                    # r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
-                    # l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
-                    # r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
-                    # l_knee_angle = 360 + l_knee_angle if l_knee_angle < 0 else l_knee_angle
-                    # r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
-                    # l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
+                    # 角度範囲を調整
+                    # 角度が負の場合は360を足して正の値に変換
+                    r_hip_angle = 360 + r_hip_angle if r_hip_angle < 0 else r_hip_angle
+                    l_hip_angle = 360 + l_hip_angle if l_hip_angle < 0 else l_hip_angle
+                    r_knee_angle = 360 + r_knee_angle if r_knee_angle < 0 else r_knee_angle
+                    l_knee_angle = 360 + l_knee_angle if l_knee_angle < 0 else l_knee_angle
+                    r_ankle_angle = 360 + r_ankle_angle if r_ankle_angle < 0 else r_ankle_angle
+                    l_ankle_angle = 360 + l_ankle_angle if l_ankle_angle < 0 else l_ankle_angle
 
-                    # # 各角度について特定の範囲に変換
-                    # r_hip_angle = 180 - r_hip_angle
-                    # l_hip_angle = 180 - l_hip_angle
-                    # r_knee_angle = 180 - r_knee_angle
-                    # l_knee_angle = 180 - l_knee_angle
-                    # r_ankle_angle = 90 - r_ankle_angle
-                    # l_ankle_angle = 90 - l_ankle_angle
+                    # 各角度について特定の範囲に変換
+                    r_hip_angle = 180 - r_hip_angle
+                    l_hip_angle = 180 - l_hip_angle
+                    r_knee_angle = 180 - r_knee_angle
+                    l_knee_angle = 180 - l_knee_angle
+                    r_ankle_angle = 90 - r_ankle_angle
+                    l_ankle_angle = 90 - l_ankle_angle
 
                     angle_list_range.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle])
+                    
+                    
 
 
                     plot_flag = True
@@ -461,11 +477,12 @@ def main():
                             ax.scatter(hip[0], hip[1], hip[2], label='hip')
                             ax.scatter(rthigh[0], rthigh[1], rthigh[2], label='rthigh')
                             ax.scatter(lthigh[0], lthigh[1], lthigh[2], label='lthigh')
-                            ax.scatter(hip_0[0], hip_0[1], hip_0[2], label='hip_0')
-                            ax.scatter(lthigh_pelvis[0], lthigh_pelvis[1], lthigh_pelvis[2], label='lthigh_0')
-                            ax.scatter(rthigh_pelvis[0], rthigh_pelvis[1], rthigh_pelvis[2], label='rthigh_0')
-                            ax.scatter((rthigh_pelvis[0] + lthigh_pelvis[0])/2, (rthigh_pelvis[1] + lthigh_pelvis[1])/2, (rthigh_pelvis[2] + lthigh_pelvis[2])/2, label='mid_thigh')
-                            ax.scatter(0, 0, 0, label='origin')
+                            
+                            # ax.scatter(hip_0[0], hip_0[1], hip_0[2], label='hip_0')
+                            # ax.scatter(lthigh_pelvis[0], lthigh_pelvis[1], lthigh_pelvis[2], label='lthigh_0')
+                            # ax.scatter(rthigh_pelvis[0], rthigh_pelvis[1], rthigh_pelvis[2], label='rthigh_0')
+                            # ax.scatter((rthigh_pelvis[0] + lthigh_pelvis[0])/2, (rthigh_pelvis[1] + lthigh_pelvis[1])/2, (rthigh_pelvis[2] + lthigh_pelvis[2])/2, label='mid_thigh')
+                            # ax.scatter(0, 0, 0, label='origin')
 
 
                             ax.plot([lhee[frame_idx_in_range, :][0]- hip[0]], [lhee[frame_idx_in_range, :][1]- hip[1]], [lhee[frame_idx_in_range, :][2]- hip[2]], color='red')
@@ -526,9 +543,9 @@ def main():
                             ax.plot([lfoot[0], lfoot[0] + e_y_lfoot[0]], [lfoot[1], lfoot[1] + e_y_lfoot[1]], [lfoot[2], lfoot[2] + e_y_lfoot[2]], color='green')
                             ax.plot([lfoot[0], lfoot[0] + e_z_lfoot[0]], [lfoot[1], lfoot[1] + e_z_lfoot[1]], [lfoot[2], lfoot[2] + e_z_lfoot[2]], color='blue')
                             
-                            ax.plot([hip_0[0], hip_0[0] + e_x_pelvis_0[0]], [hip_0[1], hip_0[1] + e_x_pelvis_0[1]], [hip_0[2], hip_0[2] + e_x_pelvis_0[2]], color='red', linestyle='dashed')
-                            ax.plot([hip_0[0], hip_0[0] + e_y_pelvis_0[0]], [hip_0[1], hip_0[1] + e_y_pelvis_0[1]], [hip_0[2], hip_0[2] + e_y_pelvis_0[2]], color='green', linestyle='dashed')
-                            ax.plot([hip_0[0], hip_0[0] + e_z_pelvis_0[0]], [hip_0[1], hip_0[1] + e_z_pelvis_0[1]], [hip_0[2], hip_0[2] + e_z_pelvis_0[2]], color='blue', linestyle='dashed')
+                            # ax.plot([hip_0[0], hip_0[0] + e_x_pelvis_0[0]], [hip_0[1], hip_0[1] + e_x_pelvis_0[1]], [hip_0[2], hip_0[2] + e_x_pelvis_0[2]], color='red', linestyle='dashed')
+                            # ax.plot([hip_0[0], hip_0[0] + e_y_pelvis_0[0]], [hip_0[1], hip_0[1] + e_y_pelvis_0[1]], [hip_0[2], hip_0[2] + e_y_pelvis_0[2]], color='green', linestyle='dashed')
+                            # ax.plot([hip_0[0], hip_0[0] + e_z_pelvis_0[0]], [hip_0[1], hip_0[1] + e_z_pelvis_0[1]], [hip_0[2], hip_0[2] + e_z_pelvis_0[2]], color='blue', linestyle='dashed')
 
                             plt.legend()
                             plt.show()
