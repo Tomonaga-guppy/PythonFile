@@ -10,14 +10,14 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 
-tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\psub_label2")
+# tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\psub_label2")
 # tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm")
-# tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
-tsv_files = tsv_dir.glob("*0003*.tsv")
-# tsv_files = tsv_dir.glob("*sub4_com*.tsv")
+tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
+# tsv_files = tsv_dir.glob("*0003*.tsv")
+tsv_files = tsv_dir.glob("*sub4_com*.tsv")
 tsv_files = list(tsv_files)
-# tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
-tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
+tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
+# tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
 
 
 def plot_interpolation_results(dfs, labels, marker_name, output_path):
@@ -426,17 +426,33 @@ def main():
                     r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
                     l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
                     
+                    # 内旋外旋
+                    r_hip_angle_inex = r_hip_angle_rot.as_euler('yzx', degrees=True)[1]
+                    l_hip_angle_inex = l_hip_angle_rot.as_euler('yzx', degrees=True)[1]
+                    r_knee_angle_inex = r_knee_angle_rot.as_euler('yzx', degrees=True)[1]
+                    l_knee_angle_inex = l_knee_angle_rot.as_euler('yzx', degrees=True)[1]
+                    r_ankle_angle_inex = r_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
+                    l_ankle_angle_inex = l_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
+                    
                     # 内転外転
-                    r_hip_angle_ab = r_hip_angle_rot.as_euler('yzx', degrees=True)[1]
+                    r_hip_angle_adab = r_hip_angle_rot.as_euler('yzx', degrees=True)[2]
+                    l_hip_angle_adab = l_hip_angle_rot.as_euler('yzx', degrees=True)[2]
+                    r_knee_angle_adab = r_knee_angle_rot.as_euler('yzx', degrees=True)[2]
+                    l_knee_angle_adab = l_knee_angle_rot.as_euler('yzx', degrees=True)[2]
+                    r_ankle_angle_adab = r_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
+                    l_ankle_angle_adab = l_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
 
-                    angle_list_range.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle])
+                    angle_list_range.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle, 
+                                             r_hip_angle_inex, l_hip_angle_inex, r_knee_angle_inex, l_knee_angle_inex, r_ankle_angle_inex, l_ankle_angle_inex,
+                                             r_hip_angle_adab, l_hip_angle_adab, r_knee_angle_adab, l_knee_angle_adab, r_ankle_angle_adab, l_ankle_angle_adab])
+                    # angle_list_range.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle])
                     
                     #骨盤と左足踵のベクトルを計算
                     pel2heel = lhee[frame_idx_in_range, :] - hip
                     pel2hee_list.append(pel2heel)
 
 
-                    plot_flag = True
+                    plot_flag = False
                     if plot_flag:
                         if original_frame_num == 0:
                             fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
@@ -548,7 +564,10 @@ def main():
             # この範囲の角度データからデータフレームを作成
             if angle_list_range:
                 angle_array_range = np.array(angle_list_range)
-                angle_df_range = pd.DataFrame(angle_array_range, columns=["R_Hip", "L_Hip", "R_Knee", "L_Knee", "R_Ankle", "L_Ankle"], index=_range)
+                # angle_df_range = pd.DataFrame(angle_array_range, columns=["R_Hip", "L_Hip", "R_Knee", "L_Knee", "R_Ankle", "L_Ankle"], index=_range)
+                angle_df_range = pd.DataFrame(angle_array_range, columns=["R_Hip", "L_Hip", "R_Knee", "L_Knee", "R_Ankle", "L_Ankle",
+                                                                           "R_Hip_InEx", "L_Hip_InEx", "R_Knee_InEx", "L_Knee_InEx", "R_Ankle_InEx", "L_Ankle_InEx",
+                                                                           "R_Hip_AdAb", "L_Hip_AdAb", "R_Knee_AdAb", "L_Knee_AdAb", "R_Ankle_AdAb", "L_Ankle_AdAb"], index=_range)
                 all_angle_dfs.append(angle_df_range)
 
         # すべての範囲の角度データフレームを結合
@@ -562,33 +581,33 @@ def main():
         
         
         # 角度データの連続性保つ
-        # for col in angle_df.columns:
-        #     prev = None
-        #     for i in angle_df.index:
-        #         curr = angle_df.at[i, col]
-        #         if prev is not None and pd.notna(curr) and pd.notna(prev):
-        #             diff = curr - prev
-        #             if diff > 180:
-        #                 angle_df.at[i, col] = curr - 360
-        #             elif diff < -180:
-        #                 angle_df.at[i, col] = curr + 360
-        #             prev = angle_df.at[i, col]
-        #         elif pd.notna(curr):
-        #             prev = curr
+        for col in angle_df.columns:
+            prev = None
+            for i in angle_df.index:
+                curr = angle_df.at[i, col]
+                if prev is not None and pd.notna(curr) and pd.notna(prev):
+                    diff = curr - prev
+                    if diff > 180:
+                        angle_df.at[i, col] = curr - 360
+                    elif diff < -180:
+                        angle_df.at[i, col] = curr + 360
+                    prev = angle_df.at[i, col]
+                elif pd.notna(curr):
+                    prev = curr
                     
         # Hip, Knee, Ankle角度のオフセット補正
-        # if 'R_Hip' in angle_df.columns:
-        #     for frame in angle_df.index:
-        #         if angle_df.at[frame, 'R_Hip'] > 0:
-        #             angle_df.loc[frame, 'R_Hip'] = angle_df.at[frame, 'R_Hip'] - 180
-        #         else:
-        #             angle_df.loc[frame, 'R_Hip'] = 180 + angle_df.at[frame, 'R_Hip']
-        # if 'L_Hip' in angle_df.columns:
-        #     for frame in angle_df.index:
-        #         if angle_df.at[frame, 'L_Hip'] > 0:
-        #             angle_df.loc[frame, 'L_Hip'] = angle_df.at[frame, 'L_Hip'] - 180
-        #         else:
-        #             angle_df.loc[frame, 'L_Hip'] = 180 + angle_df.at[frame, 'L_Hip']
+        if 'R_Hip' in angle_df.columns:
+            for frame in angle_df.index:
+                if angle_df.at[frame, 'R_Hip'] > 0:
+                    angle_df.loc[frame, 'R_Hip'] = angle_df.at[frame, 'R_Hip'] - 180
+                else:
+                    angle_df.loc[frame, 'R_Hip'] = 180 + angle_df.at[frame, 'R_Hip']
+        if 'L_Hip' in angle_df.columns:
+            for frame in angle_df.index:
+                if angle_df.at[frame, 'L_Hip'] > 0:
+                    angle_df.loc[frame, 'L_Hip'] = angle_df.at[frame, 'L_Hip'] - 180
+                else:
+                    angle_df.loc[frame, 'L_Hip'] = 180 + angle_df.at[frame, 'L_Hip']
         if 'R_Knee' in angle_df.columns:
             for frame in angle_df.index:
                 if angle_df.at[frame, 'R_Knee'] > 0:
@@ -657,7 +676,7 @@ def main():
         # 左右股関節の屈曲伸展角度をプロット
         plt.plot(angle_df['L_Hip'], label='Left Hip Flexion/Extension', color='orange')
         plt.plot(angle_df['R_Hip'], label='Right Hip Flexion/Extension', color='blue')
-        [plt.axvline(x=frame, color='red', linestyle='--', alpha=0.5) for frame in ic_frame_list]
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in ic_frame_list]
         plt.xlabel('Frame')
         plt.ylabel('Angle (degrees)')
         plt.title('Hip Flexion/Extension Angles Over Time')
@@ -670,7 +689,7 @@ def main():
         # 左右膝関節の屈曲伸展角度をプロット
         plt.plot(angle_df['L_Knee'], label='Left Knee Flexion/Extension', color='orange')
         plt.plot(angle_df['R_Knee'], label='Right Knee Flexion/Extension', color='blue')
-        [plt.axvline(x=frame, color='red', linestyle='--', alpha=0.5) for frame in ic_frame_list]
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in ic_frame_list]
         plt.xlabel('Frame')
         plt.ylabel('Angle (degrees)')
         plt.title('Knee Flexion/Extension Angles Over Time')
@@ -683,7 +702,7 @@ def main():
         # 左右足関節の底屈背屈角度をプロット
         plt.plot(angle_df['L_Ankle'], label='Left Ankle Plantarflexion/Dorsiflexion', color='orange')
         plt.plot(angle_df['R_Ankle'], label='Right Ankle Plantarflexion/Dorsiflexion', color='blue')
-        [plt.axvline(x=frame, color='red', linestyle='--', alpha=0.5) for frame in ic_frame_list]
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in ic_frame_list]
         plt.xlabel('Frame')
         plt.ylabel('Angle (degrees)')
         plt.title('Ankle Plantarflexion/Dorsiflexion Angles Over Time')
@@ -693,52 +712,132 @@ def main():
         plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Ankle_L_Plantarflexion_Dorsiflexion.png"))
         plt.close()
         
-        angle_dict[tsv_file.stem] = angle_df
         
-    print(f"angle_dict: {angle_dict}")
-    # 各被験者の角度データをプロット，RMSEを計算
-    if len(angle_dict) == 2:
+        # 左右股関節の内転外転角度をプロット
+        plt.plot(angle_df['L_Hip_AdAb'], label='Left Hip Adduction/Abduction', color='orange')
+        plt.plot(angle_df['R_Hip_AdAb'], label='Right Hip Adduction/Abduction', color='blue')
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in ic_frame_list]
+        plt.xlabel('Frame')
+        plt.ylabel('Angle (degrees)')
+        plt.title('Hip Adduction/Abduction Angles Over Time')
+        # plt.ylim(-20, 60)
+        plt.grid()
+        plt.legend()
+        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Hip_Adduction_Abduction.png"))
+        plt.close()
         
-        def ref_rmse(angle_dict):
-            keys = list(angle_dict.keys())
-            df1 = angle_dict[keys[0]]
-            df2 = angle_dict[keys[1]]
+        # 左右膝関節の内転外転角度をプロット
+        plt.plot(angle_df['L_Knee_AdAb'], label='Left Knee Adduction/Abduction', color='orange')
+        plt.plot(angle_df['R_Knee_AdAb'], label='Right Knee Adduction/Abduction', color='blue')
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in ic_frame_list]
+        plt.xlabel('Frame')
+        plt.ylabel('Angle (degrees)')
+        plt.title('Knee Adduction/Abduction Angles Over Time')
+        # plt.ylim(-20, 60)
+        plt.grid()
+        plt.legend()
+        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Knee_Adduction_Abduction.png"))
+        plt.close()
+        
+        # 左右足関節の内転外転角度をプロット
+        plt.plot(angle_df['L_Ankle_AdAb'], label='Left Ankle Adduction/Abduction', color='orange')
+        plt.plot(angle_df['R_Ankle_AdAb'], label='Right Ankle Adduction/Abduction', color='blue')
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in ic_frame_list]
+        plt.xlabel('Frame')
+        plt.ylabel('Angle (degrees)')
+        plt.title('Ankle Adduction/Abduction Angles Over Time')
+        # plt.ylim(-20, 60)
+        plt.grid()
+        plt.legend()
+        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Ankle_Adduction_Abduction.png"))
+        plt.close()
+        
+        
+        # 左右股関節の内旋外旋角度をプロット
+        plt.plot(angle_df['L_Hip_InEx'], label='Left Hip Internal/External Rotation', color='orange')
+        plt.plot(angle_df['R_Hip_InEx'], label='Right Hip Internal/External Rotation', color='blue')
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in ic_frame_list]
+        plt.xlabel('Frame')
+        plt.ylabel('Angle (degrees)')
+        plt.title('Hip Internal/External Rotation Angles Over Time')
+        # plt.ylim(-20, 60)
+        plt.grid()
+        plt.legend()
+        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Hip_Internal_External_Rotation.png"))
+        plt.close()
+        
+        # 左右膝関節の内旋外旋角度をプロット
+        plt.plot(angle_df['L_Knee_InEx'], label='Left Knee Internal/External Rotation', color='orange')
+        plt.plot(angle_df['R_Knee_InEx'], label='Right Knee Internal/External Rotation', color='blue')
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in ic_frame_list]
+        plt.xlabel('Frame')
+        plt.ylabel('Angle (degrees)')
+        plt.title('Knee Internal/External Rotation Angles Over Time')
+        # plt.ylim(-20, 60)
+        plt.grid()
+        plt.legend()
+        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Knee_Internal_External_Rotation.png"))
+        plt.close()
+        
+        # 左右足関節の内旋外旋角度をプロット
+        plt.plot(angle_df['L_Ankle_InEx'], label='Left Ankle Internal/External Rotation', color='orange')
+        plt.plot(angle_df['R_Ankle_InEx'], label='Right Ankle Internal/External Rotation', color='blue')
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in ic_frame_list]
+        plt.xlabel('Frame')     
+        plt.ylabel('Angle (degrees)')
+        plt.title('Ankle Internal/External Rotation Angles Over Time')
+        # plt.ylim(-20, 60)
+        plt.grid()
+        plt.legend()
+        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Ankle_Internal_External_Rotation.png"))
+        plt.close()
+        
+    #     angle_dict[tsv_file.stem] = angle_df
+        
+    # print(f"angle_dict: {angle_dict}")
+    # # 各被験者の角度データをプロット，RMSEを計算
+    # if len(angle_dict) == 2:
+        
+    #     def ref_rmse(angle_dict):
+    #         keys = list(angle_dict.keys())
+    #         df1 = angle_dict[keys[0]]
+    #         df2 = angle_dict[keys[1]]
             
-            # 共通のフレーム範囲を特定
-            common_index = df1.index.intersection(df2.index)
-            df1_common = df1.loc[common_index]
-            df2_common = df2.loc[common_index]
+    #         # 共通のフレーム範囲を特定
+    #         common_index = df1.index.intersection(df2.index)
+    #         df1_common = df1.loc[common_index]
+    #         df2_common = df2.loc[common_index]
             
-            joints = ['Hip', 'Knee', 'Ankle']
-            sides = ['L', 'R']
+    #         joints = ['Hip', 'Knee', 'Ankle']
+    #         sides = ['L', 'R']
             
-            for joint in joints:
-                plt.figure(figsize=(10, 6))
-                for side in sides:
-                    if side == "L":
-                        color = "tab:orange"
-                    else:
-                        color = "tab:blue"
-                    col_name = f"{side}_{joint}"
-                    plt.plot(df1_common.index, df1_common[col_name], label=f'Original', color=color, linestyle='-', linewidth=2)
-                    plt.plot(df2_common.index, df2_common[col_name], label=f'Rigid Transformation', color=color, linewidth=1, alpha=0.1)
-                    # plt.plot(df1_common.index, df1_common[col_name], label=f'Original', color=color)
-                    # plt.plot(df2_common.index, df2_common[col_name], label=f'Rigid Transformation', linestyle='--', color=color)
+    #         for joint in joints:
+    #             plt.figure(figsize=(10, 6))
+    #             for side in sides:
+    #                 if side == "L":
+    #                     color = "tab:orange"
+    #                 else:
+    #                     color = "tab:blue"
+    #                 col_name = f"{side}_{joint}"
+    #                 plt.plot(df1_common.index, df1_common[col_name], label=f'Original', color=color, linestyle='-', linewidth=2)
+    #                 plt.plot(df2_common.index, df2_common[col_name], label=f'Rigid Transformation', color=color, linewidth=1, alpha=0.1)
+    #                 # plt.plot(df1_common.index, df1_common[col_name], label=f'Original', color=color)
+    #                 # plt.plot(df2_common.index, df2_common[col_name], label=f'Rigid Transformation', linestyle='--', color=color)
 
-                    # RMSEの計算
-                    rmse = np.sqrt(np.nanmean((df1_common[col_name] - df2_common[col_name]) ** 2))
-                    print(f"RMSE for {col_name}: {rmse:.2f} degrees")
+    #                 # RMSEの計算
+    #                 rmse = np.sqrt(np.nanmean((df1_common[col_name] - df2_common[col_name]) ** 2))
+    #                 print(f"RMSE for {col_name}: {rmse:.2f} degrees")
                     
-                plt.xlabel('Frame')
-                plt.ylabel('Angle (degrees)')
-                plt.title(f'{joint} Flexion/Extension Angles Comparison')
-                plt.ylim(-50, 100)
-                plt.grid()
-                plt.legend()
-                save_path = tsv_dir / f"{keys[0]}_{keys[1]}_{joint}_Comparison.png"
-                plt.savefig(save_path)
-                plt.close()
-        ref_rmse(angle_dict)  # 関節角度のRMSEを計算,プロット
+    #             plt.xlabel('Frame')
+    #             plt.ylabel('Angle (degrees)')
+    #             plt.title(f'{joint} Flexion/Extension Angles Comparison')
+    #             plt.ylim(-50, 100)
+    #             plt.grid()
+    #             plt.legend()
+    #             save_path = tsv_dir / f"{keys[0]}_{keys[1]}_{joint}_Comparison.png"
+    #             plt.savefig(save_path)
+    #             plt.close()
+    #     ref_rmse(angle_dict)  # 関節角度のRMSEを計算,プロット
 
 
 if __name__ == "__main__":
