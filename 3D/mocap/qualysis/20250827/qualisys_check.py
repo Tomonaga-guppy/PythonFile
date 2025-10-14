@@ -10,14 +10,14 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 
-# tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\psub_label2")
+tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\psub_label2")
 # tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm")
-tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
-# tsv_files = tsv_dir.glob("*0003*.tsv")
-tsv_files = tsv_dir.glob("*sub4_com*.tsv")
+# tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
+tsv_files = tsv_dir.glob("*0003*.tsv")
+# tsv_files = tsv_dir.glob("*sub4_com*.tsv")
 tsv_files = list(tsv_files)
-tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
-# tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
+# tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
+tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
 
 
 def plot_interpolation_results(dfs, labels, marker_name, output_path):
@@ -300,7 +300,7 @@ def main():
 
 
                     """
-                    変更中
+                    変更後
                     """
                     # skycom + davis
                     x_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
@@ -417,30 +417,56 @@ def main():
                     r_ankle_angle_rot = R.from_matrix(r_ankle_realative_rotation)
                     l_ankle_angle_rot = R.from_matrix(l_ankle_realative_rotation)
 
-                    # 回転行列から回転角を計算
+                    # 回転行列から回転角を計算 XYZ大文字だと内因性，xyz小文字だと外因性
                     # 屈曲-伸展
-                    r_hip_angle = r_hip_angle_rot.as_euler('yzx', degrees=True)[0]
-                    l_hip_angle = l_hip_angle_rot.as_euler('yzx', degrees=True)[0]
-                    r_knee_angle = r_knee_angle_rot.as_euler('yzx', degrees=True)[0]
-                    l_knee_angle = l_knee_angle_rot.as_euler('yzx', degrees=True)[0]
-                    r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
-                    l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
-                    
+                    r_hip_angle = r_hip_angle_rot.as_euler('YZX', degrees=True)[0]
+                    l_hip_angle = l_hip_angle_rot.as_euler('YZX', degrees=True)[0]
+                    r_knee_angle = r_knee_angle_rot.as_euler('YZX', degrees=True)[0]
+                    l_knee_angle = l_knee_angle_rot.as_euler('YZX', degrees=True)[0]
+                    r_ankle_angle = r_ankle_angle_rot.as_euler('YZX', degrees=True)[0]
+                    l_ankle_angle = l_ankle_angle_rot.as_euler('YZX', degrees=True)[0]
+
                     # 内旋外旋
-                    r_hip_angle_inex = r_hip_angle_rot.as_euler('yzx', degrees=True)[1]
-                    l_hip_angle_inex = l_hip_angle_rot.as_euler('yzx', degrees=True)[1]
-                    r_knee_angle_inex = r_knee_angle_rot.as_euler('yzx', degrees=True)[1]
-                    l_knee_angle_inex = l_knee_angle_rot.as_euler('yzx', degrees=True)[1]
-                    r_ankle_angle_inex = r_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
-                    l_ankle_angle_inex = l_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
-                    
+                    r_hip_angle_inex = r_hip_angle_rot.as_euler('YZX', degrees=True)[1]
+                    l_hip_angle_inex = l_hip_angle_rot.as_euler('YZX', degrees=True)[1]
+                    r_knee_angle_inex = r_knee_angle_rot.as_euler('YZX', degrees=True)[1]
+                    l_knee_angle_inex = l_knee_angle_rot.as_euler('YZX', degrees=True)[1]
+                    r_ankle_angle_inex = r_ankle_angle_rot.as_euler('YZX', degrees=True)[1]
+                    l_ankle_angle_inex = l_ankle_angle_rot.as_euler('YZX', degrees=True)[1]
+
                     # 内転外転
-                    r_hip_angle_adab = r_hip_angle_rot.as_euler('yzx', degrees=True)[2]
-                    l_hip_angle_adab = l_hip_angle_rot.as_euler('yzx', degrees=True)[2]
-                    r_knee_angle_adab = r_knee_angle_rot.as_euler('yzx', degrees=True)[2]
-                    l_knee_angle_adab = l_knee_angle_rot.as_euler('yzx', degrees=True)[2]
-                    r_ankle_angle_adab = r_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
-                    l_ankle_angle_adab = l_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
+                    r_hip_angle_adab = r_hip_angle_rot.as_euler('YZX', degrees=True)[2]
+                    l_hip_angle_adab = l_hip_angle_rot.as_euler('YZX', degrees=True)[2]
+                    r_knee_angle_adab = r_knee_angle_rot.as_euler('YZX', degrees=True)[2]
+                    l_knee_angle_adab = l_knee_angle_rot.as_euler('YZX', degrees=True)[2]
+                    r_ankle_angle_adab = r_ankle_angle_rot.as_euler('YZX', degrees=True)[2]
+                    l_ankle_angle_adab = l_ankle_angle_rot.as_euler('YZX', degrees=True)[2]
+
+                    """
+                    xyz小文字(外因性)で角度計算してた
+                    """
+                    # r_hip_angle = r_hip_angle_rot.as_euler('yzx', degrees=True)[0]
+                    # l_hip_angle = l_hip_angle_rot.as_euler('yzx', degrees=True)[0]
+                    # r_knee_angle = r_knee_angle_rot.as_euler('yzx', degrees=True)[0]
+                    # l_knee_angle = l_knee_angle_rot.as_euler('yzx', degrees=True)[0]
+                    # r_ankle_angle = r_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
+                    # l_ankle_angle = l_ankle_angle_rot.as_euler('yzx', degrees=True)[0]
+                    
+                    # # 内旋外旋
+                    # r_hip_angle_inex = r_hip_angle_rot.as_euler('yzx', degrees=True)[1]
+                    # l_hip_angle_inex = l_hip_angle_rot.as_euler('yzx', degrees=True)[1]
+                    # r_knee_angle_inex = r_knee_angle_rot.as_euler('yzx', degrees=True)[1]
+                    # l_knee_angle_inex = l_knee_angle_rot.as_euler('yzx', degrees=True)[1]
+                    # r_ankle_angle_inex = r_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
+                    # l_ankle_angle_inex = l_ankle_angle_rot.as_euler('yzx', degrees=True)[1]
+                    
+                    # # 内転外転
+                    # r_hip_angle_adab = r_hip_angle_rot.as_euler('yzx', degrees=True)[2]
+                    # l_hip_angle_adab = l_hip_angle_rot.as_euler('yzx', degrees=True)[2]
+                    # r_knee_angle_adab = r_knee_angle_rot.as_euler('yzx', degrees=True)[2]
+                    # l_knee_angle_adab = l_knee_angle_rot.as_euler('yzx', degrees=True)[2]
+                    # r_ankle_angle_adab = r_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
+                    # l_ankle_angle_adab = l_ankle_angle_rot.as_euler('yzx', degrees=True)[2]
 
                     angle_list_range.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle, 
                                              r_hip_angle_inex, l_hip_angle_inex, r_knee_angle_inex, l_knee_angle_inex, r_ankle_angle_inex, l_ankle_angle_inex,

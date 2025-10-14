@@ -18,11 +18,19 @@ for subject_dir in subject_dir_list:  # 各被験者ディレクトリに対し�
         if thera_dir.name == "thera0-15":
             print(f"Mocap課題用の動画で今は使用しないもしくは黒塗りが必要なのでスキップ: {thera_dir.name}")
             continue
+
+        # 介助歩行でも最大検出人数を1人にしてみる
+        max_people = 1
+
+        """
         if thera_dir.name.startswith("thera0"):
             max_people = 1
         else:
-            max_people = 2
-        directions = ["fl", "fr", "sagi"]
+            max_people = 2        
+        """
+            
+        directions = ["fl_mxp1", "fr_mxp1", "sagi_mxp1"]
+        # directions = ["fl", "fr", "sagi"]
         for direction in directions:  # 各方向に対して
 
             ori_img_dir = thera_dir / direction / "undistorted"
@@ -37,9 +45,16 @@ for subject_dir in subject_dir_list:  # 各被験者ディレクトリに対し�
                 print(f"{stem_name}.avi はすでに存在します") #すでに推定済みの場合はスキップ
                 i += 1
                 continue
+            
+            if ori_img_dir.exists() is False:
+                print(f"{ori_img_dir}は存在しません")
+                i += 1
+                continue
 
             if i != 1:
+                print("PC負荷軽減のため1分間待機してから処理を開始します")
                 time.sleep(60)  #少しでもPC負荷を減らすために1分待つ
+                print("処理を開始します")
                 
             ######OpenPoseへの命令作成 windowsの場合
             program= r".\build\x64\Release\OpenPoseDemo.exe"

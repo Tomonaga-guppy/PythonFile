@@ -205,10 +205,6 @@ def main():
     #  afterで始まるファイルも除外（既に処理済みのファイル）
     csv_paths = [path for path in csv_paths if not os.path.basename(path).startswith("after_")]
 
-    # Tpose時の骨盤の姿勢（3x3の回転行列）を読み込み
-    neutral_matrix_path = r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap\rot_pelvis_neutral.npy"
-    rot_pelvis_neutral = np.load(neutral_matrix_path)
-
     geometry_json_path = r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap\geometry.json"
 
     for i, csv_path in enumerate(csv_paths):
@@ -276,29 +272,36 @@ def main():
             c = 0.115 * d_leg - 0.0153  #SKYCOMだと0.00153だけどDavisモデルは0.0153  https://wiki.has-motion.com/doku.php?id=visual3d:documentation:modeling:segments:hip_joint_landmarks
             x_dis = 0.1288 * d_leg - 0.04856
 
+
+            """
+            変更後
+            """
             # skycom + davis
             x_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
             x_lthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
             y_rthigh = +(c * np.sin(theta) - d_asi/2)
             y_lthigh = -(c * np.sin(theta)- d_asi/2)
-            z_rthigh = -(x_dis + r) * np.sin(beta) + c * np.cos(theta) * np.cos(beta)
-            z_lthigh = -(x_dis + r) * np.sin(beta) + c * np.cos(theta) * np.cos(beta)
+            z_rthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
+            z_lthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
             rthigh_pelvis = np.array([x_rthigh, y_rthigh, z_rthigh]).T
             lthigh_pelvis = np.array([x_lthigh, y_lthigh, z_lthigh]).T
 
+            # 骨盤原点1 ASISの中点
             hip_0 = (rasi[frame_num,:] + lasi[frame_num,:]) / 2
-            lumbar = (0.47 * (rasi[frame_num,:] + lasi[frame_num,:]) / 2 + 0.53 * (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
+            # 仙骨 PSISの中点
+            sacrum = (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2
 
-            #骨盤節座標系（原点はhip）
-            e_y0_pelvis = lasi[frame_num,:] - rasi[frame_num,:]
-            e_z_pelvis = (lumbar - hip_0)/np.linalg.norm(lumbar - hip_0)
-            e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
-            e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
-            rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
+            #骨盤節座標系1（原点はhip_0）
+            e_y0_pelvis_0 = (lasi[frame_num,:] - rasi[frame_num,:])/np.linalg.norm(lasi[frame_num,:] - rasi[frame_num,:])
+            e_x_pelvis_0 = (hip_0 - sacrum)/np.linalg.norm(hip_0 - sacrum)
+            e_z_pelvis_0 = np.cross(e_x_pelvis_0, e_y0_pelvis_0)/np.linalg.norm(np.cross(e_x_pelvis_0, e_y0_pelvis_0))
+            e_y_pelvis_0 = np.cross(e_z_pelvis_0, e_x_pelvis_0)
 
-            transformation_matrix = np.array([[e_x_pelvis[0], e_y_pelvis[0], e_z_pelvis[0], hip_0[0]],
-                                                [e_x_pelvis[1], e_y_pelvis[1], e_z_pelvis[1], hip_0[1]],
-                                                [e_x_pelvis[2], e_y_pelvis[2], e_z_pelvis[2], hip_0[2]],
+            #######################################
+
+            transformation_matrix = np.array([[e_x_pelvis_0[0], e_y_pelvis_0[0], e_z_pelvis_0[0], hip_0[0]],
+                                                [e_x_pelvis_0[1], e_y_pelvis_0[1], e_z_pelvis_0[1], hip_0[1]],
+                                                [e_x_pelvis_0[2], e_y_pelvis_0[2], e_z_pelvis_0[2], hip_0[2]],
                                                 [0,       0,       0,       1]])
 
             #モーキャプの座標系に変換してもう一度計算
@@ -306,17 +309,14 @@ def main():
             lthigh = np.dot(transformation_matrix, np.append(lthigh_pelvis, 1))[:3]
             hip = (rthigh + lthigh) / 2
 
-            e_y0_pelvis = lthigh - rthigh
+            # 腰椎節原点
+            lumbar = (0.47 * (rasi[frame_num,:] + lasi[frame_num,:]) / 2 + 0.53 * (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
+
+            e_y0_pelvis = (lthigh - rthigh)/np.linalg.norm(lthigh - rthigh)
             e_z_pelvis = (lumbar - hip)/np.linalg.norm(lumbar - hip)
             e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
             e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
             rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
-
-            """現在の骨盤の向きがTposeの状態からどれだけずれているかを計算し、その分を補正する（Tposeの状態をゼロとする）"""
-            # rot_pelvis = np.dot(np.linalg.inv(rot_pelvis_neutral), rot_pelvis)
-            # e_x_pelvis = rot_pelvis[:,0]
-            # e_y_pelvis = rot_pelvis[:,1]
-            # e_z_pelvis = rot_pelvis[:,2]
 
             hip_list.append(hip)
             hip_array = np.array(hip_list)
@@ -374,22 +374,23 @@ def main():
             rot_lfoot = np.array([e_x_lfoot, e_y_lfoot, e_z_lfoot]).T
 
             # as_eulerが小文字(内因性の回転角度)となるよう設定
-            # 屈曲伸展（底屈背屈）角度を計算
+            # 各関節の相対回転行列を計算
             r_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_rthigh)
             l_hip_realative_rotation = np.dot(np.linalg.inv(rot_pelvis), rot_lthigh)
             r_knee_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rthigh)
             l_knee_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lthigh)
             r_ankle_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rfoot)
             l_ankle_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lfoot)
-            r_hip_flexion_angle = R.from_matrix(r_hip_realative_rotation).as_euler('YZX', degrees=True)[0]
-            l_hip_flexion_angle = R.from_matrix(l_hip_realative_rotation).as_euler('YZX', degrees=True)[0]
-            r_knee_flexion_angle =  R.from_matrix(r_knee_realative_rotation).as_euler('YZX', degrees=True)[0]
-            l_knee_flexion_angle = R.from_matrix(l_knee_realative_rotation).as_euler('YZX', degrees=True)[0]
-            r_ankle_absorption_angle = R.from_matrix(r_ankle_realative_rotation).as_euler('YZX', degrees=True)[0]
-            l_ankle_absorption_angle = R.from_matrix(l_ankle_realative_rotation).as_euler('YZX', degrees=True)[0]
+            # 屈曲伸展（底屈背屈）角度を計算
+            r_hip_angle_flex = R.from_matrix(r_hip_realative_rotation).as_euler('YZX', degrees=True)[0]
+            l_hip_angle_flex = R.from_matrix(l_hip_realative_rotation).as_euler('YZX', degrees=True)[0]
+            r_knee_angle_flex =  R.from_matrix(r_knee_realative_rotation).as_euler('YZX', degrees=True)[0]
+            l_knee_angle_flex = R.from_matrix(l_knee_realative_rotation).as_euler('YZX', degrees=True)[0]
+            r_ankle_angle_dopl = R.from_matrix(r_ankle_realative_rotation).as_euler('YZX', degrees=True)[0]
+            l_ankle_angle_dopl = R.from_matrix(l_ankle_realative_rotation).as_euler('YZX', degrees=True)[0]
 
             # 股関節の外旋内旋角度
-            r_hip_external_rotation_angle = R.from_matrix(r_hip_realative_rotation).as_euler('YZX', degrees=True)[1]
+            r_hip_angle_ = R.from_matrix(r_hip_realative_rotation).as_euler('YZX', degrees=True)[1]
             l_hip_external_rotation_angle = R.from_matrix(l_hip_realative_rotation).as_euler('YZX', degrees=True)[1]
             # # 確認用0-0-15 左足基準で右足の外旋内旋角度を計算(足の場合はXが外転内転, Z内返し外返し)
             # r_ankle_realative_rotation_rl = np.dot(np.linalg.inv(rot_lshank), rot_rfoot)
@@ -403,6 +404,7 @@ def main():
             # rknee_realative_rotation_rl = np.dot(np.linalg.inv(rot_lshank), rot_rshank)
             # r_hip_abduction_angle = R.from_matrix(rknee_realative_rotation_rl).as_euler('YZX', degrees=True)[2]  #左下腿基準で右膝の外転内転角度を計算
 
+            ##############################################################################
             def signed_angle_on_plane(forward_v, asai_v, r_hip_v):
                 """
                 forward_v, asai_vで定義される平面上にr_hip_vを射影し、
@@ -439,7 +441,8 @@ def main():
             down_v = np.cross(asis_v, forward_v)  # 下方向ベクトル（体の軸のイメージ）
             r_hip_abduction_angle_2 = signed_angle_on_plane(down_v, asis_v, r_hip_v)
             l_hip_abduction_angle_2 = signed_angle_on_plane(down_v, asis_v, l_hip_v)
-
+            ##############################################################################
+            
             # 角度の連続性を保つ処理
             def unwrap_angle(current_angle, prev_angle):
                 """角度の連続性を保つため、360度ジャンプを修正"""
