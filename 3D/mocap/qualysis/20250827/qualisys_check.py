@@ -478,7 +478,7 @@ def main():
                     pel2hee_list.append(pel2heel)
 
 
-                    plot_flag = False
+                    plot_flag = True
                     if plot_flag:
                         if original_frame_num == 0:
                             fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
