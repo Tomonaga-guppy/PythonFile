@@ -42,7 +42,7 @@ def local_trend_kf(y, a1, p1, var_eta, var_eps):
         if f_t[t] == 0 or not np.isfinite(f_t[t]):
             k_t[t] = 0
         else:
-            k_t[t] = p_tt1[t] / f_t[t]
+            k_t[t] = p_tt1[t] / f_t[t] 
             
         # Current state (現時刻の状態を更新)
         a_tt[t] = a_tt1[t] + k_t[t] * v_t[t]
@@ -143,6 +143,11 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
         fL = lambda xL: -calc_log_diffuse_llhd(xL, yL)
         fR = lambda xR: -calc_log_diffuse_llhd(xR, yR)
         
+        # # 最適化を実行 (準ニュートン法の一種であるL-BFGS-Bを使用)
+        # resL = minimize(fL, x0L, method='BFGS')
+        # resR = minimize(fR, x0R, method='BFGS')
+        
+        
         # パラメータの探索範囲を制約する
         bounds = ((-20, 20), (-20, 20)) 
         
@@ -160,7 +165,13 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
         var_eta_opt_R = np.exp(2 * xoptR[0])
         var_eps_opt_R = np.exp(2 * xoptR[1])
         
-        # パラメータを更新
+        # # パラメータを更新
+        # var_eps_L = var_eps_opt_L
+        # var_eta_L = var_eta_opt_L
+        # var_eps_R = var_eps_opt_R
+        # var_eta_R = var_eta_opt_R
+        
+        # パラメータを更新(元々のやつ：epsとeta入れ替わってる？)
         var_eps_L = var_eta_opt_L
         var_eta_L = var_eps_opt_L
         var_eps_R = var_eta_opt_R
@@ -353,8 +364,10 @@ heel = np.column_stack([heel_R_x, heel_L_x, heel_R_y, heel_L_y])
 # timestep = 60.0  # OpenPose動画のフレームレート ★
 # rtimestep = 1 / timestep
 
-start_frame = 300
-end_frame = 440
+start_frame = 170 #FL約-2m地点
+end_frame = 459 #FLの最大検出フレーム
+# start_frame = 340
+# end_frame = 440
 
 # 一人歩行 1_0-3
 # start_frame = int(943*0.6)
@@ -388,12 +401,19 @@ if display_pre_correction_plots:
     }
     
     for joint_name, data in pre_correction_data.items():
+        # 速度を計算(データ数が1つ減る)
+        vel_Rx = np.diff(data[:, 0])
+        vel_Lx = np.diff(data[:, 1])
+        vel_Ry = np.diff(data[:, 2])
+        vel_Ly = np.diff(data[:, 3])
+        cframe_v = cframe[:-1]  # 速度の長さに合わせる
+
         # 加速度を計算 (データ数が2つ減る)
         accel_Rx = np.diff(data[:, 0], 2)
         accel_Lx = np.diff(data[:, 1], 2)
         accel_Ry = np.diff(data[:, 2], 2)
         accel_Ly = np.diff(data[:, 3], 2)
-        ctime_a = cframe[:-2] # 加速度の長さに合わせる
+        cframe_a = cframe[:-2] # 加速度の長さに合わせる
 
         # --- 座標のプロット ---
         plt.figure(figsize=(12, 7))
@@ -408,8 +428,8 @@ if display_pre_correction_plots:
         plt.grid(True)
         
         plt.subplot(2, 1, 2)
-        plt.plot(cframe, data[:, 2], label='Right Y', color='orange', alpha=0.8)
-        plt.plot(cframe, data[:, 3], label='Left Y', color='green', alpha=0.8)
+        plt.plot(cframe, data[:, 2], label='Right Y', color='red', alpha=0.8)
+        plt.plot(cframe, data[:, 3], label='Left Y', color='blue', alpha=0.8)
         plt.title(f'Pre-correction {joint_name.capitalize()} Y Coordinates', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Coordinate [px]', fontsize=16)
@@ -418,35 +438,63 @@ if display_pre_correction_plots:
         plt.grid(True)
         
         plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f'pre_correction_{joint_name}_coords.png'))
+        plt.savefig(os.path.join(output_dir, f'pre_{joint_name}_coords.png'))
+        plt.close()
+        
+        # --- 速度のプロット ---
+        plt.figure(figsize=(12, 7))
+        plt.subplot(2, 1, 1)
+        plt.plot(cframe_v, vel_Rx, label='Right X Vel', color='red', alpha=0.8)
+        plt.plot(cframe_v, vel_Lx, label='Left X Vel', color='blue', alpha=0.8)
+        plt.title(f'Pre-correction {joint_name.capitalize()} X Velocity', fontsize=18)
+        plt.ylabel('Velocity [px/s]', fontsize=16)  
+        plt.xlabel('Frame [-]', fontsize=16)
+        plt.tick_params(axis='both', which='major', labelsize=14)
+        plt.legend()
+        plt.grid(True)
+        
+        plt.subplot(2, 1, 2)
+        plt.plot(cframe_v, vel_Ry, label='Right Y Vel', color='red', alpha=0.8)
+        plt.plot(cframe_v, vel_Ly, label='Left Y Vel', color='blue', alpha=0.8)
+        plt.title(f'Pre-correction {joint_name.capitalize()} Y Velocity', fontsize=18)
+        plt.xlabel('Frame [-]', fontsize=16)
+        plt.ylabel('Velocity [px/s]', fontsize=16)
+        plt.tick_params(axis='both', which='major', labelsize=14)
+        plt.legend()
+        plt.grid(True)
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, f'pre_{joint_name}_vel.png'))
         plt.close()
 
         # --- 加速度のプロット ---
         plt.figure(figsize=(12, 7))
-        # plt.subplot(2, 1, 1)
-        # plt.plot(ctime_a, accel_Rx, label='Right X Accel', color='red', alpha=0.8)
-        # plt.plot(ctime_a, accel_Lx, label='Left X Accel', color='blue', alpha=0.8)
-        # plt.ylim(-1000,1000)
-        # plt.title(f'Pre-correction {joint_name.capitalize()} X Acceleration', fontsize=18)
-        # plt.ylabel('Acceleration [px/s²]', fontsize=16)
-        # plt.xlabel('Frame [-]', fontsize=16)
-        # plt.tick_params(axis='both', which='major', labelsize=14)
-        # plt.legend()
-        # plt.grid(True)
+        plt.subplot(2, 1, 1)
+        plt.plot(cframe_a, accel_Rx, label='Right X Accel', color='red', alpha=0.8)
+        plt.plot(cframe_a, accel_Lx, label='Left X Accel', color='blue', alpha=0.8)
+        plt.ylim(-1000,1000)
+        plt.title(f'Pre-correction {joint_name.capitalize()} X Acceleration', fontsize=18)
+        plt.ylabel('Acceleration [px/s²]', fontsize=16)
+        plt.xlabel('Frame [-]', fontsize=16)
+        plt.tick_params(axis='both', which='major', labelsize=14)
+        plt.legend()
+        plt.grid(True)
 
-        # plt.subplot(2, 1, 2)
-        plt.plot(ctime_a, accel_Ry, label='Right Y Accel', color='orange', alpha=0.8)
-        plt.plot(ctime_a, accel_Ly, label='Left Y Accel', color='green', alpha=0.8)
+        plt.subplot(2, 1, 2)
+        plt.plot(cframe_a, accel_Ry, label='Right Y Accel', color='red', alpha=0.8)
+        plt.plot(cframe_a, accel_Ly, label='Left Y Accel', color='blue', alpha=0.8)
         plt.ylim(-100,100)
-        plt.title(f'Pre-correction {joint_name.capitalize()} Y Acceleration', fontsize=14)
-        plt.xlabel('Frame [-]')
-        plt.ylabel('Acceleration')
+        plt.title(f'Pre-correction {joint_name.capitalize()} Y Acceleration', fontsize=18)
+        plt.xlabel('Frame [-]', fontsize=16)
+        plt.ylabel('Acceleration [px/s²]', fontsize=16)
+        plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
 
         plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f'pre_correction_{joint_name}_accel.png'))
+        plt.savefig(os.path.join(output_dir, f'pre_{joint_name}_accel.png'))
         plt.close()
+    print("補正前の座標と加速度グラフの作成が完了しました。")
 
 # --- 5. カルマンフィルタで補正 ---
 # (左座標, 右座標, 加速度の閾値, カルマンの初期値) ★データによって閾値を変更する必要あり
@@ -474,33 +522,108 @@ print("カルマンフィルタを適用中...")
 # kheel_Lx, kheel_Rx = kalman2(cheel[:, 1], cheel[:, 0], 200, 0.08)
 # kheel_Ly, kheel_Ry = kalman2(cheel[:, 3], cheel[:, 2], 50, 0.003)
 
-
-
-
-# # FL#
-# # kankle_Lx, kankle_Rx = cankle[:, 1], cankle[:, 0]
-# kankle_Lx, kankle_Rx = kalman2(cankle[:, 1], cankle[:, 0], 200, 0.0005)
+"""
+値調整中 bigtoe_y以外はうまくいく
+"""
+# kankle_Lx, kankle_Rx = cankle[:, 1], cankle[:, 0]
 # kankle_Ly, kankle_Ry = cankle[:, 3], cankle[:, 2]
 # kknee_Lx, kknee_Rx = cknee[:, 1], cknee[:, 0]
 # kknee_Ly, kknee_Ry = cknee[:, 3], cknee[:, 2]
 # khip_Lx, khip_Rx = chip[:, 1], chip[:, 0]
 # khip_Ly, khip_Ry = chip[:, 3], chip[:, 2]
 # kbigtoe_Lx, kbigtoe_Rx = cbigtoe[:, 1], cbigtoe[:, 0]
-# kbigtoe_Ly, kbigtoe_Ry = cbigtoe[:, 3], cbigtoe[:, 2]
-# # kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 3], cbigtoe[:, 2], 70, 0.003)  ##################
+# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 3], cbigtoe[:, 2], 40, 0.001)
+# print("カルマンフィルタ: 右母趾Y座標補正完了")
 # kheel_Lx, kheel_Rx = cheel[:, 1], cheel[:, 0]
 # kheel_Ly, kheel_Ry = cheel[:, 3], cheel[:, 2]
 
-kankle_Lx, kankle_Rx = kalman2(cankle[:, 1], cankle[:, 0], 200, 0.0005)
-kankle_Ly, kankle_Ry = kalman2(cankle[:, 3], cankle[:, 2], 50, 0.003)
-kknee_Lx, kknee_Rx = kalman2(cknee[:, 1], cknee[:, 0], 200, 0.008)
-kknee_Ly, kknee_Ry = kalman2(cknee[:, 3], cknee[:, 2], 50, 0.002)
-khip_Lx, khip_Rx = kalman2(chip[:, 1], chip[:, 0], 50, 0.005)
-khip_Ly, khip_Ry = kalman2(chip[:, 3], chip[:, 2], 50, 0.003)
-kbigtoe_Lx, kbigtoe_Rx = kalman2(cbigtoe[:, 1], cbigtoe[:, 0], 200, 0.008)
-kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 3], cbigtoe[:, 2], 40, 0.003)
-kheel_Lx, kheel_Rx = kalman2(cheel[:, 1], cheel[:, 0], 200, 0.08)
-kheel_Ly, kheel_Ry = kalman2(cheel[:, 3], cheel[:, 2], 50, 0.003)
+# kankle_Lx, kankle_Rx = kalman2(cankle[:, 1], cankle[:, 0], 200, 0.1)
+# print("カルマンフィルタ: 右足首X座標補正完了")
+# kankle_Ly, kankle_Ry = kalman2(cankle[:, 3], cankle[:, 2], 50, 0.1)
+# print("カルマンフィルタ: 右足首Y座標補正完了")
+# kknee_Lx, kknee_Rx = kalman2(cknee[:, 1], cknee[:, 0], 200, 0.1)
+# print("カルマンフィルタ: 右膝X座標補正完了")
+# kknee_Ly, kknee_Ry = kalman2(cknee[:, 3], cknee[:, 2], 50, 0.1)
+# print("カルマンフィルタ: 右膝Y座標補正完了")
+# khip_Lx, khip_Rx = kalman2(chip[:, 1], chip[:, 0], 50, 0.1)
+# print("カルマンフィルタ: 右股関節X座標補正完了")
+# khip_Ly, khip_Ry = kalman2(chip[:, 3], chip[:, 2], 50, 0.1)
+# print("カルマンフィルタ: 右股関節Y座標補正完了")
+# kbigtoe_Lx, kbigtoe_Rx = kalman2(cbigtoe[:, 1], cbigtoe[:, 0], 200, 0.1)
+# print("カルマンフィルタ: 右母趾X座標補正完了")
+# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 3], cbigtoe[:, 2], 40, 0.1)
+# print("カルマンフィルタ: 右母趾Y座標補正完了")
+# kheel_Lx, kheel_Rx = kalman2(cheel[:, 1], cheel[:, 0], 200, 0.1)
+# print("カルマンフィルタ: 右踵X座標補正完了")
+# kheel_Ly, kheel_Ry = kalman2(cheel[:, 3], cheel[:, 2], 50, 0.1)
+# print("カルマンフィルタ: 右踵Y座標補正完了")
+
+
+
+
+
+
+# # FL#
+# kankle_Lx, kankle_Rx = cankle[:, 1], cankle[:, 0]
+# # kankle_Lx, kankle_Rx = kalman2(cankle[:, 1], cankle[:, 0], 200, 0.0005)
+# kankle_Ly, kankle_Ry = cankle[:, 3], cankle[:, 2]
+# kknee_Lx, kknee_Rx = cknee[:, 1], cknee[:, 0]
+# kknee_Ly, kknee_Ry = cknee[:, 3], cknee[:, 2]
+# khip_Lx, khip_Rx = chip[:, 1], chip[:, 0]
+# khip_Ly, khip_Ry = chip[:, 3], chip[:, 2]
+# kbigtoe_Lx, kbigtoe_Rx = cbigtoe[:, 1], cbigtoe[:, 0]
+# # kbigtoe_Ly, kbigtoe_Ry = cbigtoe[:, 3], cbigtoe[:, 2]
+# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 3], cbigtoe[:, 2], 40, 0.003)  ##################
+# kheel_Lx, kheel_Rx = cheel[:, 1], cheel[:, 0]
+# kheel_Ly, kheel_Ry = kalman2(cheel[:, 3], cheel[:, 2], 50, 0.003)
+# # kheel_Ly, kheel_Ry = cheel[:, 3], cheel[:, 2]
+
+
+# kankle_Lx, kankle_Rx = kalman2(cankle[:, 1], cankle[:, 0], 200, 0.0005)
+# print("カルマンフィルタ: 右足首X座標補正完了")
+# kankle_Ly, kankle_Ry = kalman2(cankle[:, 3], cankle[:, 2], 50, 0.003)
+# print("カルマンフィルタ: 右足首Y座標補正完了")
+# kknee_Lx, kknee_Rx = kalman2(cknee[:, 1], cknee[:, 0], 200, 0.008)
+# print("カルマンフィルタ: 右膝X座標補正完了")
+# kknee_Ly, kknee_Ry = kalman2(cknee[:, 3], cknee[:, 2], 50, 0.002)
+# print("カルマンフィルタ: 右膝Y座標補正完了")
+# khip_Lx, khip_Rx = kalman2(chip[:, 1], chip[:, 0], 50, 0.005)
+# print("カルマンフィルタ: 右股関節X座標補正完了")
+# khip_Ly, khip_Ry = kalman2(chip[:, 3], chip[:, 2], 50, 0.003)
+# print("カルマンフィルタ: 右股関節Y座標補正完了")
+# kbigtoe_Lx, kbigtoe_Rx = kalman2(cbigtoe[:, 1], cbigtoe[:, 0], 200, 0.008)
+# print("カルマンフィルタ: 右母趾X座標補正完了")
+# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 3], cbigtoe[:, 2], 40, 0.003)
+# print("カルマンフィルタ: 右母趾Y座標補正完了")
+# kheel_Lx, kheel_Rx = kalman2(cheel[:, 1], cheel[:, 0], 200, 0.08)
+# print("カルマンフィルタ: 右踵X座標補正完了")
+# kheel_Ly, kheel_Ry = kalman2(cheel[:, 3], cheel[:, 2], 50, 0.003)
+# print("カルマンフィルタ: 右踵Y座標補正完了")
+
+"""
+この値でいけた
+"""
+kankle_Lx, kankle_Rx = kalman2(cankle[:, 1], cankle[:, 0], 200, 0.1)
+print("カルマンフィルタ: 右足首X座標補正完了")
+kankle_Ly, kankle_Ry = kalman2(cankle[:, 3], cankle[:, 2], 50, 0.1)
+print("カルマンフィルタ: 右足首Y座標補正完了")
+kknee_Lx, kknee_Rx = kalman2(cknee[:, 1], cknee[:, 0], 200, 0.1)
+print("カルマンフィルタ: 右膝X座標補正完了")
+kknee_Ly, kknee_Ry = kalman2(cknee[:, 3], cknee[:, 2], 50, 0.1)
+print("カルマンフィルタ: 右膝Y座標補正完了")
+khip_Lx, khip_Rx = kalman2(chip[:, 1], chip[:, 0], 50, 0.1)
+print("カルマンフィルタ: 右股関節X座標補正完了")
+khip_Ly, khip_Ry = kalman2(chip[:, 3], chip[:, 2], 50, 0.1)
+print("カルマンフィルタ: 右股関節Y座標補正完了")
+kbigtoe_Lx, kbigtoe_Rx = kalman2(cbigtoe[:, 1], cbigtoe[:, 0], 200, 0.1)
+print("カルマンフィルタ: 右母趾X座標補正完了")
+kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 3], cbigtoe[:, 2], 40, 0.1)
+print("カルマンフィルタ: 右母趾Y座標補正完了")
+kheel_Lx, kheel_Rx = kalman2(cheel[:, 1], cheel[:, 0], 200, 0.1)
+print("カルマンフィルタ: 右踵X座標補正完了")
+kheel_Ly, kheel_Ry = kalman2(cheel[:, 3], cheel[:, 2], 50, 0.1)
+print("カルマンフィルタ: 右踵Y座標補正完了")
+
 
 # --- 6. バターワースフィルタ ---
 # 4次バターワースフィルタ (カットオフ周波数 6Hz)
@@ -633,8 +756,8 @@ if display_coordinates:
     for joint_name, data in plot_data.items():
         # --- X座標のプロット ---
         plt.figure(figsize=(10, 6))
-        plt.plot(cframe[start_index:end_index], data['raw'][start_index:end_index, 0], color='k', label='Raw Right')
-        plt.plot(cframe[start_index:end_index], data['raw'][start_index:end_index, 1], color='gray', label='Raw Left')
+        plt.plot(cframe[start_index:end_index], data['raw'][start_index:end_index, 0], color='r', label='Raw Right', alpha=0.3)
+        plt.plot(cframe[start_index:end_index], data['raw'][start_index:end_index, 1], color='b', label='Raw Left', alpha=0.3)
         plt.plot(cframe[start_index:end_index], data['kalman_Rx'][start_index:end_index], color='r', label='Kalman Right')
         plt.plot(cframe[start_index:end_index], data['kalman_Lx'][start_index:end_index], color='b', label='Kalman Left')
         # plt.plot(cframe[start_index:end_index], data['filtered_Rx'][start_index:end_index], color='r', label='Filtered Right')
@@ -650,8 +773,8 @@ if display_coordinates:
 
         # --- Y座標のプロット ---
         plt.figure(figsize=(10, 6))
-        plt.plot(cframe[start_index:end_index], data['raw'][start_index:end_index, 2], color='k', label='Raw Right')
-        plt.plot(cframe[start_index:end_index], data['raw'][start_index:end_index, 3], color='gray', label='Raw Left')
+        plt.plot(cframe[start_index:end_index], data['raw'][start_index:end_index, 2], color='r', label='Raw Right', alpha=0.3)
+        plt.plot(cframe[start_index:end_index], data['raw'][start_index:end_index, 3], color='b', label='Raw Left', alpha=0.3)
         plt.plot(cframe[start_index:end_index], data['kalman_Ry'][start_index:end_index], color='r', label='Kalman Right')
         plt.plot(cframe[start_index:end_index], data['kalman_Ly'][start_index:end_index], color='b', label='Kalman Left')
         # plt.plot(cframe[start_index:end_index], data['filtered_Ry'][start_index:end_index], color='r', label='Filtered Right')
