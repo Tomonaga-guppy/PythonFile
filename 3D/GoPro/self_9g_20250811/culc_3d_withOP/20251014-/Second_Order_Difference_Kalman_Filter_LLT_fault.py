@@ -9,410 +9,194 @@ import warnings
 # # RuntimeWarningという種類の警告を非表示にする設定
 # warnings.filterwarnings('ignore', category=RuntimeWarning)
 
+"""
+うまくいかなかった
+運動が加速度的であることを考慮して、ローカルリニアトレンドモデル(LLT)を用いたカルマンフィルタを実装してみた場合
+LLTなどの理解を深める必要あり
+"""
+
 
 # =============================================================================
 # %% 関数定義セクション
 # =============================================================================
 
-# def local_trend_kf(y, a1, p1, var_eta, var_eps):
-#     """
-#     ローカルトレンドモデルのカルマンフィルタリングを行う関数
-#     """
-#     L = len(y)
-    
-#     # 計算結果を格納するための配列を事前に確保(Preallocation)
-#     a_tt1 = np.zeros(L + 1)
-#     a_tt1[0] = a1
-#     p_tt1 = np.zeros(L + 1)
-#     p_tt1[0] = p1
-#     v_t = np.zeros(L)
-#     f_t = np.zeros(L)
-#     a_tt = np.zeros(L)
-#     p_tt = np.zeros(L)
-#     k_t = np.zeros(L)
-    
-#     # Filtering (フィルタリングのループ処理)
-#     for t in range(L):
-#         # Innovation (観測値と予測値の差)
-#         v_t[t] = y[t] - a_tt1[t]
-#         f_t[t] = p_tt1[t] + var_eps
-        
-#         # Kalman gain (カルマンゲインの計算)
-#         # ゼロ、無限大、NaN(非数)による計算エラーを回避
-#         if f_t[t] == 0 or not np.isfinite(f_t[t]):
-#             k_t[t] = 0
-#         else:
-#             k_t[t] = p_tt1[t] / f_t[t] 
-            
-#         # Current state (現時刻の状態を更新)
-#         a_tt[t] = a_tt1[t] + k_t[t] * v_t[t]
-#         p_tt[t] = p_tt1[t] * (1 - k_t[t])
-        
-#         # Next state (次時刻の状態を予測)
-#         a_tt1[t+1] = a_tt[t]
-#         p_tt1[t+1] = p_tt[t] + var_eta
-        
-#     return a_tt, p_tt, f_t, v_t
-
-# def calc_log_diffuse_llhd(vars, y):
-#     """
-#     ローカルトレンドモデルの散漫な対数尤度を求める関数
-#     尤度を最大化するパラメータを見つけるために使用
-#     """
-#     psi_eta, psi_eps = vars
-#     var_eta = np.exp(2 * psi_eta)  # ψ_η を σ^2_η に戻す
-#     var_eps = np.exp(2 * psi_eps)  # ψ_ε を σ^2_ε に戻す
-#     L = len(y)
-    
-#     if L < 2:
-#         return -np.inf # データが少なすぎて計算できない
-        
-#     # a_1, P_1の初期値
-#     a1 = y[0]
-#     p1 = var_eps
-    
-#     # カルマンフィルタリングを実行
-#     _, _, f_t, v_t = local_trend_kf(y, a1, p1, var_eta, var_eps)
-    
-#     # f_tのゼロや負の値、非数をチェック
-#     if np.any(f_t[1:] <= 0) or not np.all(np.isfinite(f_t[1:])):
-#         return -np.inf
-
-#     # 散漫対数尤度を計算
-#     tmp = np.sum(np.log(f_t[1:]) + v_t[1:]**2 / f_t[1:])
-#     log_ld = -0.5 * L * np.log(2 * np.pi) - 0.5 * tmp
-    
-#     return log_ld
-
-# def maf(input_data, size):
-#     """
-#     移動平均フィルタ(Moving Average Filter)
-#     """
-#     window_size = size
-#     b = (1 / window_size) * np.ones(window_size)
-#     a = 1
-#     from scipy.signal import lfilter
-#     return lfilter(b, a, input_data)
-
-# def kalman2(coordinate_L, coordinate_R, th, initial_value):
-#     """
-#     二階差分カルマンフィルタ
-#     加速度(二階差分)を監視し、閾値を超えた場合に補正を行う
-#     """
-#     end_step = len(coordinate_R)
-    
-#     # 元のデータを変更しないようにコピーを作成
-#     coordinate_L = coordinate_L.copy()
-#     coordinate_R = coordinate_R.copy()
-
-#     # 誤検出の種類を記録するための配列
-#     miss_point = np.zeros(end_step)
-    
-#     # 2フレーム目から最終フレームまでループ
-#     for i in range(2, end_step):
-#         kalman_flag = 0 # カルマンフィルタによる補正が行われたかを判定するフラグ
-        
-#         # 現在のフレームまでのデータスライスを取得
-#         current_cooredinate_L = coordinate_L[:i]
-#         current_coordinate_R = coordinate_R[:i]
-
-#         # 座標の差分(速度)を計算し、移動平均を適用
-#         diff_data_Lx = np.diff(current_cooredinate_L)
-#         yL = maf(diff_data_Lx, 3)
-#         diff_data_Rx = np.diff(current_coordinate_R)
-#         yR = maf(diff_data_Rx, 3)
-        
-#         if len(yL) < 2 or len(yR) < 2:
-#             continue
-
-#         # 最尤推定よりパラメータを求める
-#         parL = initial_value
-#         parR = initial_value
-        
-#         # パラメータを対数変換 (ψ_η, ψ_ε に変換)
-#         psi_eta_L = np.log(np.sqrt(parL))
-#         psi_eps_L = np.log(np.sqrt(parL))
-#         psi_eta_R = np.log(np.sqrt(parR))
-#         psi_eps_R = np.log(np.sqrt(parR))
-        
-#         # 探索するパラメータの初期値
-#         x0L = [psi_eta_L, psi_eps_L]
-#         x0R = [psi_eta_R, psi_eps_R]
-        
-#         # 最小化したい関数（散漫な対数尤度の最大化なので負号をつける）
-#         fL = lambda xL: -calc_log_diffuse_llhd(xL, yL)
-#         fR = lambda xR: -calc_log_diffuse_llhd(xR, yR)
-        
-        
-#         # パラメータの探索範囲を制約する
-#         bounds = ((-20, 20), (-20, 20)) 
-        
-#         # 最適化を実行 (準ニュートン法の一種であるL-BFGS-Bを使用)
-#         resL = minimize(fL, x0L, method='L-BFGS-B', bounds=bounds)
-#         resR = minimize(fR, x0R, method='L-BFGS-B', bounds=bounds)
-        
-#         # 最適化されたパラメータを取得
-#         xoptL = resL.x
-#         xoptR = resR.x
-        
-#         # 推定されたψをσ^2に戻す
-#         var_eta_opt_L = np.exp(2 * xoptL[0])
-#         var_eps_opt_L = np.exp(2 * xoptL[1])
-#         var_eta_opt_R = np.exp(2 * xoptR[0])
-#         var_eps_opt_R = np.exp(2 * xoptR[1])
-        
-#         # パラメータを更新(元々のやつ：epsとeta入れ替わってる？)
-#         var_eps_L = var_eta_opt_L
-#         var_eta_L = var_eps_opt_L
-#         var_eps_R = var_eta_opt_R
-#         var_eta_R = var_eps_opt_R
-        
-#         # もともとのやつ
-#         a1L = var_eps_L
-#         p1L = var_eta_L
-#         a1R = var_eps_R
-#         p1R = var_eta_R
-        
-#         # # パラメータを更新
-#         # var_eps_L = var_eps_opt_L
-#         # var_eta_L = var_eta_opt_L
-#         # var_eps_R = var_eps_opt_R
-#         # var_eta_R = var_eta_opt_R
-        
-#         # # L180-181の代わりに以下を使用
-#         # a1L = yL[0] if len(yL) > 0 else 0  # yL（速度データ）の最初の値を初期状態とする
-#         # p1L = var_eps_L                   # 初期状態の不確かさは観測ノイズ分散で代用
-#         # a1R = yR[0] if len(yR) > 0 else 0
-#         # p1R = var_eps_R
-
-#         # カルマンフィルタを実行し、状態変数を取得
-#         a_tt_L, _, _, _ = local_trend_kf(yL, a1L, p1L, var_eta_L, var_eps_L)
-#         a_tt_R, _, _, _ = local_trend_kf(yR, a1R, p1R, var_eta_R, var_eps_R)
-        
-#         # 次の状態の予測値を取得
-#         a_tt1L_end = a_tt_L[-2] if len(a_tt_L) > 1 else 0
-#         a_tt1R_end = a_tt_R[-2] if len(a_tt_R) > 1 else 0
-#         # a_tt1L_end = a_tt_L[-1] if len(a_tt_L) > 0 else 0
-#         # a_tt1R_end = a_tt_R[-1] if len(a_tt_R) > 0 else 0
-#         # a_tt1L_end = a_tt_L[-1] + var_eta_L if len(a_tt_L) > 0 else 0
-#         # a_tt1R_end = a_tt_R[-1] + var_eta_R if len(a_tt_R) > 0 else 0
-
-#         # 加速度で検出エラーの種類を判別後、補正
-#         q1L = coordinate_L[i] - coordinate_L[i-1]
-#         q2L = coordinate_L[i-1] - coordinate_L[i-2]
-#         diff2_cankle_Lx_update = q1L - q2L
-        
-#         q1R = coordinate_R[i] - coordinate_R[i-1]
-#         q2R = coordinate_R[i-1] - coordinate_R[i-2]
-#         diff2_cankle_Rx_update = q1R - q2R
-
-#         # パターン1: 左右両方の加速度が閾値を超えた場合 (入れ替わり or 両方誤検出)
-#         if abs(diff2_cankle_Lx_update) > th and abs(diff2_cankle_Rx_update) > th:
-#             # いったん左右の座標を入れ替えてみる
-#             Lbox, Rbox = coordinate_L[i], coordinate_R[i]
-#             coordinate_L[i], coordinate_R[i] = Rbox, Lbox
-            
-#             # 入れ替えた後、再度加速度を計算
-#             q1L = coordinate_L[i] - coordinate_L[i-1]
-#             q2L = coordinate_L[i-1] - coordinate_L[i-2]
-#             diff2_cankle_Lx_update = q1L - q2L
-            
-#             q1R = coordinate_R[i] - coordinate_R[i-1]
-#             q2R = coordinate_R[i-1] - coordinate_R[i-2]
-#             diff2_cankle_Rx_update = q1R - q2R
-            
-#             # それでも両方の加速度が閾値を超えている場合 -> 両方誤検出と判断
-#             if abs(diff2_cankle_Lx_update) > th and abs(diff2_cankle_Rx_update) > th:
-#                 coordinate_L[i], coordinate_R[i] = Lbox, Rbox # 入れ替えを元に戻す
-#                 coordinate_L[i] = coordinate_L[i-1] + a_tt1L_end # カルマンフィルタで予測した値で補正
-#                 coordinate_R[i] = coordinate_R[i-1] + a_tt1R_end # カルマンフィルタで予測した値で補正
-#                 miss_point[i] = 4 # 両方誤検出=4
-#                 kalman_flag = 1
-#             else: # 入れ替えたら加速度が閾値内に収まった -> 入れ替わりと判断
-#                 miss_point[i] = 1 # 入れ替わり=1
-#                 kalman_flag = 1
-        
-#         # パターン2: 左足のみ加速度が閾値を超えた場合
-#         if abs(diff2_cankle_Lx_update) > th and abs(diff2_cankle_Rx_update) <= th:
-#             coordinate_L[i] = coordinate_L[i-1] + a_tt1L_end # カルマンフィルタで予測した値で補正
-#             miss_point[i] = 2 # 左足の誤検出=2
-#             kalman_flag = 1
-            
-#         # パターン3: 右足のみ加速度が閾値を超えた場合
-#         if abs(diff2_cankle_Lx_update) <= th and abs(diff2_cankle_Rx_update) > th:
-#             coordinate_R[i] = coordinate_R[i-1] + a_tt1R_end # カルマンフィルタで予測した値で補正
-#             miss_point[i] = 3 # 右足の誤検出=3
-#             kalman_flag = 1
-            
-#         # 補正後の値が極端に飛びすぎないようにする追加の補正
-#         p1L = coordinate_L[i] - coordinate_L[i-1]
-#         p2L = coordinate_L[i-1] - coordinate_L[i-2]
-#         diff2_cankle_Lx_update_cover = p1L - p2L
-        
-#         p1R = coordinate_R[i] - coordinate_R[i-1]
-#         p2R = coordinate_R[i-1] - coordinate_R[i-2]
-#         diff2_cankle_Rx_update_cover = p1R - p2R
-        
-#         th_cover = 500
-#         if abs(diff2_cankle_Lx_update_cover) >= th_cover and kalman_flag == 1:
-#             coordinate_L[i] = coordinate_L[i-1] + p2L
-            
-#         if abs(diff2_cankle_Rx_update_cover) >= th_cover and kalman_flag == 1:
-#             coordinate_R[i] = coordinate_R[i-1] + p2R
-
-#     return coordinate_L, coordinate_R
-
-
-# [変更点 1] local_trend_kf が a_tt1 を返すように修正
-
-def local_trend_kf_mod(y, a1, p1, var_eta, var_eps):
+def local_linear_trend_kf(y, a1, p1, var_eta, var_zeta, var_eps):
     """
-    ローカルトレンドモデルのカルマンフィルタリングを行う関数
-    (修正：a_tt1 を返すように変更)
+    ローカルリニアトレンドモデルのカルマンフィルタリング
+    状態ベクトル: [速度, 加速度]
+    
+    モデル:
+    y_t = [1, 0] * [vel_t, acc_t]^T + eps_t   (観測方程式)
+    
+    [vel_t+1, acc_t+1]^T = [[1, 1], [0, 1]] * [vel_t, acc_t]^T + [eta_t, zeta_t]^T (状態方程式)
     """
     L = len(y)
+    m = len(a1) # 状態の次元 (m=2)
     
-    # 計算結果を格納するための配列を事前に確保(Preallocation)
-    a_tt1 = np.zeros(L + 1)
-    a_tt1[0] = a1
-    p_tt1 = np.zeros(L + 1)
-    p_tt1[0] = p1
-    v_t = np.zeros(L)
-    f_t = np.zeros(L)
-    a_tt = np.zeros(L)
-    p_tt = np.zeros(L)
-    k_t = np.zeros(L)
+    # モデルの行列 (固定)
+    Z = np.array([1.0, 0.0])              # 観測行列 (速度のみ観測)
+    T = np.array([[1.0, 1.0], [0.0, 1.0]]) # 遷移行列
+    Q = np.diag([var_eta, var_zeta])    # プロセスノイズ (速度, 加速度)
+    H = var_eps                         # 観測ノイズ
     
-    # Filtering (フィルタリングのループ処理)
+    # 結果格納用
+    a_tt1 = np.zeros((L + 1, m))      # 1期先予測状態 a_t|t-1
+    a_tt1[0, :] = a1
+    p_tt1 = np.zeros((L + 1, m, m))   # 1期先予測誤差分散 P_t|t-1
+    p_tt1[0, :, :] = p1
+    v_t = np.zeros(L)                 # 予測誤差
+    f_t = np.zeros(L)                 # 予測誤差分散
+    a_tt = np.zeros((L, m))           # フィルタリング状態 a_t|t
+    p_tt = np.zeros((L, m, m))        # フィルタリング誤差分散 P_t|t
+    
     for t in range(L):
-        # Innovation (観測値と予測値の差)
-        v_t[t] = y[t] - a_tt1[t]
-        f_t[t] = p_tt1[t] + var_eps
+        # 予測ステップで使う値
+        a_pred = a_tt1[t, :]
+        p_pred = p_tt1[t, :, :]
         
-        # Kalman gain (カルマンゲインの計算)
-        if f_t[t] == 0 or not np.isfinite(f_t[t]):
-            k_t[t] = 0
+        # 観測誤差(Innovation)の計算
+        v_t[t] = y[t] - Z.dot(a_pred)
+        f_t[t] = Z.dot(p_pred).dot(Z.T) + H
+        
+        if f_t[t] <= 0 or not np.isfinite(f_t[t]):
+            # 予測誤差分散が非正定値など -> ゲイン0で更新スキップ
+            a_tt[t, :] = a_pred
+            p_tt[t, :, :] = p_pred
         else:
-            k_t[t] = p_tt1[t] / f_t[t] 
+            # カルマンゲインの計算 (K_t = P_t|t-1 * Z^T * F_t^-1)
+            k_t_vec = p_pred.dot(Z.T) / f_t[t] # (m x 1)
             
-        # Current state (現時刻の状態を更新)
-        a_tt[t] = a_tt1[t] + k_t[t] * v_t[t]
-        p_tt[t] = p_tt1[t] * (1 - k_t[t])
+            # 更新(フィルタリング)ステップ
+            a_tt[t, :] = a_pred + k_t_vec * v_t[t]
+            p_tt[t, :, :] = p_pred - np.outer(k_t_vec, k_t_vec) * f_t[t]
+            
+        # 次状態の予測ステップ
+        a_tt1[t+1, :] = T.dot(a_tt[t, :])
+        p_tt1[t+1, :, :] = T.dot(p_tt[t, :, :]).dot(T.T) + Q
         
-        # Next state (次時刻の状態を予測)
-        a_tt1[t+1] = a_tt[t]
-        p_tt1[t+1] = p_tt[t] + var_eta
-        
-    # ★ 変更点：a_tt1 (L+1次元) を返すように変更
     return a_tt, p_tt, f_t, v_t, a_tt1
 
-# [変更点 2] 尤度関数が正しい初期化を使い、修正版KFを呼ぶように変更
-
-def calc_log_diffuse_llhd_mod(vars, y):
+def calc_log_linear_trend_llhd(vars, y):
     """
-    ローカルトレンドモデルの散漫な対数尤度を求める関数
-    (修正：正しい初期化を使用し、local_trend_kf_mod を呼ぶ)
+    ローカルリニアトレンドモデルの対数尤度
+    vars = [psi_eta, psi_zeta, psi_eps]
     """
-    psi_eta, psi_eps = vars
-    var_eta = np.exp(2 * psi_eta)  # ψ_η を σ^2_η に戻す
-    var_eps = np.exp(2 * psi_eps)  # ψ_ε を σ^2_ε に戻す
+    if len(vars) != 3:
+        raise ValueError("vars must have 3 elements: [psi_eta, psi_zeta, psi_eps]")
+        
+    psi_eta, psi_zeta, psi_eps = vars
+    var_eta = np.exp(2 * psi_eta)   # 速度のプロセスノイズ
+    var_zeta = np.exp(2 * psi_zeta) # 加速度のプロセスノイズ
+    var_eps = np.exp(2 * psi_eps)   # 観測ノイズ
+    
     L = len(y)
     
-    if L < 2:
-        return -np.inf # データが少なすぎて計算できない
+    if L < 3: # 少なくとも3点(速度2点)ないと加速度が計算できない
+        return -np.inf 
         
-    # ★ 変更点：正しい初期化
-    a1 = y[0]
-    p1 = var_eps
+    # 初期値の設定 (簡易的な方法)
+    # a1 = [初期速度, 初期加速度]
+    a1 = np.array([y[1], y[1] - y[0]]) 
+    # p1 = 初期誤差分散 (対角行列で仮定)
+    p1 = np.diag([var_eps, var_eps]) 
     
-    # ★ 変更点：修正版のkfを呼び、a_tt1 は _ で受け取る
-    _, _, f_t, v_t, _ = local_trend_kf_mod(y, a1, p1, var_eta, var_eps)
+    # カルマンフィルタリングを実行
+    _, _, f_t, v_t, _ = local_linear_trend_kf(y, a1, p1, var_eta, var_zeta, var_eps)
     
-    # f_tのゼロや負の値、非数をチェック
-    if np.any(f_t[1:] <= 0) or not np.all(np.isfinite(f_t[1:])):
+    # f_tのチェック (インデックス[2:]から尤度計算)
+    if np.any(f_t[2:] <= 0) or not np.all(np.isfinite(f_t[2:])):
         return -np.inf
 
-    # 散漫対数尤度を計算
-    tmp = np.sum(np.log(f_t[1:]) + v_t[1:]**2 / f_t[1:])
-    log_ld = -0.5 * L * np.log(2 * np.pi) - 0.5 * tmp
+    # 対数尤度を計算 (最初の2点は初期化に使ったので飛ばす)
+    tmp = np.sum(np.log(f_t[2:]) + v_t[2:]**2 / f_t[2:])
+    log_ld = -0.5 * (L - 2) * np.log(2 * np.pi) - 0.5 * tmp
     
+    # 尤度が計算できない場合は-infを返す
+    if not np.isfinite(log_ld):
+        return -np.inf
+        
     return log_ld
-
-# [変更点 3] kalman2 関数を「推定部」と「補正部」に分離
 
 def kalman2(coordinate_L, coordinate_R, th, initial_value):
     """
-    二階差分カルマンフィルタ (設計見直し版)
-    1. 最初に全データでパラメータを推定
-    2. 最初に全データでフィルタリング(予測値)を実行
+    二階差分カルマンフィルタ (ローカルリニアトレンド版)
+    1. 最初に全データでパラメータ(3つ)を推定
+    2. 最初に全データでLLTフィルタリング(予測値)を実行
     3. ループ内では加速度判定と補正のみ行う
     """
     end_step = len(coordinate_R)
     
-    # 元のコードのtypo(cooredinate_L)を修正
     coordinate_L_copy = coordinate_L.copy() 
     coordinate_R_copy = coordinate_R.copy()
     miss_point = np.zeros(end_step)
     
     # --- 1. ループの外でパラメータ推定とフィルタリングを実行 ---
     
-    # 座標の差分(速度)を計算 (★ 変更点：mafを除去)
+    # 速度データ (mafなし)
     yL = np.diff(coordinate_L)
     yR = np.diff(coordinate_R)
     
-    if len(yL) < 2 or len(yR) < 2:
-        warnings.warn("データが短すぎるため、kalman2処理をスキップします。")
+    if len(yL) < 3 or len(yR) < 3: # LLTは最低3点(速度2点)必要
+        warnings.warn("データが短すぎるため、kalman2_llt処理をスキップします。")
         return coordinate_L, coordinate_R
 
-    # パラメータ推定 (元のコードの推定部分を流用)
-    parL = initial_value
-    parR = initial_value
-    psi_eta_L = np.log(np.sqrt(parL))
-    psi_eps_L = np.log(np.sqrt(parL))
-    psi_eta_R = np.log(np.sqrt(parR))
-    psi_eps_R = np.log(np.sqrt(parR))
+    # パラメータ推定 (3次元に変更)
+    par = initial_value
     
-    x0L = [psi_eta_L, psi_eps_L]
-    x0R = [psi_eta_R, psi_eps_R]
+    # 3つのパラメータの初期値を設定
+    psi_eta_L = np.log(np.sqrt(par))
+    psi_zeta_L = np.log(np.sqrt(par)) # ★ 追加
+    psi_eps_L = np.log(np.sqrt(par))
+    psi_eta_R = np.log(np.sqrt(par))
+    psi_zeta_R = np.log(np.sqrt(par)) # ★ 追加
+    psi_eps_R = np.log(np.sqrt(par))
     
-    # ★ 変更点：修正版の尤度関数を使用
-    fL = lambda xL: -calc_log_diffuse_llhd_mod(xL, yL) 
-    fR = lambda xR: -calc_log_diffuse_llhd_mod(xR, yR)
+    x0L = [psi_eta_L, psi_zeta_L, psi_eps_L] # ★ 3次元
+    x0R = [psi_eta_R, psi_zeta_R, psi_eps_R] # ★ 3次元
     
-    bounds = ((-20, 20), (-20, 20)) 
+    # ★ 変更点：LLT版の尤度関数を使用
+    fL = lambda xL: -calc_log_linear_trend_llhd(xL, yL) 
+    fR = lambda xR: -calc_log_linear_trend_llhd(xR, yR)
     
-    # ★ 変更点：minimizeをループの外で1回だけ実行
+    bounds = ((-20, 20), (-20, 20), (-20, 20)) # ★ 3次元
+    
     resL = minimize(fL, x0L, method='L-BFGS-B', bounds=bounds)
     resR = minimize(fR, x0R, method='L-BFGS-B', bounds=bounds)
     
+    if not resL.success:
+        warnings.warn(f"L側 kalman2_llt のパラメータ推定に失敗: {resL.message}")
+    if not resR.success:
+        warnings.warn(f"R側 kalman2_llt のパラメータ推定に失敗: {resR.message}")
+
     xoptL = resL.x
     xoptR = resR.x
     
-    # ★ 変更点：正しいパラメータの割り当て
+    # ★ 変更点：3つのパラメータを取得
     var_eta_L = np.exp(2 * xoptL[0])
-    var_eps_L = np.exp(2 * xoptL[1])
+    var_zeta_L = np.exp(2 * xoptL[1])
+    var_eps_L = np.exp(2 * xoptL[2])
     var_eta_R = np.exp(2 * xoptR[0])
-    var_eps_R = np.exp(2 * xoptR[1])
+    var_zeta_R = np.exp(2 * xoptR[1])
+    var_eps_R = np.exp(2 * xoptR[2])
     
-    # ★ 変更点：正しい初期化
-    a1L = yL[0]
-    p1L = var_eps_L
-    a1R = yR[0]
-    p1R = var_eps_R
+    # ★ 変更点：LLT版の初期化
+    a1L = np.array([yL[1], yL[1] - yL[0]])
+    p1L = np.diag([var_eps_L, var_eps_L]) # 簡略化
+    a1R = np.array([yR[1], yR[1] - yR[0]])
+    p1R = np.diag([var_eps_R, var_eps_R]) # 簡略化
 
-    # ★ 変更点：修正版のkfをループの外で1回だけ実行
-    # a_tt1 (予測値の時系列) を受け取る
-    _, _, _, _, a_tt1_L = local_trend_kf_mod(yL, a1L, p1L, var_eta_L, var_eps_L)
-    _, _, _, _, a_tt1_R = local_trend_kf_mod(yR, a1R, p1R, var_eta_R, var_eps_R)
+    # ★ 変更点：LLT版のkfを実行
+    _, _, _, _, a_tt1_L = local_linear_trend_kf(yL, a1L, p1L, var_eta_L, var_zeta_L, var_eps_L)
+    _, _, _, _, a_tt1_R = local_linear_trend_kf(yR, a1R, p1R, var_eta_R, var_zeta_R, var_eps_R)
     
-    # a_tt1_L/R は (速度データの長さ L) + 1 の長さを持つ。
+    # a_tt1_L/R は (速度データの長さ L) + 1 の長さで、2列(速度, 加速度)を持つ
     
     # --- 2. ループ内では加速度判定と補正のみ ---
     
     for i in range(2, end_step):
         kalman_flag = 0 
         
-        # 加速度で検出エラーの種類を判別後、補正
+        # 観測された加速度
         q1L = coordinate_L_copy[i] - coordinate_L_copy[i-1]
         q2L = coordinate_L_copy[i-1] - coordinate_L_copy[i-2]
         diff2_cankle_Lx_update = q1L - q2L
@@ -421,12 +205,23 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
         q2R = coordinate_R_copy[i-1] - coordinate_R_copy[i-2]
         diff2_cankle_Rx_update = q1R - q2R
 
+        # ★ 変更点：予測値の取得
         # 補正に使う予測速度を取得
         # フレームiの座標 = フレームi-1の座標 + 速度[i-1]
-        # 速度[i-1] (yL[i-1]) の予測値は a_tt1_L[i-1] に格納されている
-        pred_vel_L = a_tt1_L[i-1] if (i-1) < len(a_tt1_L) else yL[-1] # 配列外参照を防ぐ
-        pred_vel_R = a_tt1_R[i-1] if (i-1) < len(a_tt1_R) else yR[-1]
+        # 速度[i-1] (yL[i-1]) の予測値は a_tt1_L[i-1, 0] に格納されている
+        
+        idx = i - 1 # yL/yR のインデックス (diffで1つ減っているため)
+        if idx < len(a_tt1_L):
+            pred_vel_L = a_tt1_L[idx, 0] # 予測された速度 [vel_t|t-1]
+        else:
+            pred_vel_L = yL[-1] # 配列外参照を防ぐ (フォールバック)
+            
+        if idx < len(a_tt1_R):
+            pred_vel_R = a_tt1_R[idx, 0]
+        else:
+            pred_vel_R = yR[-1] # フォールバック
 
+        # (補正ロジック自体は変更なし。予測値 pred_vel が改善されていることを期待)
         # パターン1: 左右両方の加速度が閾値を超えた場合
         if abs(diff2_cankle_Lx_update) > th and abs(diff2_cankle_Rx_update) > th:
             Lbox, Rbox = coordinate_L_copy[i], coordinate_R_copy[i]
@@ -442,7 +237,6 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
             
             if abs(diff2_cankle_Lx_update) > th and abs(diff2_cankle_Rx_update) > th:
                 coordinate_L_copy[i], coordinate_R_copy[i] = Lbox, Rbox
-                # ★ 変更点：事前に計算した予測値で補正
                 coordinate_L_copy[i] = coordinate_L_copy[i-1] + pred_vel_L
                 coordinate_R_copy[i] = coordinate_R_copy[i-1] + pred_vel_R
                 miss_point[i] = 4 
@@ -453,19 +247,17 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
         
         # パターン2: 左足のみ
         if abs(diff2_cankle_Lx_update) > th and abs(diff2_cankle_Rx_update) <= th:
-            # ★ 変更点：事前に計算した予測値で補正
             coordinate_L_copy[i] = coordinate_L_copy[i-1] + pred_vel_L
             miss_point[i] = 2 
             kalman_flag = 1
             
         # パターン3: 右足のみ
         if abs(diff2_cankle_Lx_update) <= th and abs(diff2_cankle_Rx_update) > th:
-            # ★ 変更点：事前に計算した予測値で補正
             coordinate_R_copy[i] = coordinate_R_copy[i-1] + pred_vel_R
             miss_point[i] = 3 
             kalman_flag = 1
             
-        # (以下、補正後の追加補正ロジックは変更なし)
+        # (追加補正ロジックも変更なし)
         p1L = coordinate_L_copy[i] - coordinate_L_copy[i-1]
         p2L = coordinate_L_copy[i-1] - coordinate_L_copy[i-2]
         diff2_cankle_Lx_update_cover = p1L - p2L
@@ -482,7 +274,6 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
             coordinate_R_copy[i] = coordinate_R_copy[i-1] + p2R
 
     return coordinate_L_copy, coordinate_R_copy
-
 
 def bufilter(coordinate_R, coordinate_L):
     """

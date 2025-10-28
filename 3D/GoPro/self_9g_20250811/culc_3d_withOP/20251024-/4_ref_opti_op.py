@@ -1,7 +1,3 @@
-"""
-Tposeの際の骨盤の向きにより、各フレームの骨盤の向きを補正してから関節角度を計算する
-"""
-
 import pandas as pd
 import os
 import glob
@@ -10,138 +6,15 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt, resample
 import json
-
-def read_3d_optitrack(csv_path, start_frame, end_frame, geometry_path=None):
-    """
-    OptiTrackの3Dデータ(100Hz)を読み込み、前処理を行う。
-    1. データ範囲を決定する。
-    2. データに対して、スプライン補間と幾何学的補間を全て実行する。
-    """
-    def geometric_interpolation(marker_df, marker_to_fix, geometry, original_missing_mask):
-        """
-        指定されたマーカーを、幾何学情報を用いて補間する汎用関数。
-        引数として「元々欠損していた行のマスク」を受け取るように変更。
-        """
-        # 補間対象マーカー用の幾何学情報を取得
-        if marker_to_fix not in geometry:
-            print(f"警告: ジオメトリ情報に '{marker_to_fix}' の定義がありません。")
-            return marker_df
-
-        # ★★★ 変更点 ★★★
-        # 引数で渡されたマスクを使い、元々欠損があったかどうかを判断する
-        if not original_missing_mask.any():
-            print(f"{marker_to_fix} に元々の欠損はなかったため、幾何学的な補間はスキップしました。")
-            return marker_df
-
-        marker_geometry = geometry[marker_to_fix]
-        ref_marker_names = marker_geometry["reference_markers"]
-
-        # 必要な列名を取得
-        target_cols = [c for c in marker_df.columns if marker_to_fix in c[0]]
-        ref_cols_map = {name: [c for c in marker_df.columns if name in c[0]] for name in ref_marker_names}
-
-        if not target_cols or not all(ref_cols_map.values()):
-            print(f"警告: {marker_to_fix} またはその参照マーカーがデータフレームにありません。")
-            return marker_df
-
-        print(f"ジオメトリ情報を使用して、元々欠損していた {marker_to_fix} を再計算・補完します。")
-
-        # T-poseでの形状（ソース）を定義
-        source_vectors = [np.array(marker_geometry["reference_vectors"][name]) for name in ref_marker_names]
-        target_offset_vector = np.array(marker_geometry["target_offset_vector"])
-
-        # ★★★ 変更点 ★★★
-        # print(f"marker_df[original_missing_mask].index: {marker_df[original_missing_mask].index}")
-        # 引数で渡されたマスクを使って、元々欠損していた行だけをループする
-        # for index in marker_df[original_missing_mask].index:
-        for index in range(len(marker_df)):  #すべての行を対象とする（もともととれているデータも上書きしてほかのマーカーから補間）
-            row = marker_df.loc[index]
-
-            # 参照マーカーのデータが揃っているか確認
-            if all(not row[cols].isnull().any() for cols in ref_cols_map.values()):
-                ref_positions = [row[ref_cols_map[name]].values for name in ref_marker_names]
-
-                centroid_current = np.mean(ref_positions, axis=0)
-                target_vectors = [p - centroid_current for p in ref_positions]
-
-                rot, _ = R.align_vectors(target_vectors, source_vectors)
-                estimated_offset = rot.apply(target_offset_vector)
-                estimated_target = centroid_current + estimated_offset
-
-                marker_df.loc[index, target_cols] = estimated_target
-
-        return marker_df
-
-    df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])
-
-    if start_frame >= len(df) or end_frame >= len(df) or start_frame < 0:
-        print(f"Error: Requested range ({start_frame}-{end_frame}) is outside available data range (0-{len(df)-1})")
-        return np.array([]), range(0)
-
-    start_frame, end_frame = max(0, start_frame), min(len(df)-1, end_frame)
-    df = df.loc[start_frame:end_frame].reset_index(drop=True)
-
-    marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE", "RKNE2", "LKNE2", "RANK2", "LANK2"]
-    marker_set_df = df[[col for col in df.columns if any(marker in col[0] for marker in marker_set)]].copy()
-
-    if marker_set_df.empty:
-        print("Error: No marker data found")
-        return np.array([]), range(0)
-
-    # --- ここから補間処理  ---
-    markers_to_fix = ["LPSI"]
-    original_missing_masks = {}
-    # print("スプライン補間を行う前に、元々の欠損箇所を記録します。")
-    for marker in markers_to_fix:
-        cols = [c for c in marker_set_df.columns if marker in c[0]]
-        if cols:
-            original_missing_masks[marker] = marker_set_df[cols].isnull().any(axis=1)
-    # marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"before_interpolation_{os.path.basename(csv_path)}"))  #確認用
-
-    print("細かい欠損を補完するため、先に三次スプライン補間を実行します。")
-    marker_set_df.interpolate(method='cubic', limit_direction='both', inplace=True)
-    # marker_set_df.interpolate(method='spline', order=3, limit_direction='both', inplace=True)  #なんかこれだとうまくいかなかった
-    # marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"after_interpolation_{os.path.basename(csv_path)}"))  #確認用
-
-    if geometry_path and os.path.exists(geometry_path):
-        with open(geometry_path, 'r') as f:
-            geometry = json.load(f)
-        for marker in markers_to_fix:
-            if marker in original_missing_masks:
-                marker_set_df = geometric_interpolation(marker_set_df, marker, geometry, original_missing_masks[marker])
-    # marker_set_df.to_csv(os.path.join(os.path.dirname(csv_path), f"after_geometric_interpolation_{os.path.basename(csv_path)}"))   #確認用
-
-    if marker_set_df.isnull().values.any():
-        print("エラー: 補間後も処理できない欠損値が残っています。")
-        return np.array([]), range(0)
-
-    final_df = marker_set_df
-    # --- 以降の処理 ---
-    full_range = range(0, len(final_df))
-    final_df.to_csv(os.path.join(os.path.dirname(csv_path), f"marker_set_{os.path.basename(csv_path)}"))
-    keypoints = final_df.values
-    keypoints_mocap = keypoints.reshape(-1, len(marker_set), 3)
-
-    return keypoints_mocap, full_range
-
-def butter_lowpass_filter(data, order, cutoff_freq, frame_list, sampling_freq=100):  #4次のバターワースローパスフィルタ
-    # sampling_freq を可変にして、60Hz または 100Hz に対応
-    nyquist_freq = sampling_freq / 2
-    normal_cutoff = cutoff_freq / nyquist_freq
-    b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    # print(f"data = {data}")
-    # print(f"data.shape = {data.shape}")
-    y = filtfilt(b, a, data[frame_list])
-    data_fillter = np.copy(data)
-    data_fillter[frame_list] = y
-    return data_fillter
+import m_opti as opti
+import m_openpose as op
 
 def main():
-    csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-16\mocap"
+    # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-16\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-15\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera0-2\mocap"
-    # csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera0-3\mocap"
+    csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera0-3\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera1-0\mocap"
 
     if csv_path_dir == r"G:\gait_pattern\20250811_br\sub1\thera0-2\mocap":
@@ -185,7 +58,7 @@ def main():
         print(f"Processing: {csv_path}")
 
         try:
-            keypoints_mocap, full_range = read_3d_optitrack(csv_path, start_frame, end_frame,
+            keypoints_mocap, full_range = opti.read_3d_optitrack(csv_path, start_frame, end_frame,
                                                             geometry_path=geometry_json_path)
         except Exception as e:
             print(f"Error processing {csv_path}: {e}")
@@ -205,26 +78,23 @@ def main():
         pel2hee_r_list = []
         pel2hee_l_list = []
 
-        # 前フレームの角度を保存する変数（角度の連続性を保つため）
-        prev_angles = None
-
         # バターワースフィルタのサンプリング周波数を動的に設定
-        rasi = np.array([butter_lowpass_filter(keypoints_mocap[:, 10, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lasi = np.array([butter_lowpass_filter(keypoints_mocap[:, 2, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rpsi = np.array([butter_lowpass_filter(keypoints_mocap[:, 14, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lpsi = np.array([butter_lowpass_filter(keypoints_mocap[:, 6, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rank = np.array([butter_lowpass_filter(keypoints_mocap[:, 8, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lank = np.array([butter_lowpass_filter(keypoints_mocap[:, 0, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rank2 = np.array([butter_lowpass_filter(keypoints_mocap[:, 9, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lank2 = np.array([butter_lowpass_filter(keypoints_mocap[:, 1, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rknee = np.array([butter_lowpass_filter(keypoints_mocap[:, 12, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lknee = np.array([butter_lowpass_filter(keypoints_mocap[:, 4, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rknee2 = np.array([butter_lowpass_filter(keypoints_mocap[:, 13, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lknee2 = np.array([butter_lowpass_filter(keypoints_mocap[:, 5, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rtoe = np.array([butter_lowpass_filter(keypoints_mocap[:, 15, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        ltoe = np.array([butter_lowpass_filter(keypoints_mocap[:, 7, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rhee = np.array([butter_lowpass_filter(keypoints_mocap[:, 11, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lhee = np.array([butter_lowpass_filter(keypoints_mocap[:, 3, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        rasi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 10, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        lasi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 2, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        rpsi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 14, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        lpsi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 6, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        rank = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 8, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        lank = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 0, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        rank2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 9, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        lank2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 1, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        rknee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 12, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        lknee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 4, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        rknee2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 13, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        lknee2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 5, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        rtoe = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 15, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        ltoe = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 7, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        rhee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 11, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        lhee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 3, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
 
         # full_range = range(1, len(rasi))  #差分取るために0からではなく1フレーム目からにする
         print(f"full_range(開始点は1フレーム後から): {full_range}")
@@ -387,53 +257,13 @@ def main():
             l_knee_angle_adab = l_knee_angle_rot.as_euler('YZX', degrees=True)[2]
             r_ankle_angle_adab = r_ankle_angle_rot.as_euler('YZX', degrees=True)[2]
             l_ankle_angle_adab = l_ankle_angle_rot.as_euler('YZX', degrees=True)[2]
-            
-            
-            # ##############################################################################
-            # def signed_angle_on_plane(forward_v, asai_v, r_hip_v):
-            #     """
-            #     forward_v, asai_vで定義される平面上にr_hip_vを射影し、
-            #     forward_vとr_hip_vのなす角度（符号付き, degree）を返す
-            #     """
-            #     # 平面法線
-            #     plane_normal = np.cross(forward_v, asai_v)
-            #     plane_normal /= np.linalg.norm(plane_normal)
-
-            #     # forward_vを平面上に正規化
-            #     f_proj = forward_v - np.dot(forward_v, plane_normal) * plane_normal
-            #     f_proj /= np.linalg.norm(f_proj)
-
-            #     # r_hip_vを平面上に射影・正規化
-            #     r_proj = r_hip_v - np.dot(r_hip_v, plane_normal) * plane_normal
-            #     r_proj /= np.linalg.norm(r_proj)
-
-            #     # atan2で符号付き角度
-            #     x = np.dot(f_proj, r_proj)
-            #     y = np.dot(np.cross(f_proj, r_proj), plane_normal)
-            #     angle_rad = np.arctan2(y, x)
-            #     angle_deg = np.degrees(angle_rad)
-            #     return angle_deg
-
-            # # 股関節の外旋内旋角度2（やり方別）
-            # forward_v = hip_array[frame_num, :] - hip_array[frame_num-1, :]  # 前のフレームから現在のフレームまでの進行方向ベクトル
-            # asis_v = lasi[frame_num, :] - rasi[frame_num, :]  # 右と左のASISを結ぶベクトル 右から左
-            # r_hip_v = rshank - rthigh  # 右股関節→右膝ベクトル
-            # l_hip_v = lshank - lthigh  # 左股関節→左膝ベクトル
-            # r_hip_external_rotation_angle_2 = signed_angle_on_plane(forward_v, asis_v, r_hip_v)
-            # l_hip_external_rotation_angle_2 = signed_angle_on_plane(forward_v, asis_v, l_hip_v)
-
-            # # 股関節の外転内転角度2（やり方別）
-            # down_v = np.cross(asis_v, forward_v)  # 下方向ベクトル（体の軸のイメージ）
-            # r_hip_abduction_angle_2 = signed_angle_on_plane(down_v, asis_v, r_hip_v)
-            # l_hip_abduction_angle_2 = signed_angle_on_plane(down_v, asis_v, l_hip_v)
-            # ##############################################################################
 
             angle_list.append([r_hip_angle_flex, l_hip_angle_flex, r_knee_angle_flex, l_knee_angle_flex, r_ankle_angle_pldo, l_ankle_angle_pldo,
                                     r_hip_angle_inex, l_hip_angle_inex, r_knee_angle_inex, l_knee_angle_inex, r_ankle_angle_inex, l_ankle_angle_inex,
                                     r_hip_angle_adab, l_hip_angle_adab, r_knee_angle_adab, l_knee_angle_adab, r_ankle_angle_adab, l_ankle_angle_adab])
 
 
-            plot_flag = True
+            plot_flag = False
             if plot_flag:
                 # print(frame_num)  #相対フレーム数
                 if frame_num == 0:
@@ -524,7 +354,6 @@ def main():
                     ax.plot([hip_0[0], hip_0[0] + e_x_pelvis_0[0]], [hip_0[1], hip_0[1] + e_x_pelvis_0[1]], [hip_0[2], hip_0[2] + e_x_pelvis_0[2]], color='red')
                     ax.plot([hip_0[0], hip_0[0] + e_y_pelvis_0[0]], [hip_0[1], hip_0[1] + e_y_pelvis_0[1]], [hip_0[2], hip_0[2] + e_y_pelvis_0[2]], color='green')
                     ax.plot([hip_0[0], hip_0[0] + e_z_pelvis_0[0]], [hip_0[1], hip_0[1] + e_z_pelvis_0[1]], [hip_0[2], hip_0[2] + e_z_pelvis_0[2]], color='blue')
-                    
                     
                     plt.legend()
                     plt.show()
@@ -870,6 +699,173 @@ def main():
         json_path = os.path.join(os.path.dirname(csv_path), f"gait_data_{os.path.basename(csv_path).split('.')[0]}.json")
         with open(json_path, "w") as json_file:
             json.dump(gait_data, json_file, ensure_ascii=False, indent=4)
+            
+        # #####################################
+        # #####################################
+        # OpenPose3D結果との比較
+        # #####################################
+        # #####################################
+        # 結果保存ディレクトリ作成
+        op_result_dir = os.path.join(os.path.dirname(os.path.dirname(csv_path)), "OpenPose3D_results")
+        if not os.path.exists(op_result_dir):
+            os.makedirs(op_result_dir)
+
+        openpose_npz_path = os.path.join(os.path.dirname(csv_path_dir), "3d_kp_data_openpose.npz")
+        if not os.path.exists(openpose_npz_path):
+            print(f"OpenPose3Dデータが見つかりません: {openpose_npz_path}")
+            return
+    
+        print(f"OpenPose3Dデータとの比較を実行: {openpose_npz_path}")
+        openpose_data = np.load(openpose_npz_path)
+        print(f"openpose_data keys: {openpose_data.files}")
+        op_frame = openpose_data['frame']
+        op_raw_data = openpose_data['raw']  # shape: (num_frames, num_joints, 3)
+        op_filt_data = openpose_data['filt']  # shape: (num_frames, num_joints, 3)
+        op_conf = openpose_data['conf']  # shape: (num_frames, num_joints)
+        print(f"op_frame: {op_frame}")
+        print(f"op_raw_data shape: {op_raw_data.shape}")
+        
+        ###########################################
+        # タイミング合わせ  股関節中心が任意の位置を通るタイミングでフレーム調整
+        ###########################################
+        base_point = int(0)
+        # opti用
+        hip_z_opti = (((rasi + lasi) / 2 + (rpsi + lpsi) / 2) / 2)[:, 2]
+        # hip_z_optiが0より大きくなった最初のフレームを取得
+        start_frame_opti = np.argmax(hip_z_opti > base_point) + start_frame
+        print(f"100Hz Opti計測開始から原点通過までのフレーム数: {start_frame_opti}")
+        
+        # OpenPose用
+        hip_z_op = op_filt_data[:, 8, 2]
+        # hip_zが0より大きくなった最初のフレームを取得
+        start_idx_op = np.argmax(hip_z_op > base_point)
+        start_frame_op = op_frame[start_idx_op]
+        print(f"60Hz OpenPoseLED発光検出から原点通過までのフレーム数: {start_frame_op}")
+        
+        ###########################################
+        # 関節角度比較
+        ###########################################
+        #OpenPoseの各関節点抽出 3次元
+        neck_op, midhip_op  = op_filt_data[:, 1, :], op_filt_data[:, 8, :]
+        rhip_op, rknee_op, rankle_op, rhee_op  = op_filt_data[:, 9, :], op_filt_data[:, 10, :], op_filt_data[:, 11, :], op_filt_data[:, 24, :]
+        rtoe_op = (op_filt_data[:, 22, :] + op_filt_data[:, 23, :]) / 2
+        lhip_op, lknee_op, lankle_op, lhee_op  = op_filt_data[:, 12, :], op_filt_data[:, 13, :], op_filt_data[:, 14, :], op_filt_data[:, 21, :]
+        ltoe_op = (op_filt_data[:, 19, :] + op_filt_data[:, 20, :]) / 2
+        
+        # 使用するベクトルを定義
+        pel_bec_op = neck_op - midhip_op  #上向き
+        thigh_r_op = rknee_op - rhip_op  #下向き
+        shank_r_op = rankle_op - rknee_op  #下向き 
+        foot_r_op = rtoe_op - rhee_op  #前向き
+        thigh_l_op = lknee_op - lhip_op  
+        shank_l_op = lankle_op - lknee_op
+        foot_l_op = ltoe_op - lhee_op
+        
+        start_frame_op_tekitou = 170
+        end_frame_op_tekitou = 459
+        
+        # pel_bec_op = pel_bec_op[start_frame_op_tekitou:end_frame_op_tekitou, :]
+        # thigh_r_op = thigh_r_op[start_frame_op_tekitou:end_frame_op_tekitou, :]
+        # shank_r_op = shank_r_op[start_frame_op_tekitou:end_frame_op_tekitou, :]
+        # foot_r_op = foot_r_op[start_frame_op_tekitou:end_frame_op_tekitou, :]
+        # thigh_l_op = thigh_l_op[start_frame_op_tekitou:end_frame_op_tekitou, :]
+        # shank_l_op = shank_l_op[start_frame_op_tekitou:end_frame_op_tekitou, :]
+        # foot_l_op = foot_l_op[start_frame_op_tekitou:end_frame_op_tekitou, :]
+        
+        # 初期接地算出
+        pel2hee_z_r_op = (rhee_op - midhip_op)[:,2]
+        pel2hee_z_l_op = (lhee_op - midhip_op)[:,2]
+
+        df_ic_op_o = pd.DataFrame({"frame_60hz": op_frame,
+                                    "rhee_pel_z": pel2hee_z_r_op,
+                                    "lhee_pel_z": pel2hee_z_l_op})
+        df_ic_op_r = df_ic_op_o.sort_values(by="rhee_pel_z", ascending=False)
+        df_ic_op_l = df_ic_op_o.sort_values(by="lhee_pel_z", ascending=False)
+        # 初期接地検出
+        ic_r_list_op = df_ic_op_r.head(30)["frame_60hz"].values.astype(int)
+        ic_l_list_op = df_ic_op_l.head(30)["frame_60hz"].values.astype(int)
+        print(f"ic_r_list_op: {ic_r_list_op}")
+        print(f"ic_l_list_op: {ic_l_list_op}")
+        filt_ic_r_list_op = []
+        skip_values_op_r = set()
+        for value in ic_r_list_op:
+            if value in skip_values_op_r:
+                continue
+            filt_ic_r_list_op.append(value)
+            # 60Hzでの10フレーム間隔でスキップ
+            skip_values_op_r.update(range(value - 10, value + 11))
+        filt_ic_r_list_op = sorted(filt_ic_r_list_op)
+        print(f"フィルタリング後のRリスト (60Hz相対フレーム): {filt_ic_r_list_op}")
+        filt_ic_l_list_op = []
+        skip_values_op_l = set()
+        for value in ic_l_list_op:
+            if value in skip_values_op_l:
+                continue
+            filt_ic_l_list_op.append(value)
+            # 60Hzでの10フレーム間隔でスキップ
+            skip_values_op_l.update(range(value - 10, value + 11))
+        filt_ic_l_list_op = sorted(filt_ic_l_list_op)
+        print(f"フィルタリング後のLリスト (60Hz相対フレーム): {filt_ic_l_list_op}")
+
+
+        # 関節角度計算
+        # 股関節、膝関節、足関節の屈曲伸展角度
+        n_axis = rhip_op - lhip_op  # 右股関節から左股関節へのベクトル
+
+        rhip_flex_op = op.culc_angle_all_frames(pel_bec_op, thigh_r_op, n_axis, degrees=True, angle_type='hip')
+        lhip_flex_op = op.culc_angle_all_frames(pel_bec_op, thigh_l_op, n_axis, degrees=True, angle_type='hip')
+        rknee_flex_op = op.culc_angle_all_frames(thigh_r_op, shank_r_op, n_axis, degrees=True, angle_type='knee')
+        lknee_flex_op = op.culc_angle_all_frames(thigh_l_op, shank_l_op, n_axis, degrees=True, angle_type='knee')
+        rankle_pldo_op = op.culc_angle_all_frames(shank_r_op, foot_r_op, n_axis, degrees=True, angle_type='ankle')
+        lankle_pldo_op = op.culc_angle_all_frames(shank_l_op, foot_l_op, n_axis, degrees=True, angle_type='ankle')
+
+        print(f"rhip_flex_op[265]: {rhip_flex_op[265]}")
+        print(f"lhip_flex_op[265]: {lhip_flex_op[265]}")
+        
+        # rhip_flex_op = [180 - rhip_flex_angle if rhip_flex_angle > 0 else - (180 - rhip_flex_angle) for rhip_flex_angle in rhip_flex_op]
+        # lhip_flex_op = [180 - lhip_flex_angle if lhip_flex_angle > 0 else - (180 - lhip_flex_angle) for lhip_flex_angle in lhip_flex_op]
+
+        plt.plot(range(start_frame_op_tekitou, end_frame_op_tekitou), rhip_flex_op[start_frame_op_tekitou:end_frame_op_tekitou], label='OpenPose Right Hip Flexion/Extension', color='blue')
+        plt.plot(range(start_frame_op_tekitou, end_frame_op_tekitou), lhip_flex_op[start_frame_op_tekitou:end_frame_op_tekitou], label='OpenPose Left Hip Flexion/Extension', color='orange')
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in filt_ic_l_list_op]
+        [plt.axvline(x=frame, color='blue', linestyle='--', alpha=0.5) for frame in filt_ic_r_list_op]
+        plt.xlabel('Frame [-]')
+        plt.ylabel('Angle [deg]')
+        plt.title('OpenPose Hip Flexion/Extension Angles Over Time')
+        # plt.ylim(-40, 40)
+        plt.grid()
+        plt.legend()
+        plt.savefig(os.path.join(op_result_dir, f"{os.path.basename(csv_path)}_Hip_Flexion_Extension_{openpose_npz_path.stem}.png"))
+        # plt.show()
+        plt.close()
+        
+        plt.plot(range(start_frame_op_tekitou, end_frame_op_tekitou), rknee_flex_op[start_frame_op_tekitou:end_frame_op_tekitou], label='OpenPose Right Knee Flexion/Extension', color='blue')
+        plt.plot(range(start_frame_op_tekitou, end_frame_op_tekitou), lknee_flex_op[start_frame_op_tekitou:end_frame_op_tekitou], label='OpenPose Left Knee Flexion/Extension', color='orange')
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in filt_ic_l_list_op]
+        [plt.axvline(x=frame, color='blue', linestyle='--', alpha=0.5) for frame in filt_ic_r_list_op]
+        plt.xlabel('Frame [-]')
+        plt.ylabel('Angle [deg]')
+        plt.title('OpenPose Knee Flexion/Extension Angles Over Time')
+        # plt.ylim(-10, 70)
+        plt.grid()
+        plt.legend()
+        plt.savefig(os.path.join(op_result_dir, f"{os.path.basename(csv_path)}_Knee_Flexion_Extension_{openpose_npz_path.stem}.png"))
+        # plt.show()
+        plt.close()
+        
+        plt.plot(range(start_frame_op_tekitou, end_frame_op_tekitou), rankle_pldo_op[start_frame_op_tekitou:end_frame_op_tekitou], label='OpenPose Right Ankle Plantarflexion/Dorsiflexion', color='blue')
+        plt.plot(range(start_frame_op_tekitou, end_frame_op_tekitou), lankle_pldo_op[start_frame_op_tekitou:end_frame_op_tekitou], label='OpenPose Left Ankle Plantarflexion/Dorsiflexion', color='orange')
+        [plt.axvline(x=frame, color='orange', linestyle='--', alpha=0.5) for frame in filt_ic_l_list_op]   
+        [plt.axvline(x=frame, color='blue', linestyle='--', alpha=0.5) for frame in filt_ic_r_list_op]
+        plt.xlabel('Frame [-]')
+        plt.ylabel('Angle [deg]')
+        plt.title('OpenPose Ankle Plantarflexion/Dorsiflexion Angles Over Time')
+        # plt.ylim(-20, 60)
+        plt.grid()
+        plt.legend()
+        plt.savefig(os.path.join(op_result_dir, f"{os.path.basename(csv_path)}_Ankle_Plantarflexion_Dorsiflexion_{openpose_npz_path.stem}.png"))
+        # plt.show()
+        plt.close()
 
 if __name__ == "__main__":
     main()
