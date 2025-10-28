@@ -10,14 +10,14 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 
-tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\psub_label2")
+# tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\psub_label2")
 # tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm")
-# tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
-tsv_files = tsv_dir.glob("*0003*.tsv")
-# tsv_files = tsv_dir.glob("*sub4_com*.tsv")
+tsv_dir = Path(r"G:\gait_pattern\20250827_fukuyama\qualisys\psub_label\qtm\test_20241016")
+# tsv_files = tsv_dir.glob("*0003*.tsv")
+tsv_files = tsv_dir.glob("*sub4_com*.tsv")
 tsv_files = list(tsv_files)
-# tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
-tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
+tpose_path = tsv_dir / "sub4_tpose_ref_pos.json"
+# tpose_path = tsv_dir / "sub1-0001_ref_pos.json"
 
 
 def plot_interpolation_results(dfs, labels, marker_name, output_path):
@@ -238,9 +238,7 @@ def main():
                 continue
 
             angle_list_range = []
-            # 前フレームの角度を保存する変数
-            prev_r_hip_angle, prev_l_hip_angle, prev_r_knee_angle, prev_l_knee_angle, prev_r_ankle_angle, prev_l_ankle_angle = None, None, None, None, None, None
-
+            
             # ループの範囲を現在の有効範囲 '_range' に限定
             for frame_idx_in_range, original_frame_num in enumerate(_range):
                 try:
@@ -442,9 +440,9 @@ def main():
                     r_ankle_angle_adab = r_ankle_angle_rot.as_euler('YZX', degrees=True)[2]
                     l_ankle_angle_adab = l_ankle_angle_rot.as_euler('YZX', degrees=True)[2]
 
-                    """
-                    xyz小文字(外因性)で角度計算してた
-                    """
+                    # """
+                    # xyz小文字(外因性)で角度計算してた
+                    # """
                     # r_hip_angle = r_hip_angle_rot.as_euler('yzx', degrees=True)[0]
                     # l_hip_angle = l_hip_angle_rot.as_euler('yzx', degrees=True)[0]
                     # r_knee_angle = r_knee_angle_rot.as_euler('yzx', degrees=True)[0]
