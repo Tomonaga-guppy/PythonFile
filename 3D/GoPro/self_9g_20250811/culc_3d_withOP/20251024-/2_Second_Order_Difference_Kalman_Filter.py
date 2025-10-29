@@ -292,8 +292,8 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
 
 # --- 1. openposeから得られた座標をエクセルから取得 ---
 # ★ ユーザーはこれらのパスを自分の環境に合わせて変更する必要があります。
-path_op = r'G:\gait_pattern\20250811_br\sub0\thera0-16\fl' # OpenPoseの座標データ(csv)があるパス
-# path_op = r'G:\gait_pattern\20250811_br\sub1\thera0-3\fr' # OpenPoseの座標データ(csv)があるパス
+# path_op = r'G:\gait_pattern\20250811_br\sub0\thera0-16\fl' # OpenPoseの座標データ(csv)があるパス
+path_op = r'G:\gait_pattern\20250811_br\sub1\thera0-3\fr' # OpenPoseの座標データ(csv)があるパス
 name_op_excel = 'openpose.csv'  # 処理対象のファイル名
 full_path_op = os.path.join(path_op, name_op_excel)
 name = os.path.splitext(name_op_excel)[0] # 拡張子を除いたファイル名を取得
@@ -354,10 +354,10 @@ ear = df.iloc[:, [52,53,54, 55,56,57]].values # 耳の座標データ
 
 
 # --- 3. 前後フレーム設定 ---
-start_frame = 170 #FL約-2m地点 0-0-16
-end_frame = 350 #FLの最大検出フレーム
-# start_frame = 170 #FL約-2m地点 1-0-3
-# end_frame = 459 #FLの最大検出フレーム
+# start_frame = 170 #FL約-2m地点 0-0-16
+# end_frame = 350 #FLの最大検出フレーム
+start_frame = 170 #FL約-2m地点 1-0-3
+end_frame = 459 #FLの最大検出フレーム
 # start_frame = 340
 # end_frame = 440
 
@@ -523,6 +523,52 @@ print("カルマンフィルタを適用中...")
 # kheel_Lx, kheel_Rx = cheel[:, 3], cheel[:, 0]
 # kheel_Ly, kheel_Ry = cheel[:, 4], cheel[:, 1]
 
+kankle_Lx, kankle_Rx = kalman2(cankle[:, 3], cankle[:, 0], 200, 0.1)
+print("カルマンフィルタ: 足首X座標補正完了")
+kankle_Ly, kankle_Ry = kalman2(cankle[:, 4], cankle[:, 1], 50, 0.1)
+print("カルマンフィルタ: 足首Y座標補正完了")
+kknee_Lx, kknee_Rx = kalman2(cknee[:, 3], cknee[:, 0], 200, 0.1)
+print("カルマンフィルタ: 膝X座標補正完了")
+kknee_Ly, kknee_Ry = kalman2(cknee[:, 4], cknee[:, 1], 50, 0.1)
+print("カルマンフィルタ: 膝Y座標補正完了")
+khip_Lx, khip_Rx = kalman2(chip[:, 3], chip[:, 0], 50, 0.1)
+print("カルマンフィルタ: 股関節X座標補正完了")
+khip_Ly, khip_Ry = kalman2(chip[:, 4], chip[:, 1], 50, 0.1)
+print("カルマンフィルタ: 股関節Y座標補正完了")
+kbigtoe_Lx, kbigtoe_Rx = kalman2(cbigtoe[:, 3], cbigtoe[:, 0], 200, 0.1)
+print("カルマンフィルタ: 母趾X座標補正完了")
+kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 100, 0.1)
+# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 40, 0.1)
+print("カルマンフィルタ: 母趾Y座標補正完了")
+ksmalltoe_Lx, ksmalltoe_Rx = kalman2(csmalltoe[:, 3], csmalltoe[:, 0], 200, 0.1)
+print("カルマンフィルタ: 小趾X座標補正完了")
+ksmalltoe_Ly, ksmalltoe_Ry = kalman2(csmalltoe[:, 4], csmalltoe[:, 1], 50, 0.1)
+print("カルマンフィルタ: 小趾Y座標補正完了")
+kheel_Lx, kheel_Rx = kalman2(cheel[:, 3], cheel[:, 0], 200, 0.1)
+print("カルマンフィルタ: 踵X座標補正完了")
+kheel_Ly, kheel_Ry = kalman2(cheel[:, 4], cheel[:, 1], 50, 0.1)
+print("カルマンフィルタ: 踵Y座標補正完了")
+
+
+
+# # FL#
+# kankle_Lx, kankle_Rx = cankle[:, 1], cankle[:, 0]
+# # kankle_Lx, kankle_Rx = kalman2(cankle[:, 1], cankle[:, 0], 200, 0.0005)
+# kankle_Ly, kankle_Ry = cankle[:, 3], cankle[:, 2]
+# kknee_Lx, kknee_Rx = cknee[:, 1], cknee[:, 0]
+# kknee_Ly, kknee_Ry = cknee[:, 3], cknee[:, 2]
+# khip_Lx, khip_Rx = chip[:, 1], chip[:, 0]
+# khip_Ly, khip_Ry = chip[:, 3], chip[:, 2]
+# kbigtoe_Lx, kbigtoe_Rx = cbigtoe[:, 1], cbigtoe[:, 0]
+# # kbigtoe_Ly, kbigtoe_Ry = cbigtoe[:, 3], cbigtoe[:, 2]
+# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 3], cbigtoe[:, 2], 40, 0.003)  ##################
+# kheel_Lx, kheel_Rx = cheel[:, 1], cheel[:, 0]
+# kheel_Ly, kheel_Ry = kalman2(cheel[:, 3], cheel[:, 2], 50, 0.003)
+# # kheel_Ly, kheel_Ry = cheel[:, 3], cheel[:, 2]
+
+# """
+# FL この値でいけた
+# """
 # kankle_Lx, kankle_Rx = kalman2(cankle[:, 3], cankle[:, 0], 200, 0.1)
 # print("カルマンフィルタ: 足首X座標補正完了")
 # kankle_Ly, kankle_Ry = kalman2(cankle[:, 4], cankle[:, 1], 50, 0.1)
@@ -547,51 +593,6 @@ print("カルマンフィルタを適用中...")
 # print("カルマンフィルタ: 踵X座標補正完了")
 # kheel_Ly, kheel_Ry = kalman2(cheel[:, 4], cheel[:, 1], 50, 0.1)
 # print("カルマンフィルタ: 踵Y座標補正完了")
-
-
-
-# # FL#
-# kankle_Lx, kankle_Rx = cankle[:, 1], cankle[:, 0]
-# # kankle_Lx, kankle_Rx = kalman2(cankle[:, 1], cankle[:, 0], 200, 0.0005)
-# kankle_Ly, kankle_Ry = cankle[:, 3], cankle[:, 2]
-# kknee_Lx, kknee_Rx = cknee[:, 1], cknee[:, 0]
-# kknee_Ly, kknee_Ry = cknee[:, 3], cknee[:, 2]
-# khip_Lx, khip_Rx = chip[:, 1], chip[:, 0]
-# khip_Ly, khip_Ry = chip[:, 3], chip[:, 2]
-# kbigtoe_Lx, kbigtoe_Rx = cbigtoe[:, 1], cbigtoe[:, 0]
-# # kbigtoe_Ly, kbigtoe_Ry = cbigtoe[:, 3], cbigtoe[:, 2]
-# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 3], cbigtoe[:, 2], 40, 0.003)  ##################
-# kheel_Lx, kheel_Rx = cheel[:, 1], cheel[:, 0]
-# kheel_Ly, kheel_Ry = kalman2(cheel[:, 3], cheel[:, 2], 50, 0.003)
-# # kheel_Ly, kheel_Ry = cheel[:, 3], cheel[:, 2]
-
-"""
-FL この値でいけた
-"""
-kankle_Lx, kankle_Rx = kalman2(cankle[:, 3], cankle[:, 0], 200, 0.1)
-print("カルマンフィルタ: 足首X座標補正完了")
-kankle_Ly, kankle_Ry = kalman2(cankle[:, 4], cankle[:, 1], 50, 0.1)
-print("カルマンフィルタ: 足首Y座標補正完了")
-kknee_Lx, kknee_Rx = kalman2(cknee[:, 3], cknee[:, 0], 200, 0.1)
-print("カルマンフィルタ: 膝X座標補正完了")
-kknee_Ly, kknee_Ry = kalman2(cknee[:, 4], cknee[:, 1], 50, 0.1)
-print("カルマンフィルタ: 膝Y座標補正完了")
-khip_Lx, khip_Rx = kalman2(chip[:, 3], chip[:, 0], 50, 0.1)
-print("カルマンフィルタ: 股関節X座標補正完了")
-khip_Ly, khip_Ry = kalman2(chip[:, 4], chip[:, 1], 50, 0.1)
-print("カルマンフィルタ: 股関節Y座標補正完了")
-kbigtoe_Lx, kbigtoe_Rx = kalman2(cbigtoe[:, 3], cbigtoe[:, 0], 200, 0.1)
-print("カルマンフィルタ: 母趾X座標補正完了")
-kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 40, 0.1)
-print("カルマンフィルタ: 母趾Y座標補正完了")
-ksmalltoe_Lx, ksmalltoe_Rx = kalman2(csmalltoe[:, 3], csmalltoe[:, 0], 200, 0.1)
-print("カルマンフィルタ: 小趾X座標補正完了")
-ksmalltoe_Ly, ksmalltoe_Ry = kalman2(csmalltoe[:, 4], csmalltoe[:, 1], 50, 0.1)
-print("カルマンフィルタ: 小趾Y座標補正完了")
-kheel_Lx, kheel_Rx = kalman2(cheel[:, 3], cheel[:, 0], 200, 0.1)
-print("カルマンフィルタ: 踵X座標補正完了")
-kheel_Ly, kheel_Ry = kalman2(cheel[:, 4], cheel[:, 1], 50, 0.1)
-print("カルマンフィルタ: 踵Y座標補正完了")
 
 # --- 6 最終的な座標データの描画 & 保存 ---
 display_coordinates = True

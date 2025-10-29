@@ -50,7 +50,11 @@ def culc_angle(vector1, vector2, n_vector, degrees=False, angle_type=None):
     elif angle_type == 'knee':
         angle = - sign * angle_rad
     elif angle_type == 'ankle':
-        angle = np.pi/2 - angle_rad
+        angle = angle_rad - np.pi/2
+    elif angle_type == 'hip_adab':
+        angle = 180 - angle_rad
+    elif angle_type == 'hip_inex':
+        angle = angle_rad
 
     if degrees:
         angle = np.degrees(angle)
