@@ -230,8 +230,8 @@ def create_3d_animation(data_3d, output_path, title, all_data_for_limits):
     ax.set_ylabel('X-axis (mm) - Sideways', fontsize=14, labelpad=15)
     ax.set_zlabel('Y-axis (mm) - Up', fontsize=14, labelpad=15)
     
-    # ax.view_init(elev=10, azim=45)  # Oblique view
-    ax.view_init(elev=0, azim=-90)  #Sagittal view
+    ax.view_init(elev=10, azim=45)  # Oblique view
+    # ax.view_init(elev=0, azim=-90)  #Sagittal view
     
     ax.tick_params(axis='x', labelsize=10)
     ax.tick_params(axis='y', labelsize=10)
@@ -313,11 +313,11 @@ def main():
             
             print(f"\n{'='*80}\n処理開始: {thera_dir.relative_to(ROOT_DIR)}")
             
-            openpose_csv_path1 = thera_dir / "fl" / "openpose.csv"
-            openpose_csv_path2 = thera_dir / "fr" / "openpose.csv"
+            # openpose_csv_path1 = thera_dir / "fl" / "openpose.csv"
+            # openpose_csv_path2 = thera_dir / "fr" / "openpose.csv"
             
-            # openpose_csv_path1 = thera_dir / "fl" / "openpose_kalman.csv"
-            # openpose_csv_path2 = thera_dir / "fr" / "openpose_kalman.csv"
+            openpose_csv_path1 = thera_dir / "fl" / "openpose_kalman.csv"
+            openpose_csv_path2 = thera_dir / "fr" / "openpose_kalman.csv"
             
             kps1_seq, kps2_seq, frames = load_csv_2d_data(
                 openpose_csv_path1, openpose_csv_path2
@@ -344,7 +344,7 @@ def main():
             np.savez(npz_path, frame=frames, raw=raw_kp_3d, spline=spline_kp_3d, filt=filt_kp_3d, conf=confidences_3d)
             print(f"  - 3Dキーポイントデータを保存しました。")
             
-            exit()
+            # exit()
             
             # 3Dアニメーションを作成
             output_anim_dir = thera_dir / "3d_gait_anim"
@@ -361,12 +361,12 @@ def main():
                 all_data
             )
             
-            # create_3d_animation(
-            #     spline_kp_3d, 
-            #     output_anim_dir / "spline_3d.mp4",
-            #     f"Spline Interpolated 3D - {subject_dir.name} / {thera_dir.name}",
-            #     all_data
-            # )
+            create_3d_animation(
+                spline_kp_3d, 
+                output_anim_dir / "spline_3d.mp4",
+                f"Spline Interpolated 3D - {subject_dir.name} / {thera_dir.name}",
+                all_data
+            )
             
             create_3d_animation(
                 filt_kp_3d, 
