@@ -41,7 +41,6 @@ def weighted_linear_triangulation(P1, P2, correspondences, weights=None):
     u, s, vh = np.linalg.svd(Q)
     point_3d = p2e(u[:, -1, np.newaxis])
 
-    # --- ★★★ 変更点: 信頼度の計算 (utilsCameraPy3.py参考) ★★★ ---
     weightArray = np.asarray(weights)
     # 0でない重みが2つ未満の場合、信頼度は0
     if np.count_nonzero(weightArray) < 2:
@@ -64,21 +63,17 @@ def triangulate_points_weighted(P1, P2, points1, points2, confidences1, confiden
     重み付き三角測量を使用して2D点から3D点と信頼度を計算
     """
     points_3d_list = []
-    # ★★★ 変更点: 信頼度を格納するリストを追加 ★★★
     confidences_list = []
     for i in range(points1.shape[0]):
         correspondences = np.column_stack([points1[i], points2[i]])
         weights = [confidences1[i], confidences2[i]]
         try:
-            # ★★★ 変更点: 3D座標と信頼度を両方受け取る ★★★
             point_3d, conf = weighted_linear_triangulation(P1, P2, correspondences, weights)
             points_3d_list.append(point_3d)
             confidences_list.append(conf)
         except Exception:
             points_3d_list.append(np.full(3, np.nan))
-            # ★★★ 変更点: エラー時は信頼度にもnanを追加 ★★★
             confidences_list.append(np.nan)
-    # ★★★ 変更点: 3D座標と信頼度の両方を返す ★★★
     return np.array(points_3d_list), np.array(confidences_list)
 
 def rotate_coordinates_x_axis(points_3d, angle_degrees=180):
@@ -97,10 +92,8 @@ def triangulate_and_rotate(P1, P2, points1, points2, confidences1, confidences2)
     """三角測量と座標回転をまとめて行い、3D座標と信頼度を返すヘルパー関数"""
     valid_indices = np.where(~np.isnan(points1).any(axis=1) & ~np.isnan(points2).any(axis=1))[0]
     if len(valid_indices) == 0:
-        # ★★★ 変更点: 信頼度の配列も返す ★★★
         return np.full((25, 3), np.nan), np.full((25,), np.nan)
 
-    # ★★★ 変更点: 信頼度も受け取る ★★★
     points_3d_raw, confidences_raw = triangulate_points_weighted(
         P1, P2,
         points1[valid_indices],
@@ -113,9 +106,7 @@ def triangulate_and_rotate(P1, P2, points1, points2, confidences1, confidences2)
     full_points_3d = np.full((25, 3), np.nan)
     full_points_3d[valid_indices] = points_3d_rotated
 
-    # ★★★ 変更点: 信頼度を格納する配列を作成し、値をセット ★★★
     full_confidences = np.full((25,), np.nan)
     full_confidences[valid_indices] = confidences_raw
 
-    # ★★★ 変更点: 3D座標と信頼度の両方を返す ★★★
     return full_points_3d, full_confidences

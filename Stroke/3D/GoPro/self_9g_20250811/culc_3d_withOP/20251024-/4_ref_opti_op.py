@@ -1272,7 +1272,7 @@ def main():
         op_result_dir = csv_path_dir.parent / "OpenPose3D_results"
         op_result_dir.mkdir(parents=True, exist_ok=True)
 
-        openpose_npz_path = csv_path_dir.parent / "3d_kp_data_openpose.npz"
+        openpose_npz_path = csv_path_dir.parent / "3d_kp_data_openpose_kalman.npz"
         if not openpose_npz_path.exists():
             print(f"OpenPose3Dデータが見つかりません: {openpose_npz_path}")
             return
@@ -1307,7 +1307,8 @@ def main():
 
         # フレーム数を揃える
         if csv_path.stem == "1_0_3":
-            frame_offset_cut = 394 #LED発光フレームと動画トリミング開始フレームの差 本当は自動で計算可能
+            frame_offset_cut = 394 + 100 #LED発光フレームと動画トリミング開始フレームの差 本当は自動で計算可能
+            print(f"フレームオフセット調整: {frame_offset_cut}")
 
         frame_offset_60Hz = base_passing_frame_op + frame_offset_cut - base_passing_frame * 0.6  # 100Hzは60Hzに変換
         print(f"LED発光からMC開始までのフレームオフセット 60Hz: {frame_offset_60Hz}")
