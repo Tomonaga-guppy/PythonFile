@@ -320,7 +320,7 @@ def main():
                     l_ankle_angle = l_ankle_angle_rot.as_euler('YZX', degrees=True)[0]
 
                     angle_list_range.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle])
-                    
+                     
                     plot_flag = False
                     if plot_flag:
                         if original_frame_num == 166:
