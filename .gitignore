@@ -1,3 +1,4 @@
-Stroke/mmpose_env/,
-Stroke/vitpose_env/,
+Stroke/mmpose_env/
+Stroke/vitpose_env/
 Stroke/Vitpose/
+Stroke/opencap-core/
