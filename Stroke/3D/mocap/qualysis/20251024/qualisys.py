@@ -6,7 +6,7 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 from scipy.signal import butter, filtfilt
 
-
+# qualysisファイルのあるディレクトリ
 tsv_dir = Path(r"G:\gait_pattern\20251024_fukuyama\qtm_label")
 # qualysisisのtsvファイルを取得(QTMで補間処理を実施している前提)
 tsv_files = tsv_dir.glob("*.tsv") 
@@ -228,6 +228,12 @@ def main():
                     e_z_pelvis_0 = np.cross(e_x_pelvis_0, e_y0_pelvis_0)/np.linalg.norm(np.cross(e_x_pelvis_0, e_y0_pelvis_0))
                     e_y_pelvis_0 = np.cross(e_z_pelvis_0, e_x_pelvis_0)
                     
+                    # 骨盤節座標系の定義：Davisモデルに従って骨盤節座標系1をそのまま参照座標系として使用(もともとはL250-255の処理)
+                    e_x_pelvis = e_x_pelvis_0
+                    e_y_pelvis = e_y_pelvis_0
+                    e_z_pelvis = e_z_pelvis_0
+                    rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
+            
                     transformation_matrix = np.array([[e_x_pelvis_0[0], e_y_pelvis_0[0], e_z_pelvis_0[0], hip_0[0]],
                                                         [e_x_pelvis_0[1], e_y_pelvis_0[1], e_z_pelvis_0[1], hip_0[1]],
                                                         [e_x_pelvis_0[2], e_y_pelvis_0[2], e_z_pelvis_0[2], hip_0[2]],
@@ -241,11 +247,12 @@ def main():
                     # 腰椎節原点
                     lumbar = (0.47 * (rasi[frame_idx_in_range,:] + lasi[frame_idx_in_range,:]) / 2 + 0.53 * (rpsi[frame_idx_in_range,:] + lpsi[frame_idx_in_range,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
 
-                    e_y0_pelvis = (lthigh - rthigh)/np.linalg.norm(lthigh - rthigh)
-                    e_z_pelvis = (lumbar - hip)/np.linalg.norm(lumbar - hip)
-                    e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
-                    e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
-                    rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
+                    # #SKYCOMマニュアルに従って骨盤節座標系を再定義する場合(現在は未使用→Davisモデルの座標系をそのまま使用する処理L231-235に代替)
+                    # e_y0_pelvis = (lthigh - rthigh)/np.linalg.norm(lthigh - rthigh)
+                    # e_z_pelvis = (lumbar - hip)/np.linalg.norm(lumbar - hip)
+                    # e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
+                    # e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
+                    # rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
 
                     #必要な原点の設定
                     rshank = (rknee[frame_idx_in_range, :] + rknee2[frame_idx_in_range, :]) / 2
