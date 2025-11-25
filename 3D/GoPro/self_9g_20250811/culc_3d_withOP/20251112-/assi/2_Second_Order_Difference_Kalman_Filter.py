@@ -387,8 +387,12 @@ if len(df_p0) != len(df_p1):
     print(f"警告: Person0とPerson1のフレーム数が異なります")
 
 # --- 3. 必要なデータを抽出 ---
-start_frame = 0
-end_frame = len(df_p0)
+# start_frame = 0
+# end_frame = len(df_p0)
+
+# # 2人歩行 1_1-0
+start_frame = 250
+end_frame = 450
 
 # フレーム番号
 cframe = np.arange(start_frame, end_frame)
@@ -431,6 +435,15 @@ if display_pre_correction:
         'heel': cheel_p0,
     }
     
+    joints_data_p1 = {
+        'hip': chip_p1,
+        'knee': cknee_p1,
+        'ankle': cankle_p1,
+        'bigtoe': cbigtoe_p1,
+        'smalltoe': csmalltoe_p1,
+        'heel': cheel_p1,
+    }
+    
     for joint_name, joint_data in joints_data_p0.items():
         # 加速度計算用のフレーム
         cframe_a = cframe[2:]
@@ -449,9 +462,12 @@ if display_pre_correction:
         plt.subplot(2, 1, 1)
         plt.plot(cframe, joint_data[:, 0], label='Right X', color='red', alpha=0.8)
         plt.plot(cframe, joint_data[:, 3], label='Left X', color='blue', alpha=0.8)
+        plt.plot(cframe, joints_data_p1[f"{joint_name}"][:, 0], label='Right X PT', color='red', alpha=0.5, linestyle='--')
+        plt.plot(cframe, joints_data_p1[f"{joint_name}"][:, 3], label='Left X PT', color='blue', alpha=0.5, linestyle='--')
         plt.title(f'Pre-correction {joint_name.capitalize()} X Coordinate (Person0)', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('X Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(3840, np.max([joint_data[:, 0], joint_data[:, 3]])))
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -463,6 +479,7 @@ if display_pre_correction:
         plt.title(f'Pre-correction {joint_name.capitalize()} X Acceleration (Person0)', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Acceleration [px/s²]', fontsize=16)
+        plt.ylim(-1000,1000)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -477,9 +494,12 @@ if display_pre_correction:
         plt.subplot(2, 1, 1)
         plt.plot(cframe, joint_data[:, 1], label='Right Y', color='red', alpha=0.8)
         plt.plot(cframe, joint_data[:, 4], label='Left Y', color='blue', alpha=0.8)
+        plt.plot(cframe, joints_data_p1[f"{joint_name}"][:, 1], label='Right Y PT', color='red', alpha=0.5, linestyle='--')
+        plt.plot(cframe, joints_data_p1[f"{joint_name}"][:, 4], label='Left Y PT', color='blue', alpha=0.5, linestyle='--')
         plt.title(f'Pre-correction {joint_name.capitalize()} Y Coordinate (Person0)', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Y Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(2160, np.max([joint_data[:, 1], joint_data[:, 4]])))
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -491,6 +511,7 @@ if display_pre_correction:
         plt.title(f'Pre-correction {joint_name.capitalize()} Y Acceleration (Person0)', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Acceleration [px/s²]', fontsize=16)
+        plt.ylim(-100,100)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -583,6 +604,7 @@ if display_coordinates:
         plt.plot(cframe, data['kalman_Lx'], color='b', label='Kalman Left')
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('X Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(3840, np.max([data['raw'][:, 0], data['raw'][:, 3], data['kalman_Rx'], data['kalman_Lx']])))
         plt.title(f'{joint_name.capitalize()} X Coordinate (Person0)', fontsize=18)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
@@ -598,6 +620,7 @@ if display_coordinates:
         plt.plot(cframe, data['kalman_Ly'], color='b', label='Kalman Left')
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Y Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(2160, np.max([data['raw'][:, 1], data['raw'][:, 4], data['kalman_Ry'], data['kalman_Ly']])))
         plt.title(f'{joint_name.capitalize()} Y Coordinate (Person0)', fontsize=18)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()

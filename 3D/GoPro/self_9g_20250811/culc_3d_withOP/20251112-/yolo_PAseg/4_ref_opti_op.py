@@ -13,8 +13,8 @@ def main():
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub0\thera0-15\mocap"
     # csv_path_dir = r"G:\gait_pattern\20250811_br\sub1\thera0-2\mocap"
-    csv_path_dir = Path(r"G:\gait_pattern\20250811_br\sub1\thera0-3\mocap")
-    # csv_path_dir = Path(r"G:\gait_pattern\20250811_br\sub1\thera1-0\mocap")
+    # csv_path_dir = Path(r"G:\gait_pattern\20250811_br\sub1\thera0-3\mocap")
+    csv_path_dir = Path(r"G:\gait_pattern\20250811_br\sub1\thera1-0\mocap")
 
     if str(csv_path_dir) == r"G:\gait_pattern\20250811_br\sub1\thera0-2\mocap":
         start_frame = 1000
@@ -146,10 +146,10 @@ def main():
             e_x_pelvis_0 = np.cross(e_y_pelvis_0, e_z_pelvis_0)
             
             # お試し 産総研##############
-            # e_x_pelvis = e_x_pelvis_0
-            # e_y_pelvis = e_y_pelvis_0
-            # e_z_pelvis = e_z_pelvis_0
-            # rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
+            e_x_pelvis = e_x_pelvis_0
+            e_y_pelvis = e_y_pelvis_0
+            e_z_pelvis = e_z_pelvis_0
+            rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
             # #####################
 
             transformation_matrix = np.array([[e_x_pelvis_0[0], e_y_pelvis_0[0], e_z_pelvis_0[0], hip_0[0]],
@@ -167,11 +167,11 @@ def main():
             lumbar = (0.47 * (rasi[frame_num,:] + lasi[frame_num,:]) / 2 + 0.53 * (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2) + 0.02 * k * np.array([0, 1, 0])
             # lumbar = (0.47 * (rasi[frame_num,:] + lasi[frame_num,:]) / 2 + 0.53 * (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2) + 0.02 * k * np.array([0, 0, 1])
             
-            e_y0_pelvis = (lthigh - rthigh)/np.linalg.norm(lthigh - rthigh)
-            e_z_pelvis = (lumbar - hip)/np.linalg.norm(lumbar - hip)
-            e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
-            e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
-            rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
+            # e_y0_pelvis = (lthigh - rthigh)/np.linalg.norm(lthigh - rthigh)
+            # e_z_pelvis = (lumbar - hip)/np.linalg.norm(lumbar - hip)
+            # e_x_pelvis = np.cross(e_y0_pelvis, e_z_pelvis)/np.linalg.norm(np.cross(e_y0_pelvis, e_z_pelvis))
+            # e_y_pelvis = np.cross(e_z_pelvis, e_x_pelvis)
+            # rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
 
             hip_list.append(hip)
             hip_array = np.array(hip_list)
@@ -1282,7 +1282,7 @@ def main():
         print(f"openpose_data keys: {openpose_data.files}")
         op_frame = openpose_data['frame']
         op_raw_data = openpose_data['raw']  # shape: (num_frames, num_joints, 3)
-        op_filt_data = openpose_data['butter_filt']  # shape: (num_frames, num_joints, 3)
+        op_filt_data = openpose_data['filt']  # shape: (num_frames, num_joints, 3)
         op_conf = openpose_data['conf']  # shape: (num_frames, num_joints)
         print(f"op_frame: {op_frame[:5]} ...{op_frame[-5:]}")
         print(f"op_raw_data shape: {op_raw_data.shape}")

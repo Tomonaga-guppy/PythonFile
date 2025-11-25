@@ -292,8 +292,7 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
 
 # --- 1. openposeから得られた座標をエクセルから取得 ---
 # ★ ユーザーはこれらのパスを自分の環境に合わせて変更する必要があります。
-# path_op = r'G:\gait_pattern\20250811_br\sub0\thera0-16\fl' # OpenPoseの座標データ(csv)があるパス
-path_op = r'G:\gait_pattern\20250811_br\sub1\thera0-3\fr' # OpenPoseの座標データ(csv)があるパス
+path_op = r'G:\gait_pattern\20250811_br\sub1\thera1-0\fl_yoloseg_crop' # OpenPoseの座標データ(csv)があるパス
 name_op_excel = 'openpose.csv'  # 処理対象のファイル名
 full_path_op = os.path.join(path_op, name_op_excel)
 name = os.path.splitext(name_op_excel)[0] # 拡張子を除いたファイル名を取得
@@ -356,8 +355,8 @@ ear = df.iloc[:, [52,53,54, 55,56,57]].values # 耳の座標データ
 # --- 3. 前後フレーム設定 ---
 # start_frame = 170 #FL約-2m地点 0-0-16
 # end_frame = 350 #FLの最大検出フレーム
-start_frame = 170 #FL約-2m地点 1-0-3
-end_frame = 459 #FLの最大検出フレーム
+# start_frame = 170 #FL約-2m地点 1-0-3
+# end_frame = 459 #FLの最大検出フレーム
 # start_frame = 340
 # end_frame = 440
 
@@ -368,6 +367,10 @@ end_frame = 459 #FLの最大検出フレーム
 # # 2人歩行 1_1-1
 # start_frame = int(1090*0.6)
 # end_frame = int(1252*0.6)
+
+# # 2人歩行 1_1-0
+start_frame = 250
+end_frame = 450
 
 print(f"データはフレーム {start_frame} から {end_frame} まで使用されます。")
 
@@ -413,6 +416,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre {joint_name.capitalize()} X Coordinates', fontsize=18)
         plt.ylabel('Coordinate [px]', fontsize=16)
         plt.xlabel('Frame [-]', fontsize=16)
+        plt.ylim(0, min(3840, np.max([data[:, 0], data[:, 3]])))
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -423,6 +427,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre {joint_name.capitalize()} Y Coordinates', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(2160, np.max([data[:, 1], data[:, 4]])))
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -450,6 +455,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre-correction {joint_name.capitalize()} X Velocity', fontsize=18)
         plt.ylabel('Velocity [px/s]', fontsize=16)  
         plt.xlabel('Frame [-]', fontsize=16)
+        plt.ylim(-200,200)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -460,6 +466,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre-correction {joint_name.capitalize()} Y Velocity', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Velocity [px/s]', fontsize=16)
+        plt.ylim(-50,50)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -616,6 +623,7 @@ if display_coordinates:
         plt.plot(cframe, data['kalman_Lx'], color='b', label='Kalman Left')
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('X Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(3840, np.max([data['raw'][:, 0], data['raw'][:, 3], data['kalman_Rx'], data['kalman_Lx']])))
         plt.title(f'{joint_name.capitalize()} X Coordinate', fontsize=18)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
@@ -631,6 +639,7 @@ if display_coordinates:
         plt.plot(cframe, data['kalman_Ly'], color='b', label='Kalman Left')
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Y Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(2160, np.max([data['raw'][:, 1], data['raw'][:, 4], data['kalman_Ry'], data['kalman_Ly']])))
         plt.title(f'{joint_name.capitalize()} Y Coordinate', fontsize=18)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
