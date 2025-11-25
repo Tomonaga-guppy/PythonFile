@@ -131,7 +131,7 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
     miss_point = np.zeros(end_step)
     
     # 2フレーム目から最終フレームまでループ
-    for i in range(2, end_step):
+    for i in range(2, end_step, ):
         kalman_flag = 0 # カルマンフィルタによる補正が行われたかを判定するフラグ
         
         # 現在のフレームまでのデータスライスを取得
@@ -286,6 +286,99 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
 
     return coordinate_L, coordinate_R
 
+def interpolate_zero_coords(coord_data):
+    """
+    座標値が0の部分をNaNに変換し、線形補間を行う関数
+    信頼度pも前後の最小値で更新する
+    
+    引数:
+    coord_data : np.array (N, 6) - [Rx, Ry, Rp, Lx, Ly, Lp]の形式
+    
+    戻り値:
+    interpolated_data : np.array (N, 6) - 補間後のデータ
+    """
+    interpolated_data = coord_data.copy()
+    
+    # 右側と左側それぞれ処理
+    for side in [0, 3]:  # 0: Right, 3: Left
+        x_idx, y_idx, p_idx = side, side+1, side+2
+        
+        # X座標の処理
+        x_coords = interpolated_data[:, x_idx].copy()
+        x_p = interpolated_data[:, p_idx].copy()
+        
+        # 0の位置を特定
+        zero_mask_x = (x_coords == 0)
+        
+        if np.any(zero_mask_x):
+            # 0をNaNに変換
+            x_coords[zero_mask_x] = np.nan
+            
+            # 線形補間 (NaN以外の値を使用)
+            valid_indices = np.where(~np.isnan(x_coords))[0]
+            if len(valid_indices) > 1:
+                x_coords = np.interp(
+                    np.arange(len(x_coords)),
+                    valid_indices,
+                    x_coords[valid_indices]
+                )
+            
+            # 補間されたフレームの信頼度を前後の最小値に設定
+            for i in np.where(zero_mask_x)[0]:
+                # 前後の有効なインデックスを探す
+                prev_valid = valid_indices[valid_indices < i]
+                next_valid = valid_indices[valid_indices > i]
+                
+                if len(prev_valid) > 0 and len(next_valid) > 0:
+                    # 前後両方ある場合
+                    x_p[i] = min(x_p[prev_valid[-1]], x_p[next_valid[0]])
+                elif len(prev_valid) > 0:
+                    # 前だけある場合
+                    x_p[i] = x_p[prev_valid[-1]]
+                elif len(next_valid) > 0:
+                    # 後ろだけある場合
+                    x_p[i] = x_p[next_valid[0]]
+            
+            interpolated_data[:, x_idx] = x_coords
+            interpolated_data[:, p_idx] = x_p
+        
+        # Y座標の処理
+        y_coords = interpolated_data[:, y_idx].copy()
+        y_p = interpolated_data[:, p_idx].copy()
+        
+        # 0の位置を特定
+        zero_mask_y = (y_coords == 0)
+        
+        if np.any(zero_mask_y):
+            # 0をNaNに変換
+            y_coords[zero_mask_y] = np.nan
+            
+            # 線形補間
+            valid_indices = np.where(~np.isnan(y_coords))[0]
+            if len(valid_indices) > 1:
+                y_coords = np.interp(
+                    np.arange(len(y_coords)),
+                    valid_indices,
+                    y_coords[valid_indices]
+                )
+            
+            # 補間されたフレームの信頼度を前後の最小値に設定
+            for i in np.where(zero_mask_y)[0]:
+                prev_valid = valid_indices[valid_indices < i]
+                next_valid = valid_indices[valid_indices > i]
+                
+                if len(prev_valid) > 0 and len(next_valid) > 0:
+                    y_p[i] = min(y_p[prev_valid[-1]], y_p[next_valid[0]])
+                elif len(prev_valid) > 0:
+                    y_p[i] = y_p[prev_valid[-1]]
+                elif len(next_valid) > 0:
+                    y_p[i] = y_p[next_valid[0]]
+            
+            interpolated_data[:, y_idx] = y_coords
+            interpolated_data[:, p_idx] = y_p
+    
+    return interpolated_data
+
 # =============================================================================
 # メインスクリプト
 # =============================================================================
@@ -293,7 +386,7 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
 # --- 1. openposeから得られた座標をエクセルから取得 ---
 # ★ ユーザーはこれらのパスを自分の環境に合わせて変更する必要があります。
 # path_op = r'G:\gait_pattern\20250811_br\sub0\thera0-16\fl' # OpenPoseの座標データ(csv)があるパス
-path_op = r'G:\gait_pattern\20250811_br\sub1\thera0-3\fr' # OpenPoseの座標データ(csv)があるパス
+path_op = r'G:\gait_pattern\20250811_br\sub1\thera0-3\fl' # OpenPoseの座標データ(csv)があるパス
 name_op_excel = 'openpose.csv'  # 処理対象のファイル名
 full_path_op = os.path.join(path_op, name_op_excel)
 name = os.path.splitext(name_op_excel)[0] # 拡張子を除いたファイル名を取得
@@ -371,20 +464,28 @@ end_frame = 459 #FLの最大検出フレーム
 
 print(f"データはフレーム {start_frame} から {end_frame} まで使用されます。")
 
-# 座標データをカット(しない)
-cankle = ankle[start_frame:end_frame]
-cknee = knee[start_frame:end_frame]
-chip = hip[start_frame:end_frame]
-cbigtoe = bigtoe[start_frame:end_frame]
-csmalltoe = smalltoe[start_frame:end_frame]
-cheel = heel[start_frame:end_frame]
+# 座標データをカット
+cankle_raw = ankle[start_frame:end_frame]
+cknee_raw = knee[start_frame:end_frame]
+chip_raw = hip[start_frame:end_frame]
+cbigtoe_raw = bigtoe[start_frame:end_frame]
+csmalltoe_raw = smalltoe[start_frame:end_frame]
+cheel_raw = heel[start_frame:end_frame]
 
-cframe = np.arange(len(cankle)) + start_frame
+cframe = np.arange(len(cankle_raw)) + start_frame
+
+# 0座標の補間処理(0部分の信頼度は前後フレームの低い値を使用)
+cankle = interpolate_zero_coords(cankle_raw)
+cknee = interpolate_zero_coords(cknee_raw)
+chip = interpolate_zero_coords(chip_raw)
+cbigtoe = interpolate_zero_coords(cbigtoe_raw)
+csmalltoe = interpolate_zero_coords(csmalltoe_raw)
+cheel = interpolate_zero_coords(cheel_raw)
 
 # --- 4. 補正前の加速度算出 & グラフ描画 ---
 display_pre_correction_plots = True  # True:表示, False:非表示
 if display_pre_correction_plots:
-    print("補正前の座標と加速度グラフを作成中...")
+    print("カルマン処理前の座標と加速度グラフを作成中...")
     pre_correction_data = {
         'hip': chip, 'knee': cknee, 'ankle': cankle, 
         'bigtoe': cbigtoe, 'smalltoe': csmalltoe, 'heel': cheel
@@ -413,6 +514,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre {joint_name.capitalize()} X Coordinates', fontsize=18)
         plt.ylabel('Coordinate [px]', fontsize=16)
         plt.xlabel('Frame [-]', fontsize=16)
+        plt.ylim(0, min(3840, np.max([data[:, 0], data[:, 3]])))
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -423,6 +525,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre {joint_name.capitalize()} Y Coordinates', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(2160, np.max([data[:, 1], data[:, 4]])))
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -450,6 +553,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre-correction {joint_name.capitalize()} X Velocity', fontsize=18)
         plt.ylabel('Velocity [px/s]', fontsize=16)  
         plt.xlabel('Frame [-]', fontsize=16)
+        plt.ylim(-200,200)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -460,6 +564,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre-correction {joint_name.capitalize()} Y Velocity', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Velocity [px/s]', fontsize=16)
+        plt.ylim(-50,50)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -537,8 +642,8 @@ khip_Ly, khip_Ry = kalman2(chip[:, 4], chip[:, 1], 50, 0.1)
 print("カルマンフィルタ: 股関節Y座標補正完了")
 kbigtoe_Lx, kbigtoe_Rx = kalman2(cbigtoe[:, 3], cbigtoe[:, 0], 200, 0.1)
 print("カルマンフィルタ: 母趾X座標補正完了")
-# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 100, 0.1)
-kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 40, 0.1)
+kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 100, 0.1)
+# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 40, 0.1)
 print("カルマンフィルタ: 母趾Y座標補正完了")
 ksmalltoe_Lx, ksmalltoe_Rx = kalman2(csmalltoe[:, 3], csmalltoe[:, 0], 200, 0.1)
 print("カルマンフィルタ: 小趾X座標補正完了")
@@ -599,12 +704,12 @@ display_coordinates = True
 if display_coordinates:
     # 描画対象のデータを辞書にまとめる
     plot_data = {
-        'hip': {'raw': chip, 'kalman_Rx':khip_Rx,'kalman_Lx':khip_Lx,'kalman_Ry':khip_Ry,'kalman_Ly':khip_Ly},
-        'knee': {'raw': cknee, 'kalman_Rx':kknee_Rx,'kalman_Lx':kknee_Lx,'kalman_Ry':kknee_Ry,'kalman_Ly':kknee_Ly},
-        'ankle': {'raw': cankle, 'kalman_Rx':kankle_Rx,'kalman_Lx':kankle_Lx,'kalman_Ry':kankle_Ry,'kalman_Ly':kankle_Ly},
-        'bigtoe': {'raw': cbigtoe, 'kalman_Rx':kbigtoe_Rx,'kalman_Lx':kbigtoe_Lx,'kalman_Ry':kbigtoe_Ry,'kalman_Ly':kbigtoe_Ly},
-        'smalltoe': {'raw': csmalltoe, 'kalman_Rx':ksmalltoe_Rx,'kalman_Lx':ksmalltoe_Lx,'kalman_Ry':ksmalltoe_Ry,'kalman_Ly':ksmalltoe_Ly},
-        'heel': {'raw': cheel, 'kalman_Rx':kheel_Rx,'kalman_Lx':kheel_Lx,'kalman_Ry':kheel_Ry,'kalman_Ly':kheel_Ly},
+        'hip': {'raw': chip_raw, 'zinterp':chip, 'kalman_Rx':khip_Rx,'kalman_Lx':khip_Lx,'kalman_Ry':khip_Ry,'kalman_Ly':khip_Ly},
+        'knee': {'raw': cknee_raw, 'zinterp':cknee, 'kalman_Rx':kknee_Rx,'kalman_Lx':kknee_Lx,'kalman_Ry':kknee_Ry,'kalman_Ly':kknee_Ly},
+        'ankle': {'raw': cankle_raw, 'zinterp':cankle, 'kalman_Rx':kankle_Rx,'kalman_Lx':kankle_Lx,'kalman_Ry':kankle_Ry,'kalman_Ly':kankle_Ly},
+        'bigtoe': {'raw': cbigtoe_raw, 'zinterp':cbigtoe, 'kalman_Rx':kbigtoe_Rx,'kalman_Lx':kbigtoe_Lx,'kalman_Ry':kbigtoe_Ry,'kalman_Ly':kbigtoe_Ly},
+        'smalltoe': {'raw': csmalltoe_raw, 'zinterp':csmalltoe, 'kalman_Rx':ksmalltoe_Rx,'kalman_Lx':ksmalltoe_Lx,'kalman_Ry':ksmalltoe_Ry,'kalman_Ly':ksmalltoe_Ly},
+        'heel': {'raw': cheel_raw, 'zinterp':cheel, 'kalman_Rx':kheel_Rx,'kalman_Lx':kheel_Lx,'kalman_Ry':kheel_Ry,'kalman_Ly':kheel_Ly},
     }
 
     for joint_name, data in plot_data.items():
@@ -612,10 +717,13 @@ if display_coordinates:
         plt.figure(figsize=(10, 6))
         plt.plot(cframe, data['raw'][:, 0], color='r', label='Raw Right', alpha=0.3)
         plt.plot(cframe, data['raw'][:, 3], color='b', label='Raw Left', alpha=0.3)
+        plt.plot(cframe, data['zinterp'][:, 0], color='r', label='ZInterp Right', alpha=0.5, linestyle='--')
+        plt.plot(cframe, data['zinterp'][:, 3], color='b', label='ZInterp Left', alpha=0.5, linestyle='--')
         plt.plot(cframe, data['kalman_Rx'], color='r', label='Kalman Right')
         plt.plot(cframe, data['kalman_Lx'], color='b', label='Kalman Left')
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('X Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(3840, np.max([data['raw'][:, 0], data['raw'][:, 3], data['kalman_Rx'], data['kalman_Lx']])))
         plt.title(f'{joint_name.capitalize()} X Coordinate', fontsize=18)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
@@ -627,10 +735,13 @@ if display_coordinates:
         plt.figure(figsize=(10, 6))
         plt.plot(cframe, data['raw'][:, 1], color='r', label='Raw Right', alpha=0.3)
         plt.plot(cframe, data['raw'][:, 4], color='b', label='Raw Left', alpha=0.3)
+        plt.plot(cframe, data['zinterp'][:, 1], color='r', label='ZInterp Right', alpha=0.5, linestyle='--')
+        plt.plot(cframe, data['zinterp'][:, 4], color='b', label='ZInterp Left', alpha=0.5, linestyle='--')
         plt.plot(cframe, data['kalman_Ry'], color='r', label='Kalman Right')
         plt.plot(cframe, data['kalman_Ly'], color='b', label='Kalman Left')
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Y Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(2160, np.max([data['raw'][:, 1], data['raw'][:, 4], data['kalman_Ry'], data['kalman_Ly']])))
         plt.title(f'{joint_name.capitalize()} Y Coordinate', fontsize=18)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()

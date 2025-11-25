@@ -60,6 +60,7 @@ def local_trend_kf(y, a1, p1, var_eta, var_eps):
             print(f"Warning: f_t[{t}] is zero. Setting k_t[{t}] to 0.0.")
         else:
             k_t[t] = p_tt1[t] / f_t[t] 
+            k_t[t] = np.clip(k_t[t], 0, 1)  # カルマンゲインを[0,1]に制限
             
         # Current state (現時刻の状態推定値 a_tt[t] の計算)
         a_tt[t] = a_tt1[t] + k_t[t] * v_t[t]  #: (予測値) + (カルマンゲイン) * (観測残差)
@@ -106,15 +107,22 @@ def calc_log_diffuse_llhd(vars, y):
     
     return log_ld
 
+# def maf(input_data, size):
+#     """
+#     移動平均フィルタ(Moving Average Filter)
+#     """
+#     window_size = size
+#     b = (1 / window_size) * np.ones(window_size)
+#     a = 1
+#     from scipy.signal import lfilter
+#     return lfilter(b, a, input_data)
+
 def maf(input_data, size):
-    """
-    移動平均フィルタ(Moving Average Filter)
-    """
-    window_size = size
-    b = (1 / window_size) * np.ones(window_size)
-    a = 1
-    from scipy.signal import lfilter
-    return lfilter(b, a, input_data)
+    '''
+    中心化された移動平均フィルタ（位相遅延なし）
+    '''
+    from scipy.ndimage import uniform_filter1d
+    return uniform_filter1d(input_data, size=size, mode='nearest')
 
 def kalman2(coordinate_L, coordinate_R, th, initial_value):
     """
@@ -187,29 +195,30 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
         var_eta_opt_R = np.exp(2 * xoptR[0])
         var_eps_opt_R = np.exp(2 * xoptR[1])
         
-        # パラメータを更新(元々のやつ：epsとeta入れ替わってる？)
-        var_eps_L = var_eta_opt_L
-        var_eta_L = var_eps_opt_L
-        var_eps_R = var_eta_opt_R
-        var_eta_R = var_eps_opt_R
+        # # パラメータを更新(元々のやつ：epsとeta入れ替わってる？)
+        # var_eps_L = var_eta_opt_L
+        # var_eta_L = var_eps_opt_L
+        # var_eps_R = var_eta_opt_R
+        # var_eta_R = var_eps_opt_R
         
-        # もともとのやつ
-        a1L = var_eps_L
-        p1L = var_eta_L
-        a1R = var_eps_R
-        p1R = var_eta_R
+        # # もともとのやつ
+        # a1L = var_eps_L
+        # p1L = var_eta_L
+        # a1R = var_eps_R
+        # p1R = var_eta_R
         
-        # # パラメータを更新
-        # var_eps_L = var_eps_opt_L
-        # var_eta_L = var_eta_opt_L
-        # var_eps_R = var_eps_opt_R
-        # var_eta_R = var_eta_opt_R
+        # パラメータを更新
+        var_eta_L = var_eta_opt_L  # システムノイズ（状態遷移の不確かさ）
+        var_eps_L = var_eps_opt_L  # 観測ノイズ（観測値の不確かさ）
+        var_eta_R = var_eta_opt_R
+        var_eps_R = var_eps_opt_R
         
-        # # L180-181の代わりに以下を使用
-        # a1L = yL[0] if len(yL) > 0 else 0  # yL（速度データ）の最初の値を初期状態とする
-        # p1L = var_eps_L                   # 初期状態の不確かさは観測ノイズ分散で代用
-        # a1R = yR[0] if len(yR) > 0 else 0
-        # p1R = var_eps_R
+        # a1: 状態（速度）の初期推定値 → 直前の速度データを使用
+        # p1: 予測誤差分散の初期値 → 観測ノイズとシステムノイズの和
+        a1L = yL[-1] if len(yL) > 0 else 0.0  # 直前の速度を初期状態に
+        p1L = var_eps_L + var_eta_L           # 適切な予測誤差分散
+        a1R = yR[-1] if len(yR) > 0 else 0.0
+        p1R = var_eps_R + var_eta_R
 
         # カルマンフィルタを実行し、状態変数を取得
         a_tt_L, _, _, _ = local_trend_kf(yL, a1L, p1L, var_eta_L, var_eps_L)
@@ -292,14 +301,13 @@ def kalman2(coordinate_L, coordinate_R, th, initial_value):
 
 # --- 1. openposeから得られた座標をエクセルから取得 ---
 # ★ ユーザーはこれらのパスを自分の環境に合わせて変更する必要があります。
-# path_op = r'G:\gait_pattern\20250811_br\sub0\thera0-16\fl' # OpenPoseの座標データ(csv)があるパス
-path_op = r'G:\gait_pattern\20250811_br\sub1\thera0-3\fr' # OpenPoseの座標データ(csv)があるパス
+path_op = r'G:\gait_pattern\20250811_br\sub1\thera1-0\fr_yoloseg' # OpenPoseの座標データ(csv)があるパス
 name_op_excel = 'openpose.csv'  # 処理対象のファイル名
 full_path_op = os.path.join(path_op, name_op_excel)
 name = os.path.splitext(name_op_excel)[0] # 拡張子を除いたファイル名を取得
 
 # --- 結果保存用ディレクトリの作成 ---
-output_dir = os.path.join(path_op, f"kalman_results")
+output_dir = os.path.join(path_op, f"kalman_results_savgol")
 os.makedirs(output_dir, exist_ok=True)
 print(f"グラフは '{output_dir}' に保存されます。")
 
@@ -356,7 +364,9 @@ ear = df.iloc[:, [52,53,54, 55,56,57]].values # 耳の座標データ
 # --- 3. 前後フレーム設定 ---
 # start_frame = 170 #FL約-2m地点 0-0-16
 # end_frame = 350 #FLの最大検出フレーム
-start_frame = 170 #FL約-2m地点 1-0-3
+# start_frame = 170 #FL約-2m地点 1-0-3
+# end_frame = 459 #FLの最大検出フレーム
+start_frame = 170 #FL約-2m地点 1--0
 end_frame = 459 #FLの最大検出フレーム
 # start_frame = 340
 # end_frame = 440
@@ -413,6 +423,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre {joint_name.capitalize()} X Coordinates', fontsize=18)
         plt.ylabel('Coordinate [px]', fontsize=16)
         plt.xlabel('Frame [-]', fontsize=16)
+        plt.ylim(0, min(3840, np.max([data[:, 0], data[:, 3]])))
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -423,6 +434,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre {joint_name.capitalize()} Y Coordinates', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(2160, np.max([data[:, 1], data[:, 4]])))
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -450,6 +462,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre-correction {joint_name.capitalize()} X Velocity', fontsize=18)
         plt.ylabel('Velocity [px/s]', fontsize=16)  
         plt.xlabel('Frame [-]', fontsize=16)
+        plt.ylim(-200,200)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -460,6 +473,7 @@ if display_pre_correction_plots:
         plt.title(f'Pre-correction {joint_name.capitalize()} Y Velocity', fontsize=18)
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Velocity [px/s]', fontsize=16)
+        plt.ylim(-50,50)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
         plt.grid(True)
@@ -523,31 +537,31 @@ print("カルマンフィルタを適用中...")
 # kheel_Lx, kheel_Rx = cheel[:, 3], cheel[:, 0]
 # kheel_Ly, kheel_Ry = cheel[:, 4], cheel[:, 1]
 
-kankle_Lx, kankle_Rx = kalman2(cankle[:, 3], cankle[:, 0], 200, 0.1)
-print("カルマンフィルタ: 足首X座標補正完了")
-kankle_Ly, kankle_Ry = kalman2(cankle[:, 4], cankle[:, 1], 50, 0.1)
-print("カルマンフィルタ: 足首Y座標補正完了")
-kknee_Lx, kknee_Rx = kalman2(cknee[:, 3], cknee[:, 0], 200, 0.1)
-print("カルマンフィルタ: 膝X座標補正完了")
-kknee_Ly, kknee_Ry = kalman2(cknee[:, 4], cknee[:, 1], 50, 0.1)
-print("カルマンフィルタ: 膝Y座標補正完了")
-khip_Lx, khip_Rx = kalman2(chip[:, 3], chip[:, 0], 50, 0.1)
-print("カルマンフィルタ: 股関節X座標補正完了")
-khip_Ly, khip_Ry = kalman2(chip[:, 4], chip[:, 1], 50, 0.1)
-print("カルマンフィルタ: 股関節Y座標補正完了")
-kbigtoe_Lx, kbigtoe_Rx = kalman2(cbigtoe[:, 3], cbigtoe[:, 0], 200, 0.1)
-print("カルマンフィルタ: 母趾X座標補正完了")
-# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 100, 0.1)
-kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 40, 0.1)
-print("カルマンフィルタ: 母趾Y座標補正完了")
-ksmalltoe_Lx, ksmalltoe_Rx = kalman2(csmalltoe[:, 3], csmalltoe[:, 0], 200, 0.1)
-print("カルマンフィルタ: 小趾X座標補正完了")
-ksmalltoe_Ly, ksmalltoe_Ry = kalman2(csmalltoe[:, 4], csmalltoe[:, 1], 50, 0.1)
-print("カルマンフィルタ: 小趾Y座標補正完了")
-kheel_Lx, kheel_Rx = kalman2(cheel[:, 3], cheel[:, 0], 200, 0.1)
-print("カルマンフィルタ: 踵X座標補正完了")
-kheel_Ly, kheel_Ry = kalman2(cheel[:, 4], cheel[:, 1], 50, 0.1)
-print("カルマンフィルタ: 踵Y座標補正完了")
+# kankle_Lx, kankle_Rx = kalman2(cankle[:, 3], cankle[:, 0], 200, 0.1)
+# print("カルマンフィルタ: 足首X座標補正完了")
+# kankle_Ly, kankle_Ry = kalman2(cankle[:, 4], cankle[:, 1], 50, 0.1)
+# print("カルマンフィルタ: 足首Y座標補正完了")
+# kknee_Lx, kknee_Rx = kalman2(cknee[:, 3], cknee[:, 0], 200, 0.1)
+# print("カルマンフィルタ: 膝X座標補正完了")
+# kknee_Ly, kknee_Ry = kalman2(cknee[:, 4], cknee[:, 1], 50, 0.1)
+# print("カルマンフィルタ: 膝Y座標補正完了")
+# khip_Lx, khip_Rx = kalman2(chip[:, 3], chip[:, 0], 50, 0.1)
+# print("カルマンフィルタ: 股関節X座標補正完了")
+# khip_Ly, khip_Ry = kalman2(chip[:, 4], chip[:, 1], 50, 0.1)
+# print("カルマンフィルタ: 股関節Y座標補正完了")
+# kbigtoe_Lx, kbigtoe_Rx = kalman2(cbigtoe[:, 3], cbigtoe[:, 0], 200, 0.1)
+# print("カルマンフィルタ: 母趾X座標補正完了")
+# # kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 100, 0.1)
+# kbigtoe_Ly, kbigtoe_Ry = kalman2(cbigtoe[:, 4], cbigtoe[:, 1], 40, 0.1)
+# print("カルマンフィルタ: 母趾Y座標補正完了")
+# ksmalltoe_Lx, ksmalltoe_Rx = kalman2(csmalltoe[:, 3], csmalltoe[:, 0], 200, 0.1)
+# print("カルマンフィルタ: 小趾X座標補正完了")
+# ksmalltoe_Ly, ksmalltoe_Ry = kalman2(csmalltoe[:, 4], csmalltoe[:, 1], 50, 0.1)
+# print("カルマンフィルタ: 小趾Y座標補正完了")
+# kheel_Lx, kheel_Rx = kalman2(cheel[:, 3], cheel[:, 0], 200, 0.1)
+# print("カルマンフィルタ: 踵X座標補正完了")
+# kheel_Ly, kheel_Ry = kalman2(cheel[:, 4], cheel[:, 1], 50, 0.1)
+# print("カルマンフィルタ: 踵Y座標補正完了")
 
 
 
@@ -594,6 +608,72 @@ print("カルマンフィルタ: 踵Y座標補正完了")
 # kheel_Ly, kheel_Ry = kalman2(cheel[:, 4], cheel[:, 1], 50, 0.1)
 # print("カルマンフィルタ: 踵Y座標補正完了")
 
+
+
+from model_free_correction_full import model_free_correction
+
+"""
+window_lengthは奇数: 7, 9, 11, 13, 15, 17, 19, 21, 23, 25...
+polyorderは3固定: 変更不要
+
+windowサイズの意味
+
+小さい (7-11): ギザギザ残るが細部保存、遅延小
+標準 (13-17): バランス良好 👍
+大きい (19-25): 非常に滑らか、細部消失、遅延大
+"""
+
+# ========== 股関節 ==========
+khip_Lx, khip_Rx = model_free_correction(
+    chip[:, 3], chip[:, 0], chip[:, 5], chip[:, 2],
+    method='savgol', window_length=13, polyorder=3)
+khip_Ly, khip_Ry = model_free_correction(
+    chip[:, 4], chip[:, 1], chip[:, 5], chip[:, 2],
+    method='savgol', window_length=9, polyorder=3)
+
+# ========== 膝 ==========
+kknee_Lx, kknee_Rx = model_free_correction(
+    cknee[:, 3], cknee[:, 0], cknee[:, 5], cknee[:, 2],
+    method='savgol', window_length=15, polyorder=3)
+kknee_Ly, kknee_Ry = model_free_correction(
+    cknee[:, 4], cknee[:, 1], cknee[:, 5], cknee[:, 2],
+    method='savgol', window_length=11, polyorder=3)
+
+# ========== 足首 ==========
+kankle_Lx, kankle_Rx = model_free_correction(
+    cankle[:, 3], cankle[:, 0], cankle[:, 5], cankle[:, 2],
+    method='savgol', window_length=15, polyorder=3)
+kankle_Ly, kankle_Ry = model_free_correction(
+    cankle[:, 4], cankle[:, 1], cankle[:, 5], cankle[:, 2],
+    method='savgol', window_length=11, polyorder=3)
+
+# ========== 踵 ==========
+kheel_Lx, kheel_Rx = model_free_correction(
+    cheel[:, 3], cheel[:, 0], cheel[:, 5], cheel[:, 2],
+    method='savgol', window_length=17, polyorder=3)
+kheel_Ly, kheel_Ry = model_free_correction(
+    cheel[:, 4], cheel[:, 1], cheel[:, 5], cheel[:, 2],
+    method='savgol', window_length=13, polyorder=3)
+
+# ========== 母趾 ==========
+kbigtoe_Lx, kbigtoe_Rx = model_free_correction(
+    cbigtoe[:, 3], cbigtoe[:, 0], cbigtoe[:, 5], cbigtoe[:, 2],
+    method='savgol', window_length=19, polyorder=3)
+kbigtoe_Ly, kbigtoe_Ry = model_free_correction(
+    cbigtoe[:, 4], cbigtoe[:, 1], cbigtoe[:, 5], cbigtoe[:, 2],
+    method='savgol', window_length=15, polyorder=3)
+
+# ========== 小趾 ==========
+ksmalltoe_Lx, ksmalltoe_Rx = model_free_correction(
+    csmalltoe[:, 3], csmalltoe[:, 0], csmalltoe[:, 5], csmalltoe[:, 2],
+    method='savgol', window_length=19, polyorder=3)
+ksmalltoe_Ly, ksmalltoe_Ry = model_free_correction(
+    csmalltoe[:, 4], csmalltoe[:, 1], csmalltoe[:, 5], csmalltoe[:, 2],
+    method='savgol', window_length=15, polyorder=3)
+
+
+
+
 # --- 6 最終的な座標データの描画 & 保存 ---
 display_coordinates = True
 if display_coordinates:
@@ -616,6 +696,7 @@ if display_coordinates:
         plt.plot(cframe, data['kalman_Lx'], color='b', label='Kalman Left')
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('X Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(3840, np.max([data['raw'][:, 0], data['raw'][:, 3], data['kalman_Rx'], data['kalman_Lx']])))
         plt.title(f'{joint_name.capitalize()} X Coordinate', fontsize=18)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
@@ -631,6 +712,7 @@ if display_coordinates:
         plt.plot(cframe, data['kalman_Ly'], color='b', label='Kalman Left')
         plt.xlabel('Frame [-]', fontsize=16)
         plt.ylabel('Y Coordinate [px]', fontsize=16)
+        plt.ylim(0, min(2160, np.max([data['raw'][:, 1], data['raw'][:, 4], data['kalman_Ry'], data['kalman_Ly']])))
         plt.title(f'{joint_name.capitalize()} Y Coordinate', fontsize=18)
         plt.tick_params(axis='both', which='major', labelsize=14)
         plt.legend()
@@ -678,5 +760,6 @@ for col_name in df_final.columns:
                     break # この列の処理は完了
                 
 # 保存
-output_csv_path = os.path.join(path_op, f"{name}_kalman.csv")
+output_csv_path = os.path.join(path_op, f"{name}_savgol.csv")
+# output_csv_path = os.path.join(path_op, f"{name}_kalman.csv")
 df_final.to_csv(output_csv_path, index=False)
