@@ -18,6 +18,10 @@ for subject_dir in subject_dir_list:  # 各被験者ディレクトリに対し�
         if thera_dir.name == "thera0-15":
             print(f"Mocap課題用の動画で今は使用しないもしくは黒塗りが必要なのでスキップ: {thera_dir.name}")
             continue
+        
+        if subject_dir.name != "sub1" and thera_dir.name != "thera1-0":
+            print(f"1-1-0のみ処理")
+            continue
 
         # 介助歩行でも最大検出人数を1人にしてみる
         max_people = 1
@@ -29,7 +33,7 @@ for subject_dir in subject_dir_list:  # 各被験者ディレクトリに対し�
             max_people = 2        
         """
             
-        directions = ["fl_mxp1", "fr_mxp1", "sagi_mxp1"]
+        directions = ["fl_yolo", "fr_yolo"]
         # directions = ["fl", "fr", "sagi"]
         for direction in directions:  # 各方向に対して
 
@@ -40,15 +44,14 @@ for subject_dir in subject_dir_list:  # 各被験者ディレクトリに対し�
             
             print(f"{ori_img_dir}の処理を開始します")
             
+            
             stem_name = f"openpose"  # 出力ファイルの名前のベース
             if Path(ori_img_dir.with_name(stem_name+'.avi')).exists():
                 print(f"{stem_name}.avi はすでに存在します") #すでに推定済みの場合はスキップ
-                i += 1
                 continue
             
             if ori_img_dir.exists() is False:
                 print(f"{ori_img_dir}は存在しません")
-                i += 1
                 continue
 
             if i != 1:
