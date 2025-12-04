@@ -560,9 +560,8 @@ def main():
             
             print(f"\n{'='*80}\n処理開始: {thera_dir.relative_to(ROOT_DIR)}")
             
-            # openpose_csv_path1 = thera_dir / "fl" / "openpose.csv"
-            # openpose_csv_path2 = thera_dir / "fr" / "openpose.csv"
-            
+            thera_dir = thera_dir / "ICMST"
+                        
             openpose_csv_path1 = thera_dir / "fl_yoloseg" / "openpose.csv"
             openpose_csv_path2 = thera_dir / "fr_yoloseg" / "openpose.csv"
             

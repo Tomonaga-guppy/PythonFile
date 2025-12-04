@@ -185,7 +185,7 @@ def detect_valid_frame_range(data_3d, x_min=-2500, x_max=2500):
     return start_frame, end_frame
 
 
-def confidence_filter_keypoints(data_3d, confidences, conf_threshold=0.5):
+def confidence_filter_keypoints(data_3d, confidences, conf_threshold=0.3):
     """
     信頼値をベースに外れ値となるキーポイントをNaNに置き換えてフィルタリング
 
@@ -242,8 +242,8 @@ KEYPOINT_NAMES = [
 ]
 
 
-def plot_keypoint_timeseries(raw_data, filtered_data, spline_data, filt_data, confidences_3d,
-                              output_dir, frame_range=None):
+def plot_keypoint_timeseries(raw_data, filtered_data, spline_data, filt_data,
+                              output_dir, save_path, frame_range=None):
     """
     各キーポイントのXYZ座標の時系列データをプロットして保存
 
@@ -257,8 +257,6 @@ def plot_keypoint_timeseries(raw_data, filtered_data, spline_data, filt_data, co
         スプライン補間後のデータ
     filt_data : ndarray (num_frames, 25, 3)
         バターワースフィルタ後のデータ
-    confidences_3d : ndarray (num_frames, 25)
-        各キーポイントのconfidence値
     output_dir : Path
         出力ディレクトリ
     frame_range : tuple (start, end), optional
@@ -277,30 +275,24 @@ def plot_keypoint_timeseries(raw_data, filtered_data, spline_data, filt_data, co
     filtered_slice = filtered_data[start_frame:end_frame+1]
     spline_slice = spline_data[start_frame:end_frame+1]
     filt_slice = filt_data[start_frame:end_frame+1]
-    confidences_slice = confidences_3d[start_frame:end_frame+1]
 
     # 出力ディレクトリ作成
-    timeseries_dir = output_dir / "keypoint_timeseries_yoloseg"
+    timeseries_dir = output_dir / "keypoint_timeseries_maxpeople1"
     timeseries_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\nキーポイント別時系列プロットを作成中...")
     print(f"  - フレーム範囲: {start_frame} ~ {end_frame}")
-    print(f"  - 出力先: {timeseries_dir}")
+    print(f"  - 出力先: {save_path}")
 
     coord_labels = ['X (mm)', 'Y (mm)', 'Z (mm)']
 
     for kp_idx in tqdm(range(num_keypoints)):
         kp_name = KEYPOINT_NAMES[kp_idx]
 
-        # 4x1のサブプロット（X, Y, Z, Confidence）
-        fig, axes = plt.subplots(4, 1, figsize=(14, 12), sharex=True)
+        fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
         fig.suptitle(f'{kp_name} (Keypoint {kp_idx}) - 3D Coordinates Time Series',
                      fontsize=16, fontweight='bold')
 
-        # X, Y, Z座標のプロット
-        for coord_idx in range(3):
-            ax = axes[coord_idx]
-            
+        for coord_idx, ax in enumerate(axes):
             # データ抽出
             raw_coord = raw_slice[:, kp_idx, coord_idx]
             filtered_coord = filtered_slice[:, kp_idx, coord_idx]
@@ -332,20 +324,7 @@ def plot_keypoint_timeseries(raw_data, filtered_data, spline_data, filt_data, co
                 y_margin = (y_max - y_min) * 0.1
                 ax.set_ylim(y_min - y_margin, y_max + y_margin)
 
-        # 4行目: Confidenceのプロット
-        ax_conf = axes[3]
-        conf_values = confidences_slice[:, kp_idx]
-        
-        # 信頼度をプロット
-        ax_conf.plot(frame_indices, conf_values, '-', color='green',
-                     linewidth=1.5, alpha=0.8, label='Confidence')
-        ax_conf.fill_between(frame_indices, 0, conf_values, 
-                             color='green', alpha=0.2)
-        ax_conf.set_ylabel('Confidence', fontsize=12)
-        ax_conf.set_xlabel('Frame', fontsize=12)
-        ax_conf.set_ylim(0, 1.05)
-        ax_conf.grid(True, alpha=0.3)
-
+        axes[-1].set_xlabel('Frame', fontsize=12)
         plt.tight_layout()
 
         # 保存
@@ -560,11 +539,16 @@ def main():
             
             print(f"\n{'='*80}\n処理開始: {thera_dir.relative_to(ROOT_DIR)}")
             
-            # openpose_csv_path1 = thera_dir / "fl" / "openpose.csv"
-            # openpose_csv_path2 = thera_dir / "fr" / "openpose.csv"
+            thera_dir = thera_dir / "ICMST"
             
-            openpose_csv_path1 = thera_dir / "fl_yoloseg" / "openpose.csv"
-            openpose_csv_path2 = thera_dir / "fr_yoloseg" / "openpose.csv"
+
+            
+            openpose_csv_path1 = thera_dir / "fl_" / "openpose.csv"
+            openpose_csv_path2 = thera_dir / "fr_" / "openpose.csv"
+
+            openpose_csv_path1_butter = thera_dir / "fl_" / "openpose_butter.csv"
+            openpose_csv_path2_butter = thera_dir / "fr_" / "openpose_butter.csv"
+            
             
             kps1_seq, kps2_seq, frames = load_csv_2d_data(
                 openpose_csv_path1, openpose_csv_path2
@@ -586,7 +570,7 @@ def main():
             conf_filt_kp_3d = confidence_filter_keypoints(
                 raw_kp_3d,
                 confidences_3d,
-                conf_threshold=0.4,      # Confidence閾値
+                conf_threshold=0.7,      # Confidence閾値
             )
 
             # 有効フレーム範囲を自動検出（MidHipのX座標が-2000~2000の範囲）
@@ -599,9 +583,34 @@ def main():
             # 欠損値補間とバターワースフィルタ（フィルタリング後のデータに適用）
             spline_kp_3d = spline_interpolate(conf_filt_kp_3d)
             butter_filt_kp_3d = butterworth_filter(spline_kp_3d, BUTTERWORTH_CUTOFF, FRAME_RATE)
+            
+            
+            
+            
+            kps1_seq_butter, kps2_seq_butter, frames_butter = load_csv_2d_data(
+                openpose_csv_path1_butter, openpose_csv_path2_butter
+            )
+            if not frames_butter:
+                print(f"  - スキップ: 共通フレームが見つかりません（バターフィルタ用）。")
+                continue
+            print(f"kps1_seq_butter shape: {kps1_seq_butter.shape}, kps2_seq_butter shape: {kps2_seq_butter.shape}")
+            # 3D座標を計算（バターフィルタ用）
+            raw_kp_3d_butter, confidences_3d_butter = calculate_raw_3d_coordinates(
+                kps1_seq_butter, kps2_seq_butter, P1, P2
+            )
+            print(f"raw_kp_3d_butter shape: {raw_kp_3d_butter.shape}")
+            # 信頼度による外れ値フィルタリングを適用（バターフィルタ用）
+            conf_filt_kp_3d_butter = confidence_filter_keypoints(
+                raw_kp_3d_butter,
+                confidences_3d_butter,
+                conf_threshold=0.7,      # Confidence閾値
+            )
+            # 欠損値補間とバターワースフィルタ（フィルタリング後のデータに適用、バターフィルタ用）
+            spline_kp_3d_butter = spline_interpolate(conf_filt_kp_3d_butter)
+            butter_filt_kp_3d_butter = butterworth_filter(spline_kp_3d_butter, BUTTERWORTH_CUTOFF, FRAME_RATE)
 
             # 3次元座標を保存（外れ値フィルタリング後も保存）
-            npz_path = thera_dir / f"3d_kp_data_{openpose_csv_path1.stem}_yoloseg.npz"
+            npz_path = thera_dir / f"3d_kp_data_{openpose_csv_path1.stem}_maxpeople1.npz"
             np.savez(npz_path,
                      frame=frames,
                      raw=raw_kp_3d,
@@ -609,22 +618,28 @@ def main():
                      spline=spline_kp_3d,
                      butter_filt=butter_filt_kp_3d,
                      conf=confidences_3d,
-                     valid_frame_range=np.array([start_frame, end_frame]))
+                     valid_frame_range=np.array([start_frame, end_frame]),
+                     raw_butter=raw_kp_3d_butter,  # バターフィルタ用
+                     conf_filt_butter=conf_filt_kp_3d_butter,
+                     spline_butter=spline_kp_3d_butter,
+                     butter_filt_butter=butter_filt_kp_3d_butter,
+                     conf_butter=confidences_3d_butter,
+            )
             print(f"  - 3Dキーポイントデータを保存しました。")
 
+            print(f"\nキーポイント別時系列プロットを作成中...")
             # キーポイント別時系列プロットを作成
             plot_keypoint_timeseries(
                 raw_kp_3d,
                 conf_filt_kp_3d,
                 spline_kp_3d,
                 butter_filt_kp_3d,
-                confidences_3d,
                 thera_dir,
                 frame_range=(start_frame, end_frame)
             )
 
             # 3Dアニメーションを作成（有効フレーム範囲で）
-            output_anim_dir = thera_dir / "3d_gait_anim_yoloseg"
+            output_anim_dir = thera_dir / "3d_gait_anim_raw_maxpeople1"
             output_anim_dir.mkdir(parents=True, exist_ok=True)
             print("\n3Dスティックフィギュアアニメーションの作成を開始します...")
 
@@ -639,14 +654,14 @@ def main():
             all_data = np.concatenate([conf_filt_kp_3d_valid, spline_kp_3d_valid, butter_filt_kp_3d_valid], axis=0)
 
             # 各データセットでアニメーションを作成（有効フレーム範囲のみ）
-            # create_3d_animation(
-            #     raw_kp_3d_valid,
-            #     output_anim_dir / "raw_3d.mp4",
-            #     f"Raw 3D (Frames {start_frame}-{end_frame}) - {subject_dir.name} / {thera_dir.name}",
-            #     all_data,
-            #     confidences=confidences_3d_valid,
-            #     conf_threshold=0.3
-            # )
+            create_3d_animation(
+                raw_kp_3d_valid,
+                output_anim_dir / "raw_3d.mp4",
+                f"Raw 3D (Frames {start_frame}-{end_frame}) - {subject_dir.name} / {thera_dir.name}",
+                all_data,
+                confidences=confidences_3d_valid,
+                conf_threshold=0.3
+            )
 
             # create_3d_animation(
             #     conf_filt_kp_3d_valid,
@@ -666,14 +681,14 @@ def main():
             #     conf_threshold=0.3
             # )
 
-            # create_3d_animation(
-            #     butter_filt_kp_3d_valid,
-            #     output_anim_dir / "butter_filt_3d.mp4",
-            #     f"Butterworth Filtered 3D (Frames {start_frame}-{end_frame}) - {subject_dir.name} / {thera_dir.name}",
-            #     all_data,
-            #     confidences=confidences_3d_valid,
-            #     conf_threshold=0.3
-            # )
+            create_3d_animation(
+                butter_filt_kp_3d_valid,
+                output_anim_dir / "butter_filt_3d.mp4",
+                f"Butterworth Filtered 3D (Frames {start_frame}-{end_frame}) - {subject_dir.name} / {thera_dir.name}",
+                all_data,
+                confidences=confidences_3d_valid,
+                conf_threshold=0.3
+            )
             
             print(f"\n処理完了: {thera_dir.relative_to(ROOT_DIR)}")
 

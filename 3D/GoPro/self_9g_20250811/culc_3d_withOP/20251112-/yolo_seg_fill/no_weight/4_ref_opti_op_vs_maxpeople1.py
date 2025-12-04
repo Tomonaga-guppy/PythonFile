@@ -8,6 +8,24 @@ import json
 import m_opti as opti
 import m_openpose as op
 
+# グラフのフォントサイズを全体的に大きく設定
+plt.rcParams.update({
+    'font.size': 18,              # 基本フォントサイズ
+    'axes.titlesize': 20,         # タイトル
+    'axes.labelsize': 18,         # 軸ラベル
+    'xtick.labelsize': 16,        # x軸目盛り
+    'ytick.labelsize': 16,        # y軸目盛り
+    'legend.fontsize': 14,        # 凡例
+    'figure.titlesize': 22,       # 図タイトル
+    'lines.linewidth': 2.5,       # 線の太さ
+    'axes.linewidth': 1.5,        # 軸の太さ
+    'xtick.major.width': 1.5,     # x軸目盛りの太さ
+    'ytick.major.width': 1.5,     # y軸目盛りの太さ
+    'xtick.major.size': 6,        # x軸目盛りの長さ
+    'ytick.major.size': 6,        # y軸目盛りの長さ
+    'figure.autolayout': True,    # 自動レイアウト調整
+})
+
 def main():
     # csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub0\thera0-16\mocap")
     # csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera0-3\mocap")
@@ -1791,13 +1809,13 @@ def main():
                               label='OpenPose', color='red', alpha=0.7, capsize=5)
                 
                 # グラフの装飾
-                ax.set_xlabel('Foot Side', fontsize=12)
-                ax.set_ylabel(param_label, fontsize=12)
+                ax.set_xlabel('Foot Side')
+                ax.set_ylabel(param_label)
                 ax.set_title(f'{param_label}\n(Diff R: {stats["Diff_R"]:.3f}, Diff L: {stats["Diff_L"]:.3f})', 
                            fontsize=13)
                 ax.set_xticks(x)
                 ax.set_xticklabels(['Right', 'Left'])
-                ax.legend(fontsize=11)
+                ax.legend()
                 ax.grid(True, alpha=0.3, axis='y')
                 
                 # 値をバーの上に表示
@@ -1805,12 +1823,12 @@ def main():
                     height = bar.get_height()
                     ax.text(bar.get_x() + bar.get_width()/2., height,
                            f'{height:.3f}',
-                           ha='center', va='bottom', fontsize=9)
+                           ha='center', va='bottom')
                 for bar in bars2:
                     height = bar.get_height()
                     ax.text(bar.get_x() + bar.get_width()/2., height,
                            f'{height:.3f}',
-                           ha='center', va='bottom', fontsize=9)
+                           ha='center', va='bottom')
             
             plt.tight_layout()
             plt.savefig(op_result_dir / f"comparison_gait_parameters_mean_std_{csv_path.stem}.png", dpi=300)
@@ -1819,6 +1837,47 @@ def main():
             print(f"\n平均と標準偏差の比較グラフを保存しました: comparison_gait_parameters_mean_std_{csv_path.stem}.png")
 
 
+
+
+            # maxpeople1のデータを読み込む
+            max_people1_dir = csv_path_dir.parent / "OpenPose3D_results_maxpeople1"
+            normalized_gait_cycles_r_op_max1_csv_path = max_people1_dir / f"normalized_cycle_R_mean_{csv_path.stem}_OpenPose.csv"
+            normalized_gait_cycles_l_op_max1_csv_path = max_people1_dir / f"normalized_cycle_L_mean_{csv_path.stem}_OpenPose.csv"
+            
+            # maxpeople1のデータが存在するか確認
+            has_max1_data = False
+            if max_people1_dir.exists():
+                if normalized_gait_cycles_r_op_max1_csv_path.exists() and normalized_gait_cycles_l_op_max1_csv_path.exists():
+                    has_max1_data = True
+                    print(f"\nmaxpeople1のデータを読み込み中...")
+                    
+                    # 関節角度の平均データを読み込み
+                    mean_cycle_r_op_max1 = pd.read_csv(normalized_gait_cycles_r_op_max1_csv_path)
+                    mean_cycle_l_op_max1 = pd.read_csv(normalized_gait_cycles_l_op_max1_csv_path)
+                    
+                    # MAEデータを読み込み
+                    mae_both_max1_path = max_people1_dir / f"MAE_gait_parameters_both_{csv_path.stem}.csv"
+                    mae_summary_r_max1_path = max_people1_dir / f"MAE_summary_R_{csv_path.stem}.csv"
+                    mae_summary_l_max1_path = max_people1_dir / f"MAE_summary_L_{csv_path.stem}.csv"
+                    
+                    if mae_both_max1_path.exists():
+                        mae_gait_params_both_max1 = pd.read_csv(mae_both_max1_path)
+                        print(f"歩行パラメータMAE (maxpeople1):")
+                        print(mae_gait_params_both_max1)
+                    
+                    if mae_summary_r_max1_path.exists():
+                        mae_summary_r_max1 = pd.read_csv(mae_summary_r_max1_path)
+                        print(f"\n右足関節角度MAE (maxpeople1):")
+                        print(mae_summary_r_max1)
+                    
+                    if mae_summary_l_max1_path.exists():
+                        mae_summary_l_max1 = pd.read_csv(mae_summary_l_max1_path)
+                        print(f"\n左足関節角度MAE (maxpeople1):")
+                        print(mae_summary_l_max1)
+                else:
+                    print(f"\nmaxpeople1のデータが見つかりません")
+            else:
+                print(f"\nmaxpeople1ディレクトリが見つかりません: {max_people1_dir}")
 
 
 
@@ -1940,8 +1999,8 @@ def main():
             
             axes[0, 0].bar(x - width/2, distance_mae_r, width, label='Right', color='blue', alpha=0.7)
             axes[0, 0].bar(x + width/2, distance_mae_l, width, label='Left', color='red', alpha=0.7)
-            axes[0, 0].set_ylabel('MAE [m or m/s]', fontsize=11)
-            axes[0, 0].set_title('Distance/Speed Parameters MAE', fontsize=13)
+            axes[0, 0].set_ylabel('MAE [m or m/s]')
+            axes[0, 0].set_title('Distance/Speed Parameters MAE')
             axes[0, 0].set_xticks(x)
             axes[0, 0].set_xticklabels(distance_params, rotation=15, ha='right')
             axes[0, 0].legend()
@@ -1956,8 +2015,8 @@ def main():
             
             axes[0, 1].bar(x - width/2, time_mae_r, width, label='Right', color='blue', alpha=0.7)
             axes[0, 1].bar(x + width/2, time_mae_l, width, label='Left', color='red', alpha=0.7)
-            axes[0, 1].set_ylabel('MAE [s]', fontsize=11)
-            axes[0, 1].set_title('Time Parameters MAE', fontsize=13)
+            axes[0, 1].set_ylabel('MAE [s]')
+            axes[0, 1].set_title('Time Parameters MAE')
             axes[0, 1].set_xticks(x)
             axes[0, 1].set_xticklabels(time_params, rotation=15, ha='right')
             axes[0, 1].legend()
@@ -1972,8 +2031,8 @@ def main():
             
             axes[1, 0].bar(x - width/2, percent_mae_r, width, label='Right', color='blue', alpha=0.7)
             axes[1, 0].bar(x + width/2, percent_mae_l, width, label='Left', color='red', alpha=0.7)
-            axes[1, 0].set_ylabel('MAE [%]', fontsize=11)
-            axes[1, 0].set_title('Phase Parameters MAE', fontsize=13)
+            axes[1, 0].set_ylabel('MAE [%]')
+            axes[1, 0].set_title('Phase Parameters MAE')
             axes[1, 0].set_xticks(x)
             axes[1, 0].set_xticklabels(percent_params)
             axes[1, 0].legend()
@@ -1999,8 +2058,8 @@ def main():
                 param_names.append(result['Parameter'])
             
             axes[1, 1].barh(param_names, normalized_mae, color='green', alpha=0.7)
-            axes[1, 1].set_xlabel('Normalized MAE [%]', fontsize=11)
-            axes[1, 1].set_title('Normalized MAE (MAE / Mean × 100)', fontsize=13)
+            axes[1, 1].set_xlabel('Normalized MAE [%]')
+            axes[1, 1].set_title('Normalized MAE (MAE / Mean × 100)')
             axes[1, 1].grid(True, alpha=0.3, axis='x')
             
             plt.tight_layout()
@@ -2055,11 +2114,11 @@ def main():
                           label='OpenPose', color='red', alpha=0.7)
             
             # グラフの装飾
-            ax.set_ylabel('Symmetry Index [%]', fontsize=14)
-            ax.set_title('Stance Phase Symmetry Index Comparison\n(Lower values indicate better symmetry)', fontsize=15)
+            ax.set_ylabel('Symmetry Index [%]')
+            ax.set_title('Stance Phase Symmetry Index Comparison\n(Lower values indicate better symmetry)')
             ax.set_xticks(x)
-            ax.set_xticklabels(['Stance Phase'], fontsize=13)
-            ax.legend(fontsize=13, loc='upper right')
+            ax.set_xticklabels(['Stance Phase'])
+            ax.legend(loc='upper right')
             ax.grid(True, alpha=0.3, axis='y')
             ax.set_xlim(-0.5, 0.5)
             
@@ -2068,12 +2127,12 @@ def main():
                 height = bar.get_height()
                 ax.text(bar.get_x() + bar.get_width()/2., height,
                        f'{height:.1f}%',
-                       ha='center', va='bottom', fontsize=12, fontweight='bold')
+                       ha='center', va='bottom', fontweight='bold')
             for bar in bars2:
                 height = bar.get_height()
                 ax.text(bar.get_x() + bar.get_width()/2., height,
                        f'{height:.1f}%',
-                       ha='center', va='bottom', fontsize=12, fontweight='bold')
+                       ha='center', va='bottom', fontweight='bold')
             
             # 参考線（完全な対称性）
             ax.axhline(y=0, color='green', linestyle='--', linewidth=2, alpha=0.5, label='Perfect Symmetry')
@@ -2081,7 +2140,7 @@ def main():
             # 差分を表示
             ax.text(0, max(si_mocap_values[0], si_op_values[0]) * 1.15, 
                    f'Difference: {si_comparison["Difference"]:.1f}%',
-                   ha='center', fontsize=11, bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                   ha='center', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
             
             plt.tight_layout()
             plt.savefig(op_result_dir / f"symmetry_index_comparison_stance_{csv_path.stem}.png", dpi=300)
@@ -2241,22 +2300,22 @@ def main():
                             label=f'Cycle {cycle_idx+1}', linewidth=1.5)
             
             # グラフの装飾
-            axes[0].set_ylabel('Absolute Error [deg]', fontsize=12)
-            axes[0].set_title(f'Right Hip Flexion/Extension - Absolute Error per Cycle (MAE: {mae_rhip:.2f}°)', fontsize=14)
-            axes[0].legend(fontsize=9, loc='upper right')
+            axes[0].set_ylabel('Absolute Error [deg]')
+            axes[0].set_title(f'Right Hip Flexion/Extension - Absolute Error per Cycle (MAE: {mae_rhip:.2f}°)')
+            axes[0].legend(loc='upper right')
             axes[0].grid(True, alpha=0.3)
             axes[0].set_ylim(0, None)
             
-            axes[1].set_ylabel('Absolute Error [deg]', fontsize=12)
-            axes[1].set_title(f'Right Knee Flexion/Extension - Absolute Error per Cycle (MAE: {mae_rknee:.2f}°)', fontsize=14)
-            axes[1].legend(fontsize=9, loc='upper right')
+            axes[1].set_ylabel('Absolute Error [deg]')
+            axes[1].set_title(f'Right Knee Flexion/Extension - Absolute Error per Cycle (MAE: {mae_rknee:.2f}°)')
+            axes[1].legend(loc='upper right')
             axes[1].grid(True, alpha=0.3)
             axes[1].set_ylim(0, None)
             
-            axes[2].set_xlabel('Gait Cycle [%]', fontsize=12)
-            axes[2].set_ylabel('Absolute Error [deg]', fontsize=12)
-            axes[2].set_title(f'Right Ankle Plantarflexion/Dorsiflexion - Absolute Error per Cycle (MAE: {mae_rankle:.2f}°)', fontsize=14)
-            axes[2].legend(fontsize=9, loc='upper right')
+            axes[2].set_xlabel('Gait Cycle [%]')
+            axes[2].set_ylabel('Absolute Error [deg]')
+            axes[2].set_title(f'Right Ankle Plantarflexion/Dorsiflexion - Absolute Error per Cycle (MAE: {mae_rankle:.2f}°)')
+            axes[2].legend(loc='upper right')
             axes[2].grid(True, alpha=0.3)
             axes[2].set_ylim(0, None)
             
@@ -2283,16 +2342,16 @@ def main():
                 axes[1].plot(normalized_percentage, error_adab, color=colors[cycle_idx], 
                             label=f'Cycle {cycle_idx+1}', linewidth=1.5)
             
-            axes[0].set_ylabel('Absolute Error [deg]', fontsize=12)
-            axes[0].set_title(f'Right Hip Internal/External Rotation - Absolute Error per Cycle (MAE: {mae_rhip_inex:.2f}°)', fontsize=14)
-            axes[0].legend(fontsize=9, loc='upper right')
+            axes[0].set_ylabel('Absolute Error [deg]')
+            axes[0].set_title(f'Right Hip Internal/External Rotation - Absolute Error per Cycle (MAE: {mae_rhip_inex:.2f}°)')
+            axes[0].legend(loc='upper right')
             axes[0].grid(True, alpha=0.3)
             axes[0].set_ylim(0, None)
             
-            axes[1].set_xlabel('Gait Cycle [%]', fontsize=12)
-            axes[1].set_ylabel('Absolute Error [deg]', fontsize=12)
-            axes[1].set_title(f'Right Hip Adduction/Abduction - Absolute Error per Cycle (MAE: {mae_rhip_adab:.2f}°)', fontsize=14)
-            axes[1].legend(fontsize=9, loc='upper right')
+            axes[1].set_xlabel('Gait Cycle [%]')
+            axes[1].set_ylabel('Absolute Error [deg]')
+            axes[1].set_title(f'Right Hip Adduction/Abduction - Absolute Error per Cycle (MAE: {mae_rhip_adab:.2f}°)')
+            axes[1].legend(loc='upper right')
             axes[1].grid(True, alpha=0.3)
             axes[1].set_ylim(0, None)
             
@@ -2330,22 +2389,22 @@ def main():
                             label=f'Cycle {cycle_idx+1}', linewidth=1.5)
             
             # グラフの装飾
-            axes[0].set_ylabel('Absolute Error [deg]', fontsize=12)
-            axes[0].set_title(f'Left Hip Flexion/Extension - Absolute Error per Cycle (MAE: {mae_lhip:.2f}°)', fontsize=14)
-            axes[0].legend(fontsize=9, loc='upper right')
+            axes[0].set_ylabel('Absolute Error [deg]')
+            axes[0].set_title(f'Left Hip Flexion/Extension - Absolute Error per Cycle (MAE: {mae_lhip:.2f}°)')
+            axes[0].legend(loc='upper right')
             axes[0].grid(True, alpha=0.3)
             axes[0].set_ylim(0, None)
             
-            axes[1].set_ylabel('Absolute Error [deg]', fontsize=12)
-            axes[1].set_title(f'Left Knee Flexion/Extension - Absolute Error per Cycle (MAE: {mae_lknee:.2f}°)', fontsize=14)
-            axes[1].legend(fontsize=9, loc='upper right')
+            axes[1].set_ylabel('Absolute Error [deg]')
+            axes[1].set_title(f'Left Knee Flexion/Extension - Absolute Error per Cycle (MAE: {mae_lknee:.2f}°)')
+            axes[1].legend(loc='upper right')
             axes[1].grid(True, alpha=0.3)
             axes[1].set_ylim(0, None)
             
-            axes[2].set_xlabel('Gait Cycle [%]', fontsize=12)
-            axes[2].set_ylabel('Absolute Error [deg]', fontsize=12)
-            axes[2].set_title(f'Left Ankle Plantarflexion/Dorsiflexion - Absolute Error per Cycle (MAE: {mae_lankle:.2f}°)', fontsize=14)
-            axes[2].legend(fontsize=9, loc='upper right')
+            axes[2].set_xlabel('Gait Cycle [%]')
+            axes[2].set_ylabel('Absolute Error [deg]')
+            axes[2].set_title(f'Left Ankle Plantarflexion/Dorsiflexion - Absolute Error per Cycle (MAE: {mae_lankle:.2f}°)')
+            axes[2].legend(loc='upper right')
             axes[2].grid(True, alpha=0.3)
             axes[2].set_ylim(0, None)
             
@@ -2372,16 +2431,16 @@ def main():
                 axes[1].plot(normalized_percentage, error_adab, color=colors[cycle_idx], 
                             label=f'Cycle {cycle_idx+1}', linewidth=1.5)
             
-            axes[0].set_ylabel('Absolute Error [deg]', fontsize=12)
-            axes[0].set_title(f'Left Hip Internal/External Rotation - Absolute Error per Cycle (MAE: {mae_lhip_inex:.2f}°)', fontsize=14)
-            axes[0].legend(fontsize=9, loc='upper right')
+            axes[0].set_ylabel('Absolute Error [deg]')
+            axes[0].set_title(f'Left Hip Internal/External Rotation - Absolute Error per Cycle (MAE: {mae_lhip_inex:.2f}°)')
+            axes[0].legend(loc='upper right')
             axes[0].grid(True, alpha=0.3)
             axes[0].set_ylim(0, None)
             
-            axes[1].set_xlabel('Gait Cycle [%]', fontsize=12)
-            axes[1].set_ylabel('Absolute Error [deg]', fontsize=12)
-            axes[1].set_title(f'Left Hip Adduction/Abduction - Absolute Error per Cycle (MAE: {mae_lhip_adab:.2f}°)', fontsize=14)
-            axes[1].legend(fontsize=9, loc='upper right')
+            axes[1].set_xlabel('Gait Cycle [%]')
+            axes[1].set_ylabel('Absolute Error [deg]')
+            axes[1].set_title(f'Left Hip Adduction/Abduction - Absolute Error per Cycle (MAE: {mae_lhip_adab:.2f}°)')
+            axes[1].legend(loc='upper right')
             axes[1].grid(True, alpha=0.3)
             axes[1].set_ylim(0, None)
             
@@ -2413,19 +2472,29 @@ def main():
                                 mean_cycle_r['R_Hip_FlEx_mean'] - mean_cycle_r['R_Hip_FlEx_std'],
                                 mean_cycle_r['R_Hip_FlEx_mean'] + mean_cycle_r['R_Hip_FlEx_std'],
                                 alpha=0.2, color='b')
-            axes[0].plot(normalized_percentage, mean_cycle_r_op['R_Hip_FlEx_mean'], 'r--', label='OpenPose', linewidth=2)
+            axes[0].plot(normalized_percentage, mean_cycle_r_op['R_Hip_FlEx_mean'], 'r--', label='Proposed', linewidth=2)
             axes[0].fill_between(normalized_percentage,
                                 mean_cycle_r_op['R_Hip_FlEx_mean'] - mean_cycle_r_op['R_Hip_FlEx_std'],
                                 mean_cycle_r_op['R_Hip_FlEx_mean'] + mean_cycle_r_op['R_Hip_FlEx_std'],
                                 alpha=0.2, color='r')
             
-            # rmse_rhip = calculate_rmse(mean_cycle_r['R_Hip_FlEx_mean'], mean_cycle_r_op['R_Hip_FlEx_mean'])
-            # mae_rhip = calculate_mae(mean_cycle_r['R_Hip_FlEx_mean'], mean_cycle_r_op['R_Hip_FlEx_mean'])
+            # maxpeople1のデータがある場合は追加
+            if has_max1_data:
+                axes[0].plot(normalized_percentage, mean_cycle_r_op_max1['R_Hip_FlEx_mean'], color='orange', linestyle='-.', label='Baseline', linewidth=2)
+                axes[0].fill_between(normalized_percentage,
+                                    mean_cycle_r_op_max1['R_Hip_FlEx_mean'] - mean_cycle_r_op_max1['R_Hip_FlEx_std'],
+                                    mean_cycle_r_op_max1['R_Hip_FlEx_mean'] + mean_cycle_r_op_max1['R_Hip_FlEx_std'],
+                                    alpha=0.2, color='orange')
+            
             mae_rhip = calculate_mae_all_cycles(normalized_gait_cycles_r, normalized_gait_cycles_r_op, 'R_Hip_FlEx')
-            axes[0].set_ylabel('Hip Angle [deg]', fontsize=12)
-            # axes[0].set_title(f'Right Hip Flexion/Extension (RMSE: {rmse_rhip:.2f}°)', fontsize=14)
-            axes[0].set_title(f'Right Hip Flexion/Extension (MAE: {mae_rhip:.2f}°)', fontsize=14)
-            axes[0].legend(fontsize=11)
+            title_str = f'Right Hip Flexion/Extension (Proposed: {mae_rhip:.2f}°'
+            if has_max1_data and 'mae_summary_r_max1' in dir():
+                mae_rhip_max1 = mae_summary_r_max1[mae_summary_r_max1['Joint_Movement'] == 'Hip_FlEx']['MAE [deg]'].values[0]
+                title_str += f', Baseline: {mae_rhip_max1:.2f}°'
+            title_str += ')'
+            axes[0].set_ylabel('Hip Angle [deg]')
+            axes[0].set_title(title_str)
+            axes[0].legend()
             axes[0].grid(True, alpha=0.3)
             
             # 膝関節屈曲伸展
@@ -2434,19 +2503,28 @@ def main():
                                 mean_cycle_r['R_Knee_FlEx_mean'] - mean_cycle_r['R_Knee_FlEx_std'],
                                 mean_cycle_r['R_Knee_FlEx_mean'] + mean_cycle_r['R_Knee_FlEx_std'],
                                 alpha=0.2, color='b')
-            axes[1].plot(normalized_percentage, mean_cycle_r_op['R_Knee_FlEx_mean'], 'r--', label='OpenPose', linewidth=2)
+            axes[1].plot(normalized_percentage, mean_cycle_r_op['R_Knee_FlEx_mean'], 'r--', label='Proposed', linewidth=2)
             axes[1].fill_between(normalized_percentage,
                                 mean_cycle_r_op['R_Knee_FlEx_mean'] - mean_cycle_r_op['R_Knee_FlEx_std'],
                                 mean_cycle_r_op['R_Knee_FlEx_mean'] + mean_cycle_r_op['R_Knee_FlEx_std'],
                                 alpha=0.2, color='r')
             
-            # rmse_rknee = calculate_rmse(mean_cycle_r['R_Knee_FlEx_mean'], mean_cycle_r_op['R_Knee_FlEx_mean'])
-            # mae_rknee = calculate_mae(mean_cycle_r['R_Knee_FlEx_mean'], mean_cycle_r_op['R_Knee_FlEx_mean'])
+            if has_max1_data:
+                axes[1].plot(normalized_percentage, mean_cycle_r_op_max1['R_Knee_FlEx_mean'], color='orange', linestyle='-.', label='Baseline', linewidth=2)
+                axes[1].fill_between(normalized_percentage,
+                                    mean_cycle_r_op_max1['R_Knee_FlEx_mean'] - mean_cycle_r_op_max1['R_Knee_FlEx_std'],
+                                    mean_cycle_r_op_max1['R_Knee_FlEx_mean'] + mean_cycle_r_op_max1['R_Knee_FlEx_std'],
+                                    alpha=0.2, color='orange')
+            
             mae_rknee = calculate_mae_all_cycles(normalized_gait_cycles_r, normalized_gait_cycles_r_op, 'R_Knee_FlEx')
-            axes[1].set_ylabel('Knee Angle [deg]', fontsize=12)
-            # axes[1].set_title(f'Right Knee Flexion/Extension (RMSE: {rmse_rknee:.2f}°)', fontsize=14)
-            axes[1].set_title(f'Right Knee Flexion/Extension (MAE: {mae_rknee:.2f}°)', fontsize=14)
-            axes[1].legend(fontsize=11)
+            title_str = f'Right Knee Flexion/Extension (Proposed: {mae_rknee:.2f}°'
+            if has_max1_data and 'mae_summary_r_max1' in dir():
+                mae_rknee_max1 = mae_summary_r_max1[mae_summary_r_max1['Joint_Movement'] == 'Knee_FlEx']['MAE [deg]'].values[0]
+                title_str += f', Baseline: {mae_rknee_max1:.2f}°'
+            title_str += ')'
+            axes[1].set_ylabel('Knee Angle [deg]')
+            axes[1].set_title(title_str)
+            axes[1].legend()
             axes[1].grid(True, alpha=0.3)
             
             # 足関節背屈底屈
@@ -2455,24 +2533,33 @@ def main():
                                 mean_cycle_r['R_Ankle_PlDo_mean'] - mean_cycle_r['R_Ankle_PlDo_std'],
                                 mean_cycle_r['R_Ankle_PlDo_mean'] + mean_cycle_r['R_Ankle_PlDo_std'],
                                 alpha=0.2, color='b')
-            axes[2].plot(normalized_percentage, mean_cycle_r_op['R_Ankle_PlDo_mean'], 'r--', label='OpenPose', linewidth=2)
+            axes[2].plot(normalized_percentage, mean_cycle_r_op['R_Ankle_PlDo_mean'], 'r--', label='Proposed', linewidth=2)
             axes[2].fill_between(normalized_percentage,
                                 mean_cycle_r_op['R_Ankle_PlDo_mean'] - mean_cycle_r_op['R_Ankle_PlDo_std'],
                                 mean_cycle_r_op['R_Ankle_PlDo_mean'] + mean_cycle_r_op['R_Ankle_PlDo_std'],
                                 alpha=0.2, color='r')
             
-            # rmse_rankle = calculate_rmse(mean_cycle_r['R_Ankle_PlDo_mean'], mean_cycle_r_op['R_Ankle_PlDo_mean'])
-            # mae_rankle = calculate_mae(mean_cycle_r['R_Ankle_PlDo_mean'], mean_cycle_r_op['R_Ankle_PlDo_mean'])
+            if has_max1_data:
+                axes[2].plot(normalized_percentage, mean_cycle_r_op_max1['R_Ankle_PlDo_mean'], color='orange', linestyle='-.', label='Baseline', linewidth=2)
+                axes[2].fill_between(normalized_percentage,
+                                    mean_cycle_r_op_max1['R_Ankle_PlDo_mean'] - mean_cycle_r_op_max1['R_Ankle_PlDo_std'],
+                                    mean_cycle_r_op_max1['R_Ankle_PlDo_mean'] + mean_cycle_r_op_max1['R_Ankle_PlDo_std'],
+                                    alpha=0.2, color='orange')
+            
             mae_rankle = calculate_mae_all_cycles(normalized_gait_cycles_r, normalized_gait_cycles_r_op, 'R_Ankle_PlDo')
-            axes[2].set_xlabel('Gait Cycle [%]', fontsize=12)
-            axes[2].set_ylabel('Ankle Angle [deg]', fontsize=12)
-            # axes[2].set_title(f'Right Ankle Plantarflexion/Dorsiflexion (RMSE: {rmse_rankle:.2f}°)', fontsize=14)
-            axes[2].set_title(f'Right Ankle Plantarflexion/Dorsiflexion (MAE: {mae_rankle:.2f}°)', fontsize=14)
-            axes[2].legend(fontsize=11)
+            title_str = f'Right Ankle Plantarflexion/Dorsiflexion (Proposed: {mae_rankle:.2f}°'
+            if has_max1_data and 'mae_summary_r_max1' in dir():
+                mae_rankle_max1 = mae_summary_r_max1[mae_summary_r_max1['Joint_Movement'] == 'Ankle_PlDo']['MAE [deg]'].values[0]
+                title_str += f', Baseline: {mae_rankle_max1:.2f}°'
+            title_str += ')'
+            axes[2].set_xlabel('Gait Cycle [%]')
+            axes[2].set_ylabel('Ankle Angle [deg]')
+            axes[2].set_title(title_str)
+            axes[2].legend()
             axes[2].grid(True, alpha=0.3)
             
             plt.tight_layout()
-            plt.savefig(op_result_dir / f"comparison_FlEx_R_{csv_path.stem}.png", dpi=300)
+            plt.savefig(op_result_dir / f"comparison_FlEx_R_{csv_path.stem}_vs_max1.png", dpi=300)
             plt.close()
             
             # 股関節内旋外旋の比較
@@ -2483,24 +2570,33 @@ def main():
                            mean_cycle_r['R_Hip_InEx_mean'] - mean_cycle_r['R_Hip_InEx_std'],
                            mean_cycle_r['R_Hip_InEx_mean'] + mean_cycle_r['R_Hip_InEx_std'],
                            alpha=0.2, color='b')
-            ax.plot(normalized_percentage, mean_cycle_r_op['R_Hip_InEx_mean'], 'r--', label='OpenPose', linewidth=2)
+            ax.plot(normalized_percentage, mean_cycle_r_op['R_Hip_InEx_mean'], 'r--', label='Proposed', linewidth=2)
             ax.fill_between(normalized_percentage,
                            mean_cycle_r_op['R_Hip_InEx_mean'] - mean_cycle_r_op['R_Hip_InEx_std'],
                            mean_cycle_r_op['R_Hip_InEx_mean'] + mean_cycle_r_op['R_Hip_InEx_std'],
                            alpha=0.2, color='r')
             
-            # rmse_rhip_inex = calculate_rmse(mean_cycle_r['R_Hip_InEx_mean'], mean_cycle_r_op['R_Hip_InEx_mean'])
-            # mae_rhip_inex = calculate_mae(mean_cycle_r['R_Hip_InEx_mean'], mean_cycle_r_op['R_Hip_InEx_mean'])
+            if has_max1_data:
+                ax.plot(normalized_percentage, mean_cycle_r_op_max1['R_Hip_InEx_mean'], color='orange', linestyle='-.', label='Baseline', linewidth=2)
+                ax.fill_between(normalized_percentage,
+                               mean_cycle_r_op_max1['R_Hip_InEx_mean'] - mean_cycle_r_op_max1['R_Hip_InEx_std'],
+                               mean_cycle_r_op_max1['R_Hip_InEx_mean'] + mean_cycle_r_op_max1['R_Hip_InEx_std'],
+                               alpha=0.2, color='orange')
+            
             mae_rhip_inex = calculate_mae_all_cycles(normalized_gait_cycles_r, normalized_gait_cycles_r_op, 'R_Hip_InEx')
-            ax.set_xlabel('Gait Cycle [%]', fontsize=12)
-            ax.set_ylabel('Hip Angle [deg]', fontsize=12)
-            # ax.set_title(f'Right Hip Internal/External Rotation (RMSE: {rmse_rhip_inex:.2f}°)', fontsize=14)
-            ax.set_title(f'Right Hip Internal/External Rotation (MAE: {mae_rhip_inex:.2f}°)', fontsize=14)
-            ax.legend(fontsize=11)
+            title_str = f'Right Hip Internal/External Rotation (Proposed: {mae_rhip_inex:.2f}°'
+            if has_max1_data and 'mae_summary_r_max1' in dir():
+                mae_rhip_inex_max1 = mae_summary_r_max1[mae_summary_r_max1['Joint_Movement'] == 'Hip_InEx']['MAE [deg]'].values[0]
+                title_str += f', Baseline: {mae_rhip_inex_max1:.2f}°'
+            title_str += ')'
+            ax.set_xlabel('Gait Cycle [%]')
+            ax.set_ylabel('Hip Angle [deg]')
+            ax.set_title(title_str)
+            ax.legend()
             ax.grid(True, alpha=0.3)
             
             plt.tight_layout()
-            plt.savefig(op_result_dir / f"comparison_InEx_R_{csv_path.stem}.png", dpi=300)
+            plt.savefig(op_result_dir / f"comparison_InEx_R_{csv_path.stem}_vs_max1.png", dpi=300)
             plt.close()
             
             # 股関節内転外転の比較
@@ -2511,34 +2607,34 @@ def main():
                            mean_cycle_r['R_Hip_AdAb_mean'] - mean_cycle_r['R_Hip_AdAb_std'],
                            mean_cycle_r['R_Hip_AdAb_mean'] + mean_cycle_r['R_Hip_AdAb_std'],
                            alpha=0.2, color='b')
-            ax.plot(normalized_percentage, mean_cycle_r_op['R_Hip_AdAb_mean'], 'r--', label='OpenPose', linewidth=2)
+            ax.plot(normalized_percentage, mean_cycle_r_op['R_Hip_AdAb_mean'], 'r--', label='Proposed', linewidth=2)
             ax.fill_between(normalized_percentage,
                            mean_cycle_r_op['R_Hip_AdAb_mean'] - mean_cycle_r_op['R_Hip_AdAb_std'],
                            mean_cycle_r_op['R_Hip_AdAb_mean'] + mean_cycle_r_op['R_Hip_AdAb_std'],
                            alpha=0.2, color='r')
             
-            # rmse_rhip_adab = calculate_rmse(mean_cycle_r['R_Hip_AdAb_mean'], mean_cycle_r_op['R_Hip_AdAb_mean'])
-            # mae_rhip_adab = calculate_mae(mean_cycle_r['R_Hip_AdAb_mean'], mean_cycle_r_op['R_Hip_AdAb_mean'])
+            if has_max1_data:
+                ax.plot(normalized_percentage, mean_cycle_r_op_max1['R_Hip_AdAb_mean'], color='orange', linestyle='-.', label='Baseline', linewidth=2)
+                ax.fill_between(normalized_percentage,
+                               mean_cycle_r_op_max1['R_Hip_AdAb_mean'] - mean_cycle_r_op_max1['R_Hip_AdAb_std'],
+                               mean_cycle_r_op_max1['R_Hip_AdAb_mean'] + mean_cycle_r_op_max1['R_Hip_AdAb_std'],
+                               alpha=0.2, color='orange')
+            
             mae_rhip_adab = calculate_mae_all_cycles(normalized_gait_cycles_r, normalized_gait_cycles_r_op, 'R_Hip_AdAb')
-            ax.set_xlabel('Gait Cycle [%]', fontsize=12)
-            ax.set_ylabel('Hip Angle [deg]', fontsize=12)
-            # ax.set_title(f'Right Hip Adduction/Abduction (RMSE: {rmse_rhip_adab:.2f}°)', fontsize=14)
-            ax.set_title(f'Right Hip Adduction/Abduction (MAE: {mae_rhip_adab:.2f}°)', fontsize=14)
-            ax.legend(fontsize=11)
+            title_str = f'Right Hip Adduction/Abduction (Proposed: {mae_rhip_adab:.2f}°'
+            if has_max1_data and 'mae_summary_r_max1' in dir():
+                mae_rhip_adab_max1 = mae_summary_r_max1[mae_summary_r_max1['Joint_Movement'] == 'Hip_AdAb']['MAE [deg]'].values[0]
+                title_str += f', Baseline: {mae_rhip_adab_max1:.2f}°'
+            title_str += ')'
+            ax.set_xlabel('Gait Cycle [%]')
+            ax.set_ylabel('Hip Angle [deg]')
+            ax.set_title(title_str)
+            ax.legend()
             ax.grid(True, alpha=0.3)
             
             plt.tight_layout()
-            plt.savefig(op_result_dir / f"comparison_AdAb_R_{csv_path.stem}.png", dpi=300)
+            plt.savefig(op_result_dir / f"comparison_AdAb_R_{csv_path.stem}_vs_max1.png", dpi=300)
             plt.close()
-            
-            # # RMSEサマリーを保存
-            # rmse_summary_r = pd.DataFrame({
-            #     'Joint_Movement': ['Hip_FlEx', 'Knee_FlEx', 'Ankle_PlDo', 'Hip_InEx', 'Hip_AdAb'],
-            #     'RMSE [deg]': [rmse_rhip, rmse_rknee, rmse_rankle, rmse_rhip_inex, rmse_rhip_adab]
-            # })
-            # rmse_summary_r.to_csv(op_result_dir / f"RMSE_summary_R_{csv_path.stem}.csv", index=False)
-            # print(f"\n右足RMSE:")
-            # print(rmse_summary_r)
             
             # MAEサマリーを保存
             mae_summary_r = pd.DataFrame({
@@ -2561,19 +2657,28 @@ def main():
                                 mean_cycle_l['L_Hip_FlEx_mean'] - mean_cycle_l['L_Hip_FlEx_std'],
                                 mean_cycle_l['L_Hip_FlEx_mean'] + mean_cycle_l['L_Hip_FlEx_std'],
                                 alpha=0.2, color='b')
-            axes[0].plot(normalized_percentage, mean_cycle_l_op['L_Hip_FlEx_mean'], 'r--', label='OpenPose', linewidth=2)
+            axes[0].plot(normalized_percentage, mean_cycle_l_op['L_Hip_FlEx_mean'], 'r--', label='Proposed', linewidth=2)
             axes[0].fill_between(normalized_percentage,
                                 mean_cycle_l_op['L_Hip_FlEx_mean'] - mean_cycle_l_op['L_Hip_FlEx_std'],
                                 mean_cycle_l_op['L_Hip_FlEx_mean'] + mean_cycle_l_op['L_Hip_FlEx_std'],
                                 alpha=0.2, color='r')
             
-            # rmse_lhip = calculate_rmse(mean_cycle_l['L_Hip_FlEx_mean'], mean_cycle_l_op['L_Hip_FlEx_mean'])
-            # mae_lhip = calculate_mae(mean_cycle_l['L_Hip_FlEx_mean'], mean_cycle_l_op['L_Hip_FlEx_mean'])
+            if has_max1_data:
+                axes[0].plot(normalized_percentage, mean_cycle_l_op_max1['L_Hip_FlEx_mean'], color='orange', linestyle='-.', label='Baseline', linewidth=2)
+                axes[0].fill_between(normalized_percentage,
+                                    mean_cycle_l_op_max1['L_Hip_FlEx_mean'] - mean_cycle_l_op_max1['L_Hip_FlEx_std'],
+                                    mean_cycle_l_op_max1['L_Hip_FlEx_mean'] + mean_cycle_l_op_max1['L_Hip_FlEx_std'],
+                                    alpha=0.2, color='orange')
+            
             mae_lhip = calculate_mae_all_cycles(normalized_gait_cycles_l, normalized_gait_cycles_l_op, 'L_Hip_FlEx')
-            axes[0].set_ylabel('Hip Angle [deg]', fontsize=12)
-            # axes[0].set_title(f'Left Hip Flexion/Extension (RMSE: {rmse_lhip:.2f}°)', fontsize=14)
-            axes[0].set_title(f'Left Hip Flexion/Extension (MAE: {mae_lhip:.2f}°)', fontsize=14)
-            axes[0].legend(fontsize=11)
+            title_str = f'Left Hip Flexion/Extension (Proposed: {mae_lhip:.2f}°'
+            if has_max1_data and 'mae_summary_l_max1' in dir():
+                mae_lhip_max1 = mae_summary_l_max1[mae_summary_l_max1['Joint_Movement'] == 'Hip_FlEx']['MAE [deg]'].values[0]
+                title_str += f', Baseline: {mae_lhip_max1:.2f}°'
+            title_str += ')'
+            axes[0].set_ylabel('Hip Angle [deg]')
+            axes[0].set_title(title_str)
+            axes[0].legend()
             axes[0].grid(True, alpha=0.3)
             
             # 膝関節屈曲伸展
@@ -2582,19 +2687,28 @@ def main():
                                 mean_cycle_l['L_Knee_FlEx_mean'] - mean_cycle_l['L_Knee_FlEx_std'],
                                 mean_cycle_l['L_Knee_FlEx_mean'] + mean_cycle_l['L_Knee_FlEx_std'],
                                 alpha=0.2, color='b')
-            axes[1].plot(normalized_percentage, mean_cycle_l_op['L_Knee_FlEx_mean'], 'r--', label='OpenPose', linewidth=2)
+            axes[1].plot(normalized_percentage, mean_cycle_l_op['L_Knee_FlEx_mean'], 'r--', label='Proposed', linewidth=2)
             axes[1].fill_between(normalized_percentage,
                                 mean_cycle_l_op['L_Knee_FlEx_mean'] - mean_cycle_l_op['L_Knee_FlEx_std'],
                                 mean_cycle_l_op['L_Knee_FlEx_mean'] + mean_cycle_l_op['L_Knee_FlEx_std'],
                                 alpha=0.2, color='r')
             
-            # rmse_lknee = calculate_rmse(mean_cycle_l['L_Knee_FlEx_mean'], mean_cycle_l_op['L_Knee_FlEx_mean'])
-            # mae_lknee = calculate_mae(mean_cycle_l['L_Knee_FlEx_mean'], mean_cycle_l_op['L_Knee_FlEx_mean'])
+            if has_max1_data:
+                axes[1].plot(normalized_percentage, mean_cycle_l_op_max1['L_Knee_FlEx_mean'], color='orange', linestyle='-.', label='Baseline', linewidth=2)
+                axes[1].fill_between(normalized_percentage,
+                                    mean_cycle_l_op_max1['L_Knee_FlEx_mean'] - mean_cycle_l_op_max1['L_Knee_FlEx_std'],
+                                    mean_cycle_l_op_max1['L_Knee_FlEx_mean'] + mean_cycle_l_op_max1['L_Knee_FlEx_std'],
+                                    alpha=0.2, color='orange')
+            
             mae_lknee = calculate_mae_all_cycles(normalized_gait_cycles_l, normalized_gait_cycles_l_op, 'L_Knee_FlEx')
-            axes[1].set_ylabel('Knee Angle [deg]', fontsize=12)
-            # axes[1].set_title(f'Left Knee Flexion/Extension (RMSE: {rmse_lknee:.2f}°)', fontsize=14)
-            axes[1].set_title(f'Left Knee Flexion/Extension (MAE: {mae_lknee:.2f}°)', fontsize=14)
-            axes[1].legend(fontsize=11)
+            title_str = f'Left Knee Flexion/Extension (Proposed: {mae_lknee:.2f}°'
+            if has_max1_data and 'mae_summary_l_max1' in dir():
+                mae_lknee_max1 = mae_summary_l_max1[mae_summary_l_max1['Joint_Movement'] == 'Knee_FlEx']['MAE [deg]'].values[0]
+                title_str += f', Baseline: {mae_lknee_max1:.2f}°'
+            title_str += ')'
+            axes[1].set_ylabel('Knee Angle [deg]')
+            axes[1].set_title(title_str)
+            axes[1].legend()
             axes[1].grid(True, alpha=0.3)
             
             # 足関節背屈底屈
@@ -2603,24 +2717,33 @@ def main():
                                 mean_cycle_l['L_Ankle_PlDo_mean'] - mean_cycle_l['L_Ankle_PlDo_std'],
                                 mean_cycle_l['L_Ankle_PlDo_mean'] + mean_cycle_l['L_Ankle_PlDo_std'],
                                 alpha=0.2, color='b')
-            axes[2].plot(normalized_percentage, mean_cycle_l_op['L_Ankle_PlDo_mean'], 'r--', label='OpenPose', linewidth=2)
+            axes[2].plot(normalized_percentage, mean_cycle_l_op['L_Ankle_PlDo_mean'], 'r--', label='Proposed', linewidth=2)
             axes[2].fill_between(normalized_percentage,
                                 mean_cycle_l_op['L_Ankle_PlDo_mean'] - mean_cycle_l_op['L_Ankle_PlDo_std'],
                                 mean_cycle_l_op['L_Ankle_PlDo_mean'] + mean_cycle_l_op['L_Ankle_PlDo_std'],
                                 alpha=0.2, color='r')
             
-            # rmse_lankle = calculate_rmse(mean_cycle_l['L_Ankle_PlDo_mean'], mean_cycle_l_op['L_Ankle_PlDo_mean'])
-            # mae_lankle = calculate_mae(mean_cycle_l['L_Ankle_PlDo_mean'], mean_cycle_l_op['L_Ankle_PlDo_mean'])
+            if has_max1_data:
+                axes[2].plot(normalized_percentage, mean_cycle_l_op_max1['L_Ankle_PlDo_mean'], color='orange', linestyle='-.', label='Baseline', linewidth=2)
+                axes[2].fill_between(normalized_percentage,
+                                    mean_cycle_l_op_max1['L_Ankle_PlDo_mean'] - mean_cycle_l_op_max1['L_Ankle_PlDo_std'],
+                                    mean_cycle_l_op_max1['L_Ankle_PlDo_mean'] + mean_cycle_l_op_max1['L_Ankle_PlDo_std'],
+                                    alpha=0.2, color='orange')
+            
             mae_lankle = calculate_mae_all_cycles(normalized_gait_cycles_l, normalized_gait_cycles_l_op, 'L_Ankle_PlDo')
-            axes[2].set_xlabel('Gait Cycle [%]', fontsize=12)
-            axes[2].set_ylabel('Ankle Angle [deg]', fontsize=12)
-            # axes[2].set_title(f'Left Ankle Plantarflexion/Dorsiflexion (RMSE: {rmse_lankle:.2f}°)', fontsize=14)
-            axes[2].set_title(f'Left Ankle Plantarflexion/Dorsiflexion (MAE: {mae_lankle:.2f}°)', fontsize=14)
-            axes[2].legend(fontsize=11)
+            title_str = f'Left Ankle Plantarflexion/Dorsiflexion (Proposed: {mae_lankle:.2f}°'
+            if has_max1_data and 'mae_summary_l_max1' in dir():
+                mae_lankle_max1 = mae_summary_l_max1[mae_summary_l_max1['Joint_Movement'] == 'Ankle_PlDo']['MAE [deg]'].values[0]
+                title_str += f', Baseline: {mae_lankle_max1:.2f}°'
+            title_str += ')'
+            axes[2].set_xlabel('Gait Cycle [%]')
+            axes[2].set_ylabel('Ankle Angle [deg]')
+            axes[2].set_title(title_str)
+            axes[2].legend()
             axes[2].grid(True, alpha=0.3)
             
             plt.tight_layout()
-            plt.savefig(op_result_dir / f"comparison_FlEx_L_{csv_path.stem}.png", dpi=300)
+            plt.savefig(op_result_dir / f"comparison_FlEx_L_{csv_path.stem}_vs_max1.png", dpi=300)
             plt.close()
             
             # 股関節内旋外旋の比較
@@ -2631,24 +2754,33 @@ def main():
                            mean_cycle_l['L_Hip_InEx_mean'] - mean_cycle_l['L_Hip_InEx_std'],
                            mean_cycle_l['L_Hip_InEx_mean'] + mean_cycle_l['L_Hip_InEx_std'],
                            alpha=0.2, color='b')
-            ax.plot(normalized_percentage, mean_cycle_l_op['L_Hip_InEx_mean'], 'r--', label='OpenPose', linewidth=2)
+            ax.plot(normalized_percentage, mean_cycle_l_op['L_Hip_InEx_mean'], 'r--', label='Proposed', linewidth=2)
             ax.fill_between(normalized_percentage,
                            mean_cycle_l_op['L_Hip_InEx_mean'] - mean_cycle_l_op['L_Hip_InEx_std'],
                            mean_cycle_l_op['L_Hip_InEx_mean'] + mean_cycle_l_op['L_Hip_InEx_std'],
                            alpha=0.2, color='r')
             
-            # rmse_lhip_inex = calculate_rmse(mean_cycle_l['L_Hip_InEx_mean'], mean_cycle_l_op['L_Hip_InEx_mean'])
-            # mae_lhip_inex = calculate_mae(mean_cycle_l['L_Hip_InEx_mean'], mean_cycle_l_op['L_Hip_InEx_mean'])
+            if has_max1_data:
+                ax.plot(normalized_percentage, mean_cycle_l_op_max1['L_Hip_InEx_mean'], color='orange', linestyle='-.', label='Baseline', linewidth=2)
+                ax.fill_between(normalized_percentage,
+                               mean_cycle_l_op_max1['L_Hip_InEx_mean'] - mean_cycle_l_op_max1['L_Hip_InEx_std'],
+                               mean_cycle_l_op_max1['L_Hip_InEx_mean'] + mean_cycle_l_op_max1['L_Hip_InEx_std'],
+                               alpha=0.2, color='orange')
+            
             mae_lhip_inex = calculate_mae_all_cycles(normalized_gait_cycles_l, normalized_gait_cycles_l_op, 'L_Hip_InEx')
-            ax.set_xlabel('Gait Cycle [%]', fontsize=12)
-            ax.set_ylabel('Hip Angle [deg]', fontsize=12)
-            # ax.set_title(f'Left Hip Internal/External Rotation (RMSE: {rmse_lhip_inex:.2f}°)', fontsize=14)
-            ax.set_title(f'Left Hip Internal/External Rotation (MAE: {mae_lhip_inex:.2f}°)', fontsize=14)
-            ax.legend(fontsize=11)
+            title_str = f'Left Hip Internal/External Rotation (Proposed: {mae_lhip_inex:.2f}°'
+            if has_max1_data and 'mae_summary_l_max1' in dir():
+                mae_lhip_inex_max1 = mae_summary_l_max1[mae_summary_l_max1['Joint_Movement'] == 'Hip_InEx']['MAE [deg]'].values[0]
+                title_str += f', Baseline: {mae_lhip_inex_max1:.2f}°'
+            title_str += ')'
+            ax.set_xlabel('Gait Cycle [%]')
+            ax.set_ylabel('Hip Angle [deg]')
+            ax.set_title(title_str)
+            ax.legend()
             ax.grid(True, alpha=0.3)
             
             plt.tight_layout()
-            plt.savefig(op_result_dir / f"comparison_InEx_L_{csv_path.stem}.png", dpi=300)
+            plt.savefig(op_result_dir / f"comparison_InEx_L_{csv_path.stem}_vs_max1.png", dpi=300)
             plt.close()
             
             # 股関節内転外転の比較
@@ -2659,34 +2791,34 @@ def main():
                            mean_cycle_l['L_Hip_AdAb_mean'] - mean_cycle_l['L_Hip_AdAb_std'],
                            mean_cycle_l['L_Hip_AdAb_mean'] + mean_cycle_l['L_Hip_AdAb_std'],
                            alpha=0.2, color='b')
-            ax.plot(normalized_percentage, mean_cycle_l_op['L_Hip_AdAb_mean'], 'r--', label='OpenPose', linewidth=2)
+            ax.plot(normalized_percentage, mean_cycle_l_op['L_Hip_AdAb_mean'], 'r--', label='Proposed', linewidth=2)
             ax.fill_between(normalized_percentage,
                            mean_cycle_l_op['L_Hip_AdAb_mean'] - mean_cycle_l_op['L_Hip_AdAb_std'],
                            mean_cycle_l_op['L_Hip_AdAb_mean'] + mean_cycle_l_op['L_Hip_AdAb_std'],
                            alpha=0.2, color='r')
             
-            # rmse_lhip_adab = calculate_rmse(mean_cycle_l['L_Hip_AdAb_mean'], mean_cycle_l_op['L_Hip_AdAb_mean'])
-            # mae_lhip_adab = calculate_mae(mean_cycle_l['L_Hip_AdAb_mean'], mean_cycle_l_op['L_Hip_AdAb_mean'])
+            if has_max1_data:
+                ax.plot(normalized_percentage, mean_cycle_l_op_max1['L_Hip_AdAb_mean'], color='orange', linestyle='-.', label='Baseline', linewidth=2)
+                ax.fill_between(normalized_percentage,
+                               mean_cycle_l_op_max1['L_Hip_AdAb_mean'] - mean_cycle_l_op_max1['L_Hip_AdAb_std'],
+                               mean_cycle_l_op_max1['L_Hip_AdAb_mean'] + mean_cycle_l_op_max1['L_Hip_AdAb_std'],
+                               alpha=0.2, color='orange')
+            
             mae_lhip_adab = calculate_mae_all_cycles(normalized_gait_cycles_l, normalized_gait_cycles_l_op, 'L_Hip_AdAb')
-            ax.set_xlabel('Gait Cycle [%]', fontsize=12)
-            ax.set_ylabel('Hip Angle [deg]', fontsize=12)
-            # ax.set_title(f'Left Hip Adduction/Abduction (RMSE: {rmse_lhip_adab:.2f}°)', fontsize=14)
-            ax.set_title(f'Left Hip Adduction/Abduction (MAE: {mae_lhip_adab:.2f}°)', fontsize=14)
-            ax.legend(fontsize=11)
+            title_str = f'Left Hip Adduction/Abduction (Proposed: {mae_lhip_adab:.2f}°'
+            if has_max1_data and 'mae_summary_l_max1' in dir():
+                mae_lhip_adab_max1 = mae_summary_l_max1[mae_summary_l_max1['Joint_Movement'] == 'Hip_AdAb']['MAE [deg]'].values[0]
+                title_str += f', Baseline: {mae_lhip_adab_max1:.2f}°'
+            title_str += ')'
+            ax.set_xlabel('Gait Cycle [%]')
+            ax.set_ylabel('Hip Angle [deg]')
+            ax.set_title(title_str)
+            ax.legend()
             ax.grid(True, alpha=0.3)
             
             plt.tight_layout()
-            plt.savefig(op_result_dir / f"comparison_AdAb_L_{csv_path.stem}.png", dpi=300)
+            plt.savefig(op_result_dir / f"comparison_AdAb_L_{csv_path.stem}_vs_max1.png", dpi=300)
             plt.close()
-            
-            # # RMSEサマリーを保存
-            # rmse_summary_l = pd.DataFrame({
-            #     'Joint_Movement': ['Hip_FlEx', 'Knee_FlEx', 'Ankle_PlDo', 'Hip_InEx', 'Hip_AdAb'],
-            #     'RMSE [deg]': [rmse_lhip, rmse_lknee, rmse_lankle, rmse_lhip_inex, rmse_lhip_adab]
-            # })
-            # rmse_summary_l.to_csv(op_result_dir / f"RMSE_summary_L_{csv_path.stem}.csv", index=False)
-            # print(f"\n左足RMSE:")
-            # print(rmse_summary_l)
             
             # MAEサマリーを保存
             mae_summary_l = pd.DataFrame({
@@ -2696,6 +2828,365 @@ def main():
             mae_summary_l.to_csv(op_result_dir / f"MAE_summary_L_{csv_path.stem}.csv", index=False)
             print(f"\n左足MAE:")
             print(mae_summary_l)
+            
+            ###########################################
+            # MAE比較バープロット（YoloSeg vs maxpeople1）
+            ###########################################
+            if has_max1_data and 'mae_summary_r_max1' in dir() and 'mae_summary_l_max1' in dir():
+                print("\nMAE比較バープロットを作成中...")
+                
+                # 右足
+                fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+                
+                joint_names = ['Hip FlEx', 'Knee FlEx', 'Ankle PlDo', 'Hip InEx', 'Hip AdAb']
+                x = np.arange(len(joint_names))
+                width = 0.35
+                
+                mae_yoloseg_r = [mae_rhip, mae_rknee, mae_rankle, mae_rhip_inex, mae_rhip_adab]
+                mae_max1_r = mae_summary_r_max1['MAE [deg]'].values
+                
+                bars1 = ax.bar(x - width/2, mae_yoloseg_r, width, label='proposed', color='red', alpha=0.7)
+                bars2 = ax.bar(x + width/2, mae_max1_r, width, label='baseline', color='orange', alpha=0.7)
+                
+                ax.set_ylabel('MAE [deg]')
+                ax.set_title('Right Leg Joint Angle MAE Comparison')
+                ax.set_xticks(x)
+                ax.set_xticklabels(joint_names, rotation=15, ha='right')
+                ax.legend()
+                ax.grid(True, alpha=0.3, axis='y')
+                
+                # 値をバーの上に表示
+                for bar in bars1:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{height:.1f}°', ha='center', va='bottom')
+                for bar in bars2:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{height:.1f}°', ha='center', va='bottom')
+                
+                plt.tight_layout()
+                plt.savefig(op_result_dir / f"MAE_comparison_R_{csv_path.stem}_yoloseg_vs_max1.png", dpi=300)
+                plt.close()
+                
+                # 左足
+                fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+                
+                mae_yoloseg_l = [mae_lhip, mae_lknee, mae_lankle, mae_lhip_inex, mae_lhip_adab]
+                mae_max1_l = mae_summary_l_max1['MAE [deg]'].values
+                
+                bars1 = ax.bar(x - width/2, mae_yoloseg_l, width, label='proposed', color='red', alpha=0.7)
+                bars2 = ax.bar(x + width/2, mae_max1_l, width, label='baseline', color='orange', alpha=0.7)
+                
+                ax.set_ylabel('MAE [deg]')
+                ax.set_title('Left Leg Joint Angle MAE Comparison')
+                ax.set_xticks(x)
+                ax.set_xticklabels(joint_names, rotation=15, ha='right')
+                ax.legend()
+                ax.grid(True, alpha=0.3, axis='y')
+                
+                for bar in bars1:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{height:.1f}°', ha='center', va='bottom')
+                for bar in bars2:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{height:.1f}°', ha='center', va='bottom')
+                
+                plt.tight_layout()
+                plt.savefig(op_result_dir / f"MAE_comparison_L_{csv_path.stem}_yoloseg_vs_max1.png", dpi=300)
+                plt.close()
+                
+                print(f"MAE比較バープロットを保存しました")
+                
+                ###########################################
+                # 歩行パラメータMAEの比較グラフ（YoloSeg vs maxpeople1）
+                ###########################################
+                if 'mae_gait_params_both_max1' in dir():
+                    print("\n歩行パラメータMAE比較グラフを作成中...")
+                    
+                    # 距離・速度系パラメータ
+                    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+                    
+                    # 距離系パラメータ
+                    distance_params = ['Gait Speed', 'Stride Length', 'Step Length', 'Step Width']
+                    x = np.arange(len(distance_params))
+                    width = 0.35
+                    
+                    distance_mae_yoloseg = [mae_both_df[mae_both_df['Parameter'] == p]['MAE_Average'].values[0] for p in distance_params]
+                    distance_mae_max1 = [mae_gait_params_both_max1[mae_gait_params_both_max1['Parameter'] == p]['MAE_Average'].values[0] for p in distance_params]
+                    
+                    bars1 = axes[0, 0].bar(x - width/2, distance_mae_yoloseg, width, label='proposed', color='red', alpha=0.7)
+                    bars2 = axes[0, 0].bar(x + width/2, distance_mae_max1, width, label='baseline', color='orange', alpha=0.7)
+                    
+                    axes[0, 0].set_ylabel('MAE [m or m/s]')
+                    axes[0, 0].set_title('Distance/Speed Parameters MAE Comparison')
+                    axes[0, 0].set_xticks(x)
+                    axes[0, 0].set_xticklabels(distance_params, rotation=15, ha='right')
+                    axes[0, 0].legend()
+                    axes[0, 0].grid(True, alpha=0.3, axis='y')
+                    
+                    for bar in bars1:
+                        height = bar.get_height()
+                        axes[0, 0].text(bar.get_x() + bar.get_width()/2., height,
+                               f'{height:.3f}', ha='center', va='bottom')
+                    for bar in bars2:
+                        height = bar.get_height()
+                        axes[0, 0].text(bar.get_x() + bar.get_width()/2., height,
+                               f'{height:.3f}', ha='center', va='bottom')
+                    
+                    # 時間系パラメータ
+                    time_params = ['Cycle Duration', 'Stance Duration', 'Swing Duration']
+                    x = np.arange(len(time_params))
+                    
+                    time_mae_yoloseg = [mae_both_df[mae_both_df['Parameter'] == p]['MAE_Average'].values[0] for p in time_params]
+                    time_mae_max1 = [mae_gait_params_both_max1[mae_gait_params_both_max1['Parameter'] == p]['MAE_Average'].values[0] for p in time_params]
+                    
+                    bars1 = axes[0, 1].bar(x - width/2, time_mae_yoloseg, width, label='proposed', color='red', alpha=0.7)
+                    bars2 = axes[0, 1].bar(x + width/2, time_mae_max1, width, label='baseline', color='orange', alpha=0.7)
+                    
+                    axes[0, 1].set_ylabel('MAE [s]')
+                    axes[0, 1].set_title('Time Parameters MAE Comparison')
+                    axes[0, 1].set_xticks(x)
+                    axes[0, 1].set_xticklabels(time_params, rotation=15, ha='right')
+                    axes[0, 1].legend()
+                    axes[0, 1].grid(True, alpha=0.3, axis='y')
+                    
+                    for bar in bars1:
+                        height = bar.get_height()
+                        axes[0, 1].text(bar.get_x() + bar.get_width()/2., height,
+                               f'{height:.3f}', ha='center', va='bottom')
+                    for bar in bars2:
+                        height = bar.get_height()
+                        axes[0, 1].text(bar.get_x() + bar.get_width()/2., height,
+                               f'{height:.3f}', ha='center', va='bottom')
+                    
+                    # 割合系パラメータ
+                    percent_params = ['Stance Phase', 'Swing Phase']
+                    x = np.arange(len(percent_params))
+                    
+                    percent_mae_yoloseg = [mae_both_df[mae_both_df['Parameter'] == p]['MAE_Average'].values[0] for p in percent_params]
+                    percent_mae_max1 = [mae_gait_params_both_max1[mae_gait_params_both_max1['Parameter'] == p]['MAE_Average'].values[0] for p in percent_params]
+                    
+                    bars1 = axes[1, 0].bar(x - width/2, percent_mae_yoloseg, width, label='proposed', color='red', alpha=0.7)
+                    bars2 = axes[1, 0].bar(x + width/2, percent_mae_max1, width, label='baseline', color='orange', alpha=0.7)
+                    
+                    axes[1, 0].set_ylabel('MAE [%]')
+                    axes[1, 0].set_title('Phase Parameters MAE Comparison')
+                    axes[1, 0].set_xticks(x)
+                    axes[1, 0].set_xticklabels(percent_params)
+                    axes[1, 0].legend()
+                    axes[1, 0].grid(True, alpha=0.3, axis='y')
+                    
+                    for bar in bars1:
+                        height = bar.get_height()
+                        axes[1, 0].text(bar.get_x() + bar.get_width()/2., height,
+                               f'{height:.2f}', ha='center', va='bottom')
+                    for bar in bars2:
+                        height = bar.get_height()
+                        axes[1, 0].text(bar.get_x() + bar.get_width()/2., height,
+                               f'{height:.2f}', ha='center', va='bottom')
+                    
+                    # 全パラメータの比較（横棒グラフ）
+                    all_params = distance_params + time_params + percent_params
+                    all_mae_yoloseg = distance_mae_yoloseg + time_mae_yoloseg + percent_mae_yoloseg
+                    all_mae_max1 = distance_mae_max1 + time_mae_max1 + percent_mae_max1
+                    
+                    # 正規化MAEで比較（YoloSeg vs maxpeople1）
+                    y = np.arange(len(all_params))
+                    height = 0.35
+                    
+                    # どちらが良いかを色で示す（小さい方が良い）
+                    colors_yoloseg = ['green' if yolo < max1 else 'red' for yolo, max1 in zip(all_mae_yoloseg, all_mae_max1)]
+                    colors_max1 = ['green' if max1 < yolo else 'orange' for yolo, max1 in zip(all_mae_yoloseg, all_mae_max1)]
+                    
+                    axes[1, 1].barh(y + height/2, all_mae_yoloseg, height, label='proposed', color='red', alpha=0.7)
+                    axes[1, 1].barh(y - height/2, all_mae_max1, height, label='baseline', color='orange', alpha=0.7)
+                    
+                    axes[1, 1].set_xlabel('MAE (各単位)')
+                    axes[1, 1].set_title('All Gait Parameters MAE Comparison')
+                    axes[1, 1].set_yticks(y)
+                    axes[1, 1].set_yticklabels(all_params)
+                    axes[1, 1].legend(loc='lower right')
+                    axes[1, 1].grid(True, alpha=0.3, axis='x')
+                    
+                    plt.tight_layout()
+                    plt.savefig(op_result_dir / f"MAE_gait_parameters_comparison_{csv_path.stem}_yoloseg_vs_max1.png", dpi=300)
+                    plt.close()
+                    
+                    print(f"歩行パラメータMAE比較グラフを保存しました")
+                    
+                    # 比較サマリーをCSVに保存
+                    comparison_summary = []
+                    for p in all_params:
+                        yolo_mae = mae_both_df[mae_both_df['Parameter'] == p]['MAE_Average'].values[0]
+                        max1_mae = mae_gait_params_both_max1[mae_gait_params_both_max1['Parameter'] == p]['MAE_Average'].values[0]
+                        better = 'YoloSeg' if yolo_mae < max1_mae else 'maxpeople1'
+                        comparison_summary.append({
+                            'Parameter': p,
+                            'MAE_YoloSeg': yolo_mae,
+                            'MAE_maxpeople1': max1_mae,
+                            'Better': better,
+                            'Difference': abs(yolo_mae - max1_mae)
+                        })
+                    
+                    comparison_summary_df = pd.DataFrame(comparison_summary)
+                    comparison_summary_df.to_csv(op_result_dir / f"MAE_gait_parameters_comparison_summary_{csv_path.stem}.csv", index=False)
+                    print(f"\n歩行パラメータMAE比較サマリー:")
+                    print(comparison_summary_df.to_string(index=False))
+
+
+                    comparison_summary_df = pd.DataFrame(comparison_summary)
+                    comparison_summary_df.to_csv(op_result_dir / f"MAE_gait_parameters_comparison_summary_{csv_path.stem}.csv", index=False)
+                    print(f"\n歩行パラメータMAE比較サマリー:")
+                    print(comparison_summary_df.to_string(index=False))
+                    
+                    ###########################################
+                    # gait_speed, step_length, step_widthのMAE比較（Proposed vs Baseline）
+                    ###########################################
+                    print("\n歩行速度・ステップ長・歩隔のMAE比較グラフを作成中...")
+                    
+                    # 比較対象パラメータ
+                    target_params = ['Gait Speed', 'Step Length', 'Step Width']
+                    target_units = ['m/s', 'm', 'm']
+                    
+                    # MAE値を取得
+                    mae_proposed = []
+                    mae_baseline = []
+                    for p in target_params:
+                        proposed_val = mae_both_df[mae_both_df['Parameter'] == p]['MAE_Average'].values[0]
+                        baseline_val = mae_gait_params_both_max1[mae_gait_params_both_max1['Parameter'] == p]['MAE_Average'].values[0]
+                        mae_proposed.append(proposed_val)
+                        mae_baseline.append(baseline_val)
+                    
+                    # 棒グラフ作成
+                    fig, ax = plt.subplots(1, 1, figsize=(10, 7))
+                    
+                    x = np.arange(len(target_params))
+                    width = 0.35
+                    
+                    bars1 = ax.bar(x - width/2, mae_proposed, width, label='Proposed', color='red', alpha=0.7)
+                    bars2 = ax.bar(x + width/2, mae_baseline, width, label='Baseline', color='orange', alpha=0.7)
+                    
+                    ax.set_ylabel('MAE')
+                    ax.set_title('Gait Parameters MAE Comparison: Proposed vs Baseline')
+                    ax.set_xticks(x)
+                    ax.set_xticklabels([f'{p}\n[{u}]' for p, u in zip(target_params, target_units)])
+                    ax.legend()
+                    ax.grid(True, alpha=0.3, axis='y')
+                    
+                    # 値をバーの上に表示
+                    for bar in bars1:
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height,
+                               f'{height:.3f}', ha='center', va='bottom')
+                    for bar in bars2:
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height,
+                               f'{height:.3f}', ha='center', va='bottom')
+                    
+                    plt.tight_layout()
+                    plt.savefig(op_result_dir / f"MAE_gait_speed_step_comparison_{csv_path.stem}.png", dpi=300)
+                    plt.close()
+                    
+                    print(f"歩行速度・ステップ長・歩隔のMAE比較グラフを保存しました: MAE_gait_speed_step_comparison_{csv_path.stem}.png")
+                    
+                    # 比較結果を表示
+                    print(f"\n歩行速度・ステップ長・歩隔のMAE比較:")
+                    for p, u, prop, base in zip(target_params, target_units, mae_proposed, mae_baseline):
+                        better = 'Proposed' if prop < base else 'Baseline'
+                        diff = abs(prop - base)
+                        print(f"  {p}: Proposed={prop:.4f} {u}, Baseline={base:.4f} {u}, Better={better}, Diff={diff:.4f}")
+
+
+                    # 比較結果を表示
+                    print(f"\n歩行速度・ステップ長・歩隔のMAE比較:")
+                    for p, u, prop, base in zip(target_params, target_units, mae_proposed, mae_baseline):
+                        better = 'Proposed' if prop < base else 'Baseline'
+                        diff = abs(prop - base)
+                        print(f"  {p}: Proposed={prop:.4f} {u}, Baseline={base:.4f} {u}, Better={better}, Diff={diff:.4f}")
+                    
+                    ###########################################
+                    # gait_speed, step_length, step_widthの正規化MAE比較（Proposed vs Baseline）
+                    ###########################################
+                    print("\n歩行速度・ステップ長・歩隔の正規化MAE比較グラフを作成中...")
+                    
+                    # 比較対象パラメータ
+                    target_params_norm = ['Gait Speed', 'Step Length', 'Step Width']
+                    target_keys = ['gait_speed', 'step_length', 'step_width']
+                    
+                    # 正規化MAE値を計算（Mocapの平均値で正規化）
+                    mae_proposed_norm = []
+                    mae_baseline_norm = []
+                    
+                    for p, key in zip(target_params_norm, target_keys):
+                        # Mocapの平均値を取得
+                        r_vals = [params[key] for params in gait_params_r if params.get(key) is not None]
+                        l_vals = [params[key] for params in gait_params_l if params.get(key) is not None]
+                        mocap_mean = np.mean(r_vals + l_vals) if len(r_vals + l_vals) > 0 else 1
+                        
+                        # ProposedのMAE
+                        proposed_mae = mae_both_df[mae_both_df['Parameter'] == p]['MAE_Average'].values[0]
+                        # BaselineのMAE
+                        baseline_mae = mae_gait_params_both_max1[mae_gait_params_both_max1['Parameter'] == p]['MAE_Average'].values[0]
+                        
+                        # 正規化（%）
+                        if mocap_mean != 0:
+                            proposed_norm = (proposed_mae / abs(mocap_mean)) * 100
+                            baseline_norm = (baseline_mae / abs(mocap_mean)) * 100
+                        else:
+                            proposed_norm = 0
+                            baseline_norm = 0
+                        
+                        mae_proposed_norm.append(proposed_norm)
+                        mae_baseline_norm.append(baseline_norm)
+                    
+                    # 棒グラフ作成
+                    fig, ax = plt.subplots(1, 1, figsize=(10, 7))
+                    
+                    x = np.arange(len(target_params_norm))
+                    width = 0.35
+                    
+                    bars1 = ax.bar(x - width/2, mae_proposed_norm, width, label='Proposed', color='red', alpha=0.7)
+                    bars2 = ax.bar(x + width/2, mae_baseline_norm, width, label='Baseline', color='orange', alpha=0.7)
+                    
+                    ax.set_ylabel('Normalized MAE [%]')
+                    ax.set_title('Gait Parameters Normalized MAE Comparison\n(MAE / Mocap Mean × 100)')
+                    ax.set_xticks(x)
+                    ax.set_xticklabels(target_params_norm)
+                    ax.legend()
+                    ax.grid(True, alpha=0.3, axis='y')
+                    
+                    # 値をバーの上に表示
+                    for bar in bars1:
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height,
+                               f'{height:.1f}%', ha='center', va='bottom')
+                    for bar in bars2:
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height,
+                               f'{height:.1f}%', ha='center', va='bottom')
+                    
+                    plt.tight_layout()
+                    plt.savefig(op_result_dir / f"MAE_gait_speed_step_normalized_comparison_{csv_path.stem}.png", dpi=300)
+                    plt.close()
+                    
+                    print(f"正規化MAE比較グラフを保存しました: MAE_gait_speed_step_normalized_comparison_{csv_path.stem}.png")
+                    
+                    # 比較結果を表示
+                    print(f"\n歩行速度・ステップ長・歩隔の正規化MAE比較:")
+                    for p, key, prop_norm, base_norm in zip(target_params_norm, target_keys, mae_proposed_norm, mae_baseline_norm):
+                        # Mocapの平均値も表示
+                        r_vals = [params[key] for params in gait_params_r if params.get(key) is not None]
+                        l_vals = [params[key] for params in gait_params_l if params.get(key) is not None]
+                        mocap_mean = np.mean(r_vals + l_vals)
+                        
+                        better = 'Proposed' if prop_norm < base_norm else 'Baseline'
+                        diff = abs(prop_norm - base_norm)
+                        print(f"  {p}: Mocap Mean={mocap_mean:.4f}, Proposed={prop_norm:.1f}%, Baseline={base_norm:.1f}%, Better={better}, Diff={diff:.1f}%")
+
+
 
 if __name__ == "__main__":
     main()

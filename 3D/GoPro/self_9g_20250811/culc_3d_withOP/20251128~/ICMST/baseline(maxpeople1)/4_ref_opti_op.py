@@ -9,32 +9,14 @@ import m_opti as opti
 import m_openpose as op
 
 def main():
-    # csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub0\thera0-16\mocap")
-    # csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera0-3\mocap")
-    csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\mocap")
+    csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\ICMST\mocap")
     start_frame = 0
     end_frame = 10000
 
-    if str(csv_path_dir) == r"G:\gait_pattern\BR9G_shuron\sub1\thera0-2\mocap":
-        start_frame = 1000
-        end_frame = 1440
-    elif str(csv_path_dir) == r"G:\gait_pattern\BR9G_shuron\sub1\thera0-3\mocap":
-        start_frame = 943
-        end_frame = 1400
-    elif str(csv_path_dir) == r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\mocap":
+    if str(csv_path_dir) == r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\ICMST\mocap":
         pass
         start_frame = 1000
         # end_frame = 1252
-    elif str(csv_path_dir) == r"G:\gait_pattern\BR9G_shuron\sub0\thera0-16\mocap":
-        start_frame = 890
-        end_frame = 1210
-    elif str(csv_path_dir) == r"G:\gait_pattern\BR9G_shuron\sub0\thera0-15\mocap":
-        # #0-0-15 で股関節外転 maxは1756くらい（60Hz）
-        # start_frame_100hz = 2751
-        # end_frame_100hz = 3144
-        #0-0-15 で右股関節外旋（右足外転）
-        start_frame = 627
-        end_frame = 976
     else:
         #適当
         start_frame = 0
@@ -808,7 +790,6 @@ def main():
                 'R_Ankle_AdAb': cycle_data['R_Ankle_AdAb']
             })
             cycle_df.to_csv(csv_path_dir / f"normalized_cycle_R_{cycle_data['cycle_index']}_{csv_path.stem}.csv", index=False)
-            print(f"正規化した右足サイクルデータ {cycle_data['cycle_index']+1}/{len(normalized_gait_cycles_r)}を保存: normalized_cycle_R_{cycle_data['cycle_index']}_{csv_path.stem}.csv")
         
         for cycle_data in normalized_gait_cycles_l:
             cycle_df = pd.DataFrame({
@@ -824,7 +805,6 @@ def main():
                 'L_Ankle_AdAb': cycle_data['L_Ankle_AdAb']
             })
             cycle_df.to_csv(csv_path_dir / f"normalized_cycle_L_{cycle_data['cycle_index']}_{csv_path.stem}.csv", index=False)
-            print(f"正規化した左足サイクルデータ {cycle_data['cycle_index']+1}/{len(normalized_gait_cycles_l)}を保存: normalized_cycle_L_{cycle_data['cycle_index']}_{csv_path.stem}.csv")
         
         # 各サイクルの平均と標準偏差を計算
         if len(normalized_gait_cycles_r) > 0:
@@ -1388,10 +1368,10 @@ def main():
         # #####################################
         # #####################################
         # 結果保存ディレクトリ作成
-        op_result_dir = csv_path_dir.parent / "OpenPose3D_results"
+        op_result_dir = csv_path_dir.parent / "OpenPose3D_results_maxpeople1"
         op_result_dir.mkdir(parents=True, exist_ok=True)
 
-        openpose_npz_path = csv_path_dir.parent / "3d_kp_data_openpose_yoloseg.npz"
+        openpose_npz_path = csv_path_dir.parent / "3d_kp_data_openpose_maxpeople1.npz"
         if not openpose_npz_path.exists():
             print(f"OpenPose3Dデータが見つかりません: {openpose_npz_path}")
             return
@@ -1409,26 +1389,22 @@ def main():
         ###########################################
         # タイミング合わせ  股関節中心が任意の位置を通るタイミングでフレーム調整
         ###########################################
-        # base_point = int(0)
-        # # opti用
-        # hip_z_opti = (((rasi + lasi) / 2 + (rpsi + lpsi) / 2) / 2)[:, 2]
-        # # hip_z_optiが0より大きくなった最初のフレームを取得
-        # base_passing_frame = np.argmax(hip_z_opti > base_point) + start_frame
-        # print(f"100Hz Opti計測開始から原点通過までのフレーム数: {base_passing_frame}")
+        base_point = int(0)
+        # opti用
+        hip_z_opti = (((rasi + lasi) / 2 + (rpsi + lpsi) / 2) / 2)[:, 2]
+        # hip_z_optiが0より大きくなった最初のフレームを取得
+        base_passing_frame = np.argmax(hip_z_opti > base_point) + start_frame
+        print(f"100Hz Opti計測開始から原点通過までのフレーム数: {base_passing_frame}")
         
-        # # OpenPose用
-        # hip_z_op = op_filt_data[:, 8, 2]
-        # # hip_zが0より大きくなった最初のフレームを取得
-        # base_passing_idx_op = np.argmax(hip_z_op > base_point)
-        # base_passing_frame_op = op_frame[base_passing_idx_op]
-        # print(f"60Hz OpenPoseトリミング開始から原点通過までのフレーム数: {base_passing_frame_op}")
+        # OpenPose用
+        hip_z_op = op_filt_data[:, 8, 2]
+        # hip_zが0より大きくなった最初のフレームを取得
+        base_passing_idx_op = np.argmax(hip_z_op > base_point)
+        base_passing_frame_op = op_frame[base_passing_idx_op]
+        print(f"60Hz OpenPoseトリミング開始から原点通過までのフレーム数: {base_passing_frame_op}")
         
-        # mc_frame_offset = base_passing_frame - base_passing_frame_op / 0.6  # 100Hzに変換
-        # print(f"MC開始からGoProトリミング開始までのフレームオフセット 100Hz: {mc_frame_offset}")
-        
-        mc_frame_offset = 602  # 手動設定(なにもなしで介助条件で一人検出した場合の値を使用)
-        
-        
+        mc_frame_offset = base_passing_frame - base_passing_frame_op / 0.6  # 100Hzに変換
+        print(f"MC開始からGoProトリミング開始までのフレームオフセット 100Hz: {mc_frame_offset}")
         
         gait_cycles_r_op = []
         gait_cycles_l_op = []
@@ -1479,8 +1455,6 @@ def main():
         lankle_pldo_op = op.culc_angle_all_frames(shank_l_op, foot_l_op, n_axis, degrees=True, angle_type='ankle')
         # 股関節の内転外転
         n_axis_adab = np.cross(pel_up_bec_op, n_axis)  # pel_vecとn_axisの外積を計算して直交ベクトルを取得 進行方向向き
-        # n_axis_adab = np.zeros_like(pel_up_bec_op)
-        # n_axis_adab[:, 2] = 1.0  # 全フレームでZ軸方向 [0, 0, 1]
         rhip_adab_op = op.culc_angle_all_frames(pel_up_bec_op, thigh_r_op, n_axis_adab, degrees=True, angle_type='hip_adab')
         lhip_adab_op = op.culc_angle_all_frames(pel_up_bec_op, thigh_l_op, n_axis_adab, degrees=True, angle_type='hip_adab')
         # 股関節の内旋外旋
@@ -1538,6 +1512,25 @@ def main():
                 'R_Hip_AdAb': rhip_adab_normalized_op
             }
             normalized_gait_cycles_r_op.append(cycle_data)
+            
+        # 全サイクルを1つのDataFrameにまとめて保存
+        all_cycles_r_op_list = []
+        for cycle_data in normalized_gait_cycles_r_op:
+            cycle_df = pd.DataFrame({
+                'Cycle_Index': cycle_data['cycle_index'],
+                'Percentage': cycle_data['percentage'],
+                'R_Hip_FlEx': cycle_data['R_Hip_FlEx'],
+                'R_Knee_FlEx': cycle_data['R_Knee_FlEx'],
+                'R_Ankle_PlDo': cycle_data['R_Ankle_PlDo'],
+                'R_Hip_InEx': cycle_data['R_Hip_InEx'],
+                'R_Hip_AdAb': cycle_data['R_Hip_AdAb']
+            })
+            all_cycles_r_op_list.append(cycle_df)
+        
+        if len(all_cycles_r_op_list) > 0:
+            all_cycles_r_op_df = pd.concat(all_cycles_r_op_list, ignore_index=True)
+            all_cycles_r_op_df.to_csv(op_result_dir / f"angles_cycles_R_OpenPose.csv", index=False)
+        
         
         # 左足の歩行周期ごとに関節角度を100%に正規化
         normalized_gait_cycles_l_op = []
@@ -1590,7 +1583,27 @@ def main():
                 'L_Hip_AdAb': lhip_adab_normalized_op
             }
             normalized_gait_cycles_l_op.append(cycle_data)
-                
+        
+        # 全サイクルを1つのDataFrameにまとめて保存
+        all_cycles_l_op_list = []
+        for cycle_data in normalized_gait_cycles_l_op:
+            cycle_df = pd.DataFrame({
+                'Cycle_Index': cycle_data['cycle_index'],
+                'Percentage': cycle_data['percentage'],
+                'L_Hip_FlEx': cycle_data['L_Hip_FlEx'],
+                'L_Knee_FlEx': cycle_data['L_Knee_FlEx'],
+                'L_Ankle_PlDo': cycle_data['L_Ankle_PlDo'],
+                'L_Hip_InEx': cycle_data['L_Hip_InEx'],
+                'L_Hip_AdAb': cycle_data['L_Hip_AdAb']
+            })
+            all_cycles_l_op_list.append(cycle_df)
+        
+        if len(all_cycles_l_op_list) > 0:
+            all_cycles_l_op_df = pd.concat(all_cycles_l_op_list, ignore_index=True)
+            all_cycles_l_op_df.to_csv(op_result_dir / f"angles_cycles_L_OpenPose.csv", index=False)
+        
+        
+        
         ###########################################
         # 歩行パラメータの計算（OpenPose）
         ###########################################
@@ -1823,6 +1836,8 @@ def main():
 
 
 
+
+
             ###########################################
             # 歩行パラメータのMAE計算（Mocapを正解として）
             ###########################################
@@ -2008,11 +2023,10 @@ def main():
             plt.close()
             
             print(f"\n歩行パラメータMAEグラフを保存しました: MAE_gait_parameters_comparison_{csv_path.stem}.png")
-            
-            
-            
-            
-            
+
+
+
+
 
 
 
@@ -2148,7 +2162,7 @@ def main():
             """MAEを計算"""
             return np.mean(np.abs(data1 - data2))
         
-        # 各歩行周期ごとのMAEを計算し、全周期の平均を取る関数
+                # 各歩行周期ごとのMAEを計算し、全周期の平均を取る関数
         def calculate_mae_all_cycles(cycles_mocap, cycles_op, joint_key):
             """
             全歩行周期でMAEを計算
@@ -2204,8 +2218,6 @@ def main():
         print(f"足関節背屈底屈 MAE: {mae_lankle:.2f}°")
         print(f"股関節内旋外旋 MAE: {mae_lhip_inex:.2f}°")
         print(f"股関節内転外転 MAE: {mae_lhip_adab:.2f}°")
-        
-        
         
         ###########################################
         # 各歩行周期ごとの絶対誤差プロット
@@ -2396,9 +2408,6 @@ def main():
 
 
 
-
-
-        
         
         # 右足の比較プロット
         print(f"len normalized_gait_cycles_r: {len(normalized_gait_cycles_r)}, len normalized_gait_cycles_r_op: {len(normalized_gait_cycles_r_op)}")
@@ -2568,8 +2577,7 @@ def main():
                                 alpha=0.2, color='r')
             
             # rmse_lhip = calculate_rmse(mean_cycle_l['L_Hip_FlEx_mean'], mean_cycle_l_op['L_Hip_FlEx_mean'])
-            # mae_lhip = calculate_mae(mean_cycle_l['L_Hip_FlEx_mean'], mean_cycle_l_op['L_Hip_FlEx_mean'])
-            mae_lhip = calculate_mae_all_cycles(normalized_gait_cycles_l, normalized_gait_cycles_l_op, 'L_Hip_FlEx')
+            mae_lhip = calculate_mae(mean_cycle_l['L_Hip_FlEx_mean'], mean_cycle_l_op['L_Hip_FlEx_mean'])
             axes[0].set_ylabel('Hip Angle [deg]', fontsize=12)
             # axes[0].set_title(f'Left Hip Flexion/Extension (RMSE: {rmse_lhip:.2f}°)', fontsize=14)
             axes[0].set_title(f'Left Hip Flexion/Extension (MAE: {mae_lhip:.2f}°)', fontsize=14)
@@ -2589,8 +2597,7 @@ def main():
                                 alpha=0.2, color='r')
             
             # rmse_lknee = calculate_rmse(mean_cycle_l['L_Knee_FlEx_mean'], mean_cycle_l_op['L_Knee_FlEx_mean'])
-            # mae_lknee = calculate_mae(mean_cycle_l['L_Knee_FlEx_mean'], mean_cycle_l_op['L_Knee_FlEx_mean'])
-            mae_lknee = calculate_mae_all_cycles(normalized_gait_cycles_l, normalized_gait_cycles_l_op, 'L_Knee_FlEx')
+            mae_lknee = calculate_mae(mean_cycle_l['L_Knee_FlEx_mean'], mean_cycle_l_op['L_Knee_FlEx_mean'])
             axes[1].set_ylabel('Knee Angle [deg]', fontsize=12)
             # axes[1].set_title(f'Left Knee Flexion/Extension (RMSE: {rmse_lknee:.2f}°)', fontsize=14)
             axes[1].set_title(f'Left Knee Flexion/Extension (MAE: {mae_lknee:.2f}°)', fontsize=14)
@@ -2610,8 +2617,7 @@ def main():
                                 alpha=0.2, color='r')
             
             # rmse_lankle = calculate_rmse(mean_cycle_l['L_Ankle_PlDo_mean'], mean_cycle_l_op['L_Ankle_PlDo_mean'])
-            # mae_lankle = calculate_mae(mean_cycle_l['L_Ankle_PlDo_mean'], mean_cycle_l_op['L_Ankle_PlDo_mean'])
-            mae_lankle = calculate_mae_all_cycles(normalized_gait_cycles_l, normalized_gait_cycles_l_op, 'L_Ankle_PlDo')
+            mae_lankle = calculate_mae(mean_cycle_l['L_Ankle_PlDo_mean'], mean_cycle_l_op['L_Ankle_PlDo_mean'])
             axes[2].set_xlabel('Gait Cycle [%]', fontsize=12)
             axes[2].set_ylabel('Ankle Angle [deg]', fontsize=12)
             # axes[2].set_title(f'Left Ankle Plantarflexion/Dorsiflexion (RMSE: {rmse_lankle:.2f}°)', fontsize=14)
@@ -2638,8 +2644,7 @@ def main():
                            alpha=0.2, color='r')
             
             # rmse_lhip_inex = calculate_rmse(mean_cycle_l['L_Hip_InEx_mean'], mean_cycle_l_op['L_Hip_InEx_mean'])
-            # mae_lhip_inex = calculate_mae(mean_cycle_l['L_Hip_InEx_mean'], mean_cycle_l_op['L_Hip_InEx_mean'])
-            mae_lhip_inex = calculate_mae_all_cycles(normalized_gait_cycles_l, normalized_gait_cycles_l_op, 'L_Hip_InEx')
+            mae_lhip_inex = calculate_mae(mean_cycle_l['L_Hip_InEx_mean'], mean_cycle_l_op['L_Hip_InEx_mean'])
             ax.set_xlabel('Gait Cycle [%]', fontsize=12)
             ax.set_ylabel('Hip Angle [deg]', fontsize=12)
             # ax.set_title(f'Left Hip Internal/External Rotation (RMSE: {rmse_lhip_inex:.2f}°)', fontsize=14)
@@ -2666,8 +2671,7 @@ def main():
                            alpha=0.2, color='r')
             
             # rmse_lhip_adab = calculate_rmse(mean_cycle_l['L_Hip_AdAb_mean'], mean_cycle_l_op['L_Hip_AdAb_mean'])
-            # mae_lhip_adab = calculate_mae(mean_cycle_l['L_Hip_AdAb_mean'], mean_cycle_l_op['L_Hip_AdAb_mean'])
-            mae_lhip_adab = calculate_mae_all_cycles(normalized_gait_cycles_l, normalized_gait_cycles_l_op, 'L_Hip_AdAb')
+            mae_lhip_adab = calculate_mae(mean_cycle_l['L_Hip_AdAb_mean'], mean_cycle_l_op['L_Hip_AdAb_mean'])
             ax.set_xlabel('Gait Cycle [%]', fontsize=12)
             ax.set_ylabel('Hip Angle [deg]', fontsize=12)
             # ax.set_title(f'Left Hip Adduction/Abduction (RMSE: {rmse_lhip_adab:.2f}°)', fontsize=14)
@@ -2696,6 +2700,222 @@ def main():
             mae_summary_l.to_csv(op_result_dir / f"MAE_summary_L_{csv_path.stem}.csv", index=False)
             print(f"\n左足MAE:")
             print(mae_summary_l)
+            
+            
+            
+        # 右足のプロット（時系列）
+        # 時系列での関節角度比較プロット（正規化データを使用）
+        print("\n時系列での関節角度比較プロット（正規化データ）を作成中...")
+        
+        # 右足の時系列プロット（屈曲伸展・背屈底屈）
+        fig, axes = plt.subplots(3, 1, figsize=(16, 14))
+        
+        # 各歩行周期ごとにプロット
+        for cycle_idx, (cycle_mocap, cycle_op) in enumerate(zip(normalized_gait_cycles_r, normalized_gait_cycles_r_op)):
+            # この周期のMocap基準時間軸を計算
+            ic_start = gait_cycles_r[cycle_idx][0]  # Mocapの開始フレーム（相対）
+            ic_end = gait_cycles_r[cycle_idx][-1]   # Mocapの終了フレーム（相対）
+            
+            # 0-100%を実際の時間（秒）に変換
+            time_axis = np.linspace(ic_start / 60.0, ic_end / 60.0, 101)
+            
+            # 股関節屈曲伸展
+            axes[0].plot(time_axis, cycle_mocap['R_Hip_FlEx'], 
+                        'b-', linewidth=1.5, alpha=0.6, label='Mocap' if cycle_idx == 0 else '')
+            axes[0].plot(time_axis, cycle_op['R_Hip_FlEx'], 
+                        'r--', linewidth=1.5, alpha=0.6, label='Proposed' if cycle_idx == 0 else '')
+            
+            # 膝関節屈曲伸展
+            axes[1].plot(time_axis, cycle_mocap['R_Knee_FlEx'], 
+                        'b-', linewidth=1.5, alpha=0.6, label='Mocap' if cycle_idx == 0 else '')
+            axes[1].plot(time_axis, cycle_op['R_Knee_FlEx'], 
+                        'r--', linewidth=1.5, alpha=0.6, label='Proposed' if cycle_idx == 0 else '')
+            
+            # 足関節背屈底屈
+            axes[2].plot(time_axis, cycle_mocap['R_Ankle_PlDo'], 
+                        'b-', linewidth=1.5, alpha=0.6, label='Mocap' if cycle_idx == 0 else '')
+            axes[2].plot(time_axis, cycle_op['R_Ankle_PlDo'], 
+                        'r--', linewidth=1.5, alpha=0.6, label='Proposed' if cycle_idx == 0 else '')
+        
+        # グラフ装飾
+        axes[0].set_ylabel('Hip Angle [deg]')
+        axes[0].set_title(f'Right Hip Flexion/Extension (Time Series, MAE: {mae_rhip:.2f}°)')
+        axes[0].legend(loc='upper right')
+        axes[0].grid(True, alpha=0.3)
+        axes[0].set_ylim(-50, 60)
+        
+        # 歩行周期の区切り線を追加（IC）
+        for cycle in gait_cycles_r:
+            ic_time = cycle[0] / 60.0
+            axes[0].axvline(x=ic_time, color='gray', linestyle=':', alpha=0.5)
+            axes[1].axvline(x=ic_time, color='gray', linestyle=':', alpha=0.5)
+            axes[2].axvline(x=ic_time, color='gray', linestyle=':', alpha=0.5)
+        
+        axes[1].set_ylabel('Knee Angle [deg]')
+        axes[1].set_title(f'Right Knee Flexion/Extension (Time Series, MAE: {mae_rknee:.2f}°)')
+        axes[1].legend(loc='upper right')
+        axes[1].grid(True, alpha=0.3)
+        axes[1].set_ylim(-10, 80)
+        
+        axes[2].set_xlabel('Time [s] (Mocap reference)')
+        axes[2].set_ylabel('Ankle Angle [deg]')
+        axes[2].set_title(f'Right Ankle Plantarflexion/Dorsiflexion (Time Series, MAE: {mae_rankle:.2f}°)')
+        axes[2].legend(loc='upper right')
+        axes[2].grid(True, alpha=0.3)
+        axes[2].set_ylim(-40, 60)
+        
+        plt.tight_layout()
+        plt.savefig(op_result_dir / f"timeseries_FlEx_R_{csv_path.stem}.png", dpi=300)
+        plt.close()
+        
+        print(f"右足時系列プロット（屈曲伸展）を保存しました")
+        
+        # 右足の時系列プロット（内旋外旋・内転外転）
+        fig, axes = plt.subplots(2, 1, figsize=(16, 10))
+        
+        for cycle_idx, (cycle_mocap, cycle_op) in enumerate(zip(normalized_gait_cycles_r, normalized_gait_cycles_r_op)):
+            ic_start = gait_cycles_r[cycle_idx][0]
+            ic_end = gait_cycles_r[cycle_idx][-1]
+            time_axis = np.linspace(ic_start / 60.0, ic_end / 60.0, 101)
+            
+            # 股関節内旋外旋
+            axes[0].plot(time_axis, cycle_mocap['R_Hip_InEx'], 
+                        'b-', linewidth=1.5, alpha=0.6, label='Mocap' if cycle_idx == 0 else '')
+            axes[0].plot(time_axis, cycle_op['R_Hip_InEx'], 
+                        'r--', linewidth=1.5, alpha=0.6, label='Proposed' if cycle_idx == 0 else '')
+            
+            # 股関節内転外転
+            axes[1].plot(time_axis, cycle_mocap['R_Hip_AdAb'], 
+                        'b-', linewidth=1.5, alpha=0.6, label='Mocap' if cycle_idx == 0 else '')
+            axes[1].plot(time_axis, cycle_op['R_Hip_AdAb'], 
+                        'r--', linewidth=1.5, alpha=0.6, label='Proposed' if cycle_idx == 0 else '')
+        
+        axes[0].set_ylabel('Hip Angle [deg]')
+        axes[0].set_title(f'Right Hip Internal/External Rotation (Time Series, MAE: {mae_rhip_inex:.2f}°)')
+        axes[0].legend(loc='upper right')
+        axes[0].grid(True, alpha=0.3)
+        axes[0].set_ylim(-40, 40)
+        
+        for cycle in gait_cycles_r:
+            ic_time = cycle[0] / 60.0
+            axes[0].axvline(x=ic_time, color='gray', linestyle=':', alpha=0.5)
+            axes[1].axvline(x=ic_time, color='gray', linestyle=':', alpha=0.5)
+        
+        axes[1].set_xlabel('Time [s] (Mocap reference)')
+        axes[1].set_ylabel('Hip Angle [deg]')
+        axes[1].set_title(f'Right Hip Adduction/Abduction (Time Series, MAE: {mae_rhip_adab:.2f}°)')
+        axes[1].legend(loc='upper right')
+        axes[1].grid(True, alpha=0.3)
+        axes[1].set_ylim(-40, 40)
+        
+        plt.tight_layout()
+        plt.savefig(op_result_dir / f"timeseries_InEx_AdAb_R_{csv_path.stem}.png", dpi=300)
+        plt.close()
+        
+        print(f"右足時系列プロット（内旋外旋・内転外転）を保存しました")
+        
+        # 左足の時系列プロット（屈曲伸展・背屈底屈）
+        fig, axes = plt.subplots(3, 1, figsize=(16, 14))
+        
+        for cycle_idx, (cycle_mocap, cycle_op) in enumerate(zip(normalized_gait_cycles_l, normalized_gait_cycles_l_op)):
+            ic_start = gait_cycles_l[cycle_idx][0]
+            ic_end = gait_cycles_l[cycle_idx][-1]
+            time_axis = np.linspace(ic_start / 60.0, ic_end / 60.0, 101)
+            
+            # 股関節屈曲伸展
+            axes[0].plot(time_axis, cycle_mocap['L_Hip_FlEx'], 
+                        'b-', linewidth=1.5, alpha=0.6, label='Mocap' if cycle_idx == 0 else '')
+            axes[0].plot(time_axis, cycle_op['L_Hip_FlEx'], 
+                        'r--', linewidth=1.5, alpha=0.6, label='Proposed' if cycle_idx == 0 else '')
+            
+            # 膝関節屈曲伸展
+            axes[1].plot(time_axis, cycle_mocap['L_Knee_FlEx'], 
+                        'b-', linewidth=1.5, alpha=0.6, label='Mocap' if cycle_idx == 0 else '')
+            axes[1].plot(time_axis, cycle_op['L_Knee_FlEx'], 
+                        'r--', linewidth=1.5, alpha=0.6, label='Proposed' if cycle_idx == 0 else '')
+            
+            # 足関節背屈底屈
+            axes[2].plot(time_axis, cycle_mocap['L_Ankle_PlDo'], 
+                        'b-', linewidth=1.5, alpha=0.6, label='Mocap' if cycle_idx == 0 else '')
+            axes[2].plot(time_axis, cycle_op['L_Ankle_PlDo'], 
+                        'r--', linewidth=1.5, alpha=0.6, label='Proposed' if cycle_idx == 0 else '')
+        
+        axes[0].set_ylabel('Hip Angle [deg]')
+        axes[0].set_title(f'Left Hip Flexion/Extension (Time Series, MAE: {mae_lhip:.2f}°)')
+        axes[0].legend(loc='upper right')
+        axes[0].grid(True, alpha=0.3)
+        axes[0].set_ylim(-50, 60)
+        
+        for cycle in gait_cycles_l:
+            ic_time = cycle[0] / 60.0
+            axes[0].axvline(x=ic_time, color='gray', linestyle=':', alpha=0.5)
+            axes[1].axvline(x=ic_time, color='gray', linestyle=':', alpha=0.5)
+            axes[2].axvline(x=ic_time, color='gray', linestyle=':', alpha=0.5)
+        
+        axes[1].set_ylabel('Knee Angle [deg]')
+        axes[1].set_title(f'Left Knee Flexion/Extension (Time Series, MAE: {mae_lknee:.2f}°)')
+        axes[1].legend(loc='upper right')
+        axes[1].grid(True, alpha=0.3)
+        axes[1].set_ylim(-10, 80)
+        
+        axes[2].set_xlabel('Time [s] (Mocap reference)')
+        axes[2].set_ylabel('Ankle Angle [deg]')
+        axes[2].set_title(f'Left Ankle Plantarflexion/Dorsiflexion (Time Series, MAE: {mae_lankle:.2f}°)')
+        axes[2].legend(loc='upper right')
+        axes[2].grid(True, alpha=0.3)
+        axes[2].set_ylim(-40, 60)
+        
+        plt.tight_layout()
+        plt.savefig(op_result_dir / f"timeseries_FlEx_L_{csv_path.stem}.png", dpi=300)
+        plt.close()
+        
+        print(f"左足時系列プロット（屈曲伸展）を保存しました")
+        
+        # 左足の時系列プロット（内旋外旋・内転外転）
+        fig, axes = plt.subplots(2, 1, figsize=(16, 10))
+        
+        for cycle_idx, (cycle_mocap, cycle_op) in enumerate(zip(normalized_gait_cycles_l, normalized_gait_cycles_l_op)):
+            ic_start = gait_cycles_l[cycle_idx][0]
+            ic_end = gait_cycles_l[cycle_idx][-1]
+            time_axis = np.linspace(ic_start / 60.0, ic_end / 60.0, 101)
+            
+            # 股関節内旋外旋
+            axes[0].plot(time_axis, cycle_mocap['L_Hip_InEx'], 
+                        'b-', linewidth=1.5, alpha=0.6, label='Mocap' if cycle_idx == 0 else '')
+            axes[0].plot(time_axis, cycle_op['L_Hip_InEx'], 
+                        'r--', linewidth=1.5, alpha=0.6, label='Proposed' if cycle_idx == 0 else '')
+            
+            # 股関節内転外転
+            axes[1].plot(time_axis, cycle_mocap['L_Hip_AdAb'], 
+                        'b-', linewidth=1.5, alpha=0.6, label='Mocap' if cycle_idx == 0 else '')
+            axes[1].plot(time_axis, cycle_op['L_Hip_AdAb'], 
+                        'r--', linewidth=1.5, alpha=0.6, label='Proposed' if cycle_idx == 0 else '')
+        
+        axes[0].set_ylabel('Hip Angle [deg]')
+        axes[0].set_title(f'Left Hip Internal/External Rotation (Time Series, MAE: {mae_lhip_inex:.2f}°)')
+        axes[0].legend(loc='upper right')
+        axes[0].grid(True, alpha=0.3)
+        axes[0].set_ylim(-40, 40)
+        
+        for cycle in gait_cycles_l:
+            ic_time = cycle[0] / 60.0
+            axes[0].axvline(x=ic_time, color='gray', linestyle=':', alpha=0.5)
+            axes[1].axvline(x=ic_time, color='gray', linestyle=':', alpha=0.5)
+        
+        axes[1].set_xlabel('Time [s] (Mocap reference)')
+        axes[1].set_ylabel('Hip Angle [deg]')
+        axes[1].set_title(f'Left Hip Adduction/Abduction (Time Series, MAE: {mae_lhip_adab:.2f}°)')
+        axes[1].legend(loc='upper right')
+        axes[1].grid(True, alpha=0.3)
+        axes[1].set_ylim(-40, 40)
+        
+        plt.tight_layout()
+        plt.savefig(op_result_dir / f"timeseries_InEx_AdAb_L_{csv_path.stem}.png", dpi=300)
+        plt.close()
+        
+        print(f"左足時系列プロット（内旋外旋・内転外転）を保存しました")
+        print(f"\n時系列プロットの保存完了")
+        
 
 if __name__ == "__main__":
     main()

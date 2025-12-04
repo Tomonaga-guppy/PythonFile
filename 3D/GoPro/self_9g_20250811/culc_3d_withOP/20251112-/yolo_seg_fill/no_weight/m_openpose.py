@@ -52,7 +52,7 @@ def culc_angle(vector1, vector2, n_vector, degrees=False, angle_type=None):
     elif angle_type == 'ankle':
         angle = sign * (angle_rad - np.pi/2)
     elif angle_type == 'hip_adab':
-        angle = 180 - angle_rad
+        angle = np.pi - angle_rad
     elif angle_type == 'hip_inex':
         angle = angle_rad
 
@@ -63,7 +63,7 @@ def culc_angle(vector1, vector2, n_vector, degrees=False, angle_type=None):
 
 def culc_angle_all_frames(vector1_all, vector2_all, n_vector_all, degrees=False, angle_type=None):
     """
-    全フレームで股関節屈曲伸展角度を計算
+    全フレームで関節角度を計算
     """
     angles = np.zeros(vector1_all.shape[0])
     for i in range(vector1_all.shape[0]):
