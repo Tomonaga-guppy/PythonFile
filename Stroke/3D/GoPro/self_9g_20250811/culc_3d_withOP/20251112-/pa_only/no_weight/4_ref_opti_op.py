@@ -8,211 +8,8 @@ import json
 import m_opti as opti
 import m_openpose as op
 
-def visualize_vectors_3d(frame_idx, rhip, lhip, midhip, rknee, lknee, rankle, lankle, rtoe, ltoe,
-                         pel_vec, thigh_r, thigh_l, shank_r, shank_l, foot_r, foot_l,
-                         n_axis, n_axis_adab, n_axis_inex, title="Vector Visualization"):
-    """
-    関節位置とベクトルの向きを3Dで可視化する関数
-    
-    Parameters:
-    -----------
-    frame_idx : int
-        表示するフレームのインデックス
-    rhip, lhip, midhip, rknee, lknee, rankle, lankle, rtoe, ltoe : ndarray
-        各関節位置 (n_frames, 3)
-    pel_vec, thigh_r, thigh_l, shank_r, shank_l, foot_r, foot_l : ndarray
-        各セグメントベクトル (n_frames, 3)
-    n_axis, n_axis_adab, n_axis_inex : ndarray
-        回転軸ベクトル (n_frames, 3)
-    title : str
-        グラフのタイトル
-    """
-    from mpl_toolkits.mplot3d import Axes3D
-    
-    fig = plt.figure(figsize=(14, 10))
-    ax = fig.add_subplot(111, projection='3d')
-    
-    # フレームインデックス
-    f = frame_idx
-    
-    # 関節位置をプロット
-    joints = {
-        'R_Hip': rhip[f],
-        'L_Hip': lhip[f],
-        'MidHip': midhip[f],
-        'R_Knee': rknee[f],
-        'L_Knee': lknee[f],
-        'R_Ankle': rankle[f],
-        'L_Ankle': lankle[f],
-        'R_Toe': rtoe[f],
-        'L_Toe': ltoe[f]
-    }
-    
-    # 関節をプロット
-    for name, pos in joints.items():
-        color = 'red' if 'R_' in name else ('blue' if 'L_' in name else 'green')
-        ax.scatter(pos[0], pos[1], pos[2], c=color, s=100, label=name)
-        ax.text(pos[0], pos[1], pos[2], f'  {name}', fontsize=8)
-    
-    # 骨格を線で結ぶ
-    # 右脚
-    ax.plot([rhip[f][0], rknee[f][0]], [rhip[f][1], rknee[f][1]], [rhip[f][2], rknee[f][2]], 'r-', linewidth=2)
-    ax.plot([rknee[f][0], rankle[f][0]], [rknee[f][1], rankle[f][1]], [rknee[f][2], rankle[f][2]], 'r-', linewidth=2)
-    ax.plot([rankle[f][0], rtoe[f][0]], [rankle[f][1], rtoe[f][1]], [rankle[f][2], rtoe[f][2]], 'r-', linewidth=2)
-    # 左脚
-    ax.plot([lhip[f][0], lknee[f][0]], [lhip[f][1], lknee[f][1]], [lhip[f][2], lknee[f][2]], 'b-', linewidth=2)
-    ax.plot([lknee[f][0], lankle[f][0]], [lknee[f][1], lankle[f][1]], [lknee[f][2], lankle[f][2]], 'b-', linewidth=2)
-    ax.plot([lankle[f][0], ltoe[f][0]], [lankle[f][1], ltoe[f][1]], [lankle[f][2], ltoe[f][2]], 'b-', linewidth=2)
-    # 骨盤
-    ax.plot([rhip[f][0], lhip[f][0]], [rhip[f][1], lhip[f][1]], [rhip[f][2], lhip[f][2]], 'g-', linewidth=2)
-    
-    # ベクトルを矢印で表示（スケール調整）
-    scale = 0.2  # ベクトルの長さスケール
-    
-    # 原点（MidHip）
-    origin = midhip[f]
-    
-    # ベクトルを正規化してプロット
-    def plot_vector(ax, origin, vector, color, label):
-        vec_norm = vector / (np.linalg.norm(vector) + 1e-8)  # 正規化
-        ax.quiver(origin[0], origin[1], origin[2],
-                  vec_norm[0] * scale, vec_norm[1] * scale, vec_norm[2] * scale,
-                  color=color, arrow_length_ratio=0.2, linewidth=2, label=label)
-    
-    # 骨盤ベクトル（pel_vec）
-    plot_vector(ax, origin, pel_vec[f], 'purple', 'pel_vec (体幹)')
-    
-    # n_axis（左右軸：右股関節→左股関節）
-    plot_vector(ax, origin, n_axis[f], 'cyan', 'n_axis (左右軸)')
-    
-    # n_axis_adab（内転外転軸：前後方向）
-    plot_vector(ax, origin, n_axis_adab[f], 'orange', 'n_axis_adab (前後軸)')
-    
-    # n_axis_inex（内旋外旋軸：上下方向）
-    plot_vector(ax, origin, n_axis_inex[f], 'magenta', 'n_axis_inex (上下軸)')
-    
-    # 大腿ベクトル
-    plot_vector(ax, rhip[f], thigh_r[f], 'darkred', 'thigh_R')
-    plot_vector(ax, lhip[f], thigh_l[f], 'darkblue', 'thigh_L')
-    
-    # 下腿ベクトル
-    plot_vector(ax, rknee[f], shank_r[f], 'salmon', 'shank_R')
-    plot_vector(ax, lknee[f], shank_l[f], 'lightblue', 'shank_L')
-    
-    # 足部ベクトル
-    plot_vector(ax, rankle[f], foot_r[f], 'coral', 'foot_R')
-    plot_vector(ax, lankle[f], foot_l[f], 'skyblue', 'foot_L')
-    
-    # 軸設定
-    ax.set_xlabel('X (前後)')
-    ax.set_ylabel('Y (左右)')
-    ax.set_zlabel('Z (上下)')
-    ax.set_title(f'{title}\nFrame: {frame_idx}')
-    
-    # アスペクト比を等しくする
-    max_range = 0.5
-    mid_x = origin[0]
-    mid_y = origin[1]
-    mid_z = origin[2]
-    ax.set_xlim(mid_x - max_range, mid_x + max_range)
-    ax.set_ylim(mid_y - max_range, mid_y + max_range)
-    ax.set_zlim(mid_z - max_range, mid_z + max_range)
-    
-    # 凡例
-    ax.legend(loc='upper left', fontsize=8)
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def visualize_vectors_multiple_views(frame_idx, rhip, lhip, midhip, rknee, lknee, rankle, lankle, rtoe, ltoe,
-                                     pel_vec, thigh_r, thigh_l, shank_r, shank_l, foot_r, foot_l,
-                                     n_axis, n_axis_adab, n_axis_inex, title="Vector Visualization"):
-    """
-    関節位置とベクトルの向きを複数視点（前・横・上）から2Dで可視化する関数
-    """
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    
-    f = frame_idx
-    scale = 0.15  # ベクトルの長さスケール
-    
-    # 各視点の設定
-    views = [
-        {'ax': axes[0], 'title': '前面図 (Frontal)', 'x': 1, 'y': 2, 'xlabel': 'Y (左右)', 'ylabel': 'Z (上下)'},
-        {'ax': axes[1], 'title': '側面図 (Sagittal)', 'x': 0, 'y': 2, 'xlabel': 'X (前後)', 'ylabel': 'Z (上下)'},
-        {'ax': axes[2], 'title': '上面図 (Transverse)', 'x': 0, 'y': 1, 'xlabel': 'X (前後)', 'ylabel': 'Y (左右)'}
-    ]
-    
-    for view in views:
-        ax = view['ax']
-        xi, yi = view['x'], view['y']
-        
-        # 関節をプロット
-        joints = {
-            'R_Hip': (rhip[f], 'red'),
-            'L_Hip': (lhip[f], 'blue'),
-            'MidHip': (midhip[f], 'green'),
-            'R_Knee': (rknee[f], 'red'),
-            'L_Knee': (lknee[f], 'blue'),
-            'R_Ankle': (rankle[f], 'red'),
-            'L_Ankle': (lankle[f], 'blue'),
-            'R_Toe': (rtoe[f], 'red'),
-            'L_Toe': (ltoe[f], 'blue')
-        }
-        
-        for name, (pos, color) in joints.items():
-            ax.scatter(pos[xi], pos[yi], c=color, s=80, zorder=5)
-            ax.annotate(name, (pos[xi], pos[yi]), fontsize=7, xytext=(3, 3), textcoords='offset points')
-        
-        # 骨格を線で結ぶ
-        # 右脚
-        ax.plot([rhip[f][xi], rknee[f][xi]], [rhip[f][yi], rknee[f][yi]], 'r-', linewidth=2)
-        ax.plot([rknee[f][xi], rankle[f][xi]], [rknee[f][yi], rankle[f][yi]], 'r-', linewidth=2)
-        ax.plot([rankle[f][xi], rtoe[f][xi]], [rankle[f][yi], rtoe[f][yi]], 'r-', linewidth=2)
-        # 左脚
-        ax.plot([lhip[f][xi], lknee[f][xi]], [lhip[f][yi], lknee[f][yi]], 'b-', linewidth=2)
-        ax.plot([lknee[f][xi], lankle[f][xi]], [lknee[f][yi], lankle[f][yi]], 'b-', linewidth=2)
-        ax.plot([lankle[f][xi], ltoe[f][xi]], [lankle[f][yi], ltoe[f][yi]], 'b-', linewidth=2)
-        # 骨盤
-        ax.plot([rhip[f][xi], lhip[f][xi]], [rhip[f][yi], lhip[f][yi]], 'g-', linewidth=2)
-        
-        # ベクトルを矢印で表示
-        origin = midhip[f]
-        
-        def plot_arrow(ax, orig, vec, color, label):
-            vec_norm = vec / (np.linalg.norm(vec) + 1e-8)
-            ax.annotate('', xy=(orig[xi] + vec_norm[xi] * scale, orig[yi] + vec_norm[yi] * scale),
-                        xytext=(orig[xi], orig[yi]),
-                        arrowprops=dict(arrowstyle='->', color=color, lw=2),
-                        zorder=10)
-            # ラベル
-            ax.text(orig[xi] + vec_norm[xi] * scale * 1.1, orig[yi] + vec_norm[yi] * scale * 1.1,
-                    label, fontsize=7, color=color)
-        
-        # 各ベクトルをプロット
-        plot_arrow(ax, origin, pel_vec[f], 'purple', 'pel')
-        plot_arrow(ax, origin, n_axis[f], 'cyan', 'n_ax')
-        plot_arrow(ax, origin, n_axis_adab[f], 'orange', 'adab')
-        plot_arrow(ax, origin, n_axis_inex[f], 'magenta', 'inex')
-        
-        # 大腿ベクトル
-        plot_arrow(ax, rhip[f], thigh_r[f], 'darkred', 'th_R')
-        plot_arrow(ax, lhip[f], thigh_l[f], 'darkblue', 'th_L')
-        
-        ax.set_xlabel(view['xlabel'])
-        ax.set_ylabel(view['ylabel'])
-        ax.set_title(view['title'])
-        ax.set_aspect('equal')
-        ax.grid(True, alpha=0.3)
-    
-    plt.suptitle(f'{title} - Frame: {frame_idx}', fontsize=14)
-    plt.tight_layout()
-    plt.show()
-    
-    
-    
-    
 def main():
+    # csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub0\thera0-16\mocap")
     csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera0-3\mocap")
     # csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\mocap")
     start_frame = 0
@@ -243,7 +40,7 @@ def main():
         start_frame = 0
         end_frame = 100
 
-    csv_paths = list(csv_path_dir.glob("[0-9]*_[0-9]*_[0-9].csv"))
+    csv_paths = list(csv_path_dir.glob("[0-9]*_[0-9]*_*[0-9].csv"))
 
     geometry_json_path = Path(r"G:\gait_pattern\20250811_br\sub0\thera0-14\mocap\geometry.json")
 
@@ -609,6 +406,23 @@ def main():
         if 'L_Ankle_PlDo' in angle_df.columns:
             for frame in angle_df.index:
                 angle_df.loc[frame, 'L_Ankle_PlDo'] = 180 - angle_df.at[frame, 'L_Ankle_PlDo']
+        
+        if 'R_Hip_InEx' in angle_df.columns:
+            for frame in angle_df.index:
+                angle_df.loc[frame, 'R_Hip_InEx'] = angle_df.at[frame, 'R_Hip_InEx'] #外旋ex+, 内旋in-
+        if 'L_Hip_InEx' in angle_df.columns:
+            for frame in angle_df.index:
+                angle_df.loc[frame, 'L_Hip_InEx'] = - angle_df.at[frame, 'L_Hip_InEx'] # 外旋ex+, 内旋in-
+        
+        
+        if 'R_Hip_AdAb' in angle_df.columns:
+            for frame in angle_df.index:
+                angle_df.loc[frame, 'R_Hip_AdAb'] = angle_df.at[frame, 'R_Hip_AdAb']  # 外転ab+, 内転ad-
+        if 'L_Hip_AdAb' in angle_df.columns:
+            for frame in angle_df.index:
+                angle_df.loc[frame, 'L_Hip_AdAb'] = - angle_df.at[frame, 'L_Hip_AdAb'] # 外転ab+, 内転ad-
+        
+        
         
                 
         # DataFrameのインデックスを絶対フレーム番号に設定
@@ -1566,8 +1380,6 @@ def main():
         print(f"\nシンメトリインデックス:")
         print(si_df)
         
-        
-            
         # #####################################
         # #####################################
         # OpenPose3D結果との比較
@@ -1654,7 +1466,7 @@ def main():
         ltoe_op = (op_filt_data[:, 19, :] + op_filt_data[:, 20, :]) / 2
         
         # 使用するベクトルを定義
-        pel_bec_op = neck_op - midhip_op  #上向き
+        pel_up_bec_op = neck_op - midhip_op  #上向き
         thigh_r_op = rknee_op - rhip_op  #下向き
         shank_r_op = rankle_op - rknee_op  #下向き 
         foot_r_op = rtoe_op - rhee_op  #前向き
@@ -1664,54 +1476,21 @@ def main():
 
         # 関節角度計算
         # 股関節、膝関節、足関節の屈曲伸展角度
-        n_axis = rhip_op - lhip_op  # 右股関節から左股関節へのベクトル
-        rhip_flex_op = op.culc_angle_all_frames(pel_bec_op, thigh_r_op, n_axis, degrees=True, angle_type='hip')
-        lhip_flex_op = op.culc_angle_all_frames(pel_bec_op, thigh_l_op, n_axis, degrees=True, angle_type='hip')
+        n_axis = rhip_op - lhip_op  # 左股関節から右股関節へのベクトル
+        rhip_flex_op = op.culc_angle_all_frames(pel_up_bec_op, thigh_r_op, n_axis, degrees=True, angle_type='hip')
+        lhip_flex_op = op.culc_angle_all_frames(pel_up_bec_op, thigh_l_op, n_axis, degrees=True, angle_type='hip')
         rknee_flex_op = op.culc_angle_all_frames(thigh_r_op, shank_r_op, n_axis, degrees=True, angle_type='knee')
         lknee_flex_op = op.culc_angle_all_frames(thigh_l_op, shank_l_op, n_axis, degrees=True, angle_type='knee')
         rankle_pldo_op = op.culc_angle_all_frames(shank_r_op, foot_r_op, n_axis, degrees=True, angle_type='ankle')
         lankle_pldo_op = op.culc_angle_all_frames(shank_l_op, foot_l_op, n_axis, degrees=True, angle_type='ankle')
         # 股関節の内転外転
-        n_axis_adab = np.cross(pel_bec_op, n_axis)  # pel_vecとn_axisの外積を計算して直交ベクトルを取得 進行方向向き
-        rhip_adab_op = op.culc_angle_all_frames(pel_bec_op, thigh_r_op, n_axis_adab, degrees=True, angle_type='hip_adab')
-        lhip_adab_op = op.culc_angle_all_frames(pel_bec_op, thigh_l_op, n_axis_adab, degrees=True, angle_type='hip_adab')
+        n_axis_adab = np.cross(pel_up_bec_op, n_axis)  # pel_vecとn_axisの外積を計算して直交ベクトルを取得 進行方向向き
+        rhip_adab_op = op.culc_angle_all_frames(pel_up_bec_op, thigh_r_op, n_axis_adab, degrees=True, angle_type='hip_adab')
+        lhip_adab_op = op.culc_angle_all_frames(pel_up_bec_op, thigh_l_op, n_axis_adab, degrees=True, angle_type='hip_adab')
         # 股関節の内旋外旋
-        n_axis_inex = pel_bec_op  # pel_vecを内旋外旋の回転軸とする
-        rhip_inex_op = op.culc_angle_all_frames(thigh_r_op, n_axis_inex, n_axis_inex, degrees=True, angle_type='hip_inex')
-        lhip_inex_op = op.culc_angle_all_frames(thigh_l_op, n_axis_inex, n_axis_inex, degrees=True, angle_type='hip_inex')
-
-
-
-        # ベクトルの向きを確認（任意のフレームで可視化）
-        # 3D表示
-        visualize_vectors_3d(
-            frame_idx=0,  # 確認したいフレームのインデックス
-            rhip=rhip_op, lhip=lhip_op, midhip=midhip_op,
-            rknee=rknee_op, lknee=lknee_op,
-            rankle=rankle_op, lankle=lankle_op,
-            rtoe=rtoe_op, ltoe=ltoe_op,
-            pel_vec=pel_bec_op, thigh_r=thigh_r_op, thigh_l=thigh_l_op,
-            shank_r=shank_r_op, shank_l=shank_l_op,
-            foot_r=foot_r_op, foot_l=foot_l_op,
-            n_axis=n_axis, n_axis_adab=n_axis_adab, n_axis_inex=n_axis_inex,
-            title="OpenPose Vectors"
-        )
-        
-        # 複数視点（前面・側面・上面）で表示
-        visualize_vectors_multiple_views(
-            frame_idx=0,  # 確認したいフレームのインデックス
-            rhip=rhip_op, lhip=lhip_op, midhip=midhip_op,
-            rknee=rknee_op, lknee=lknee_op,
-            rankle=rankle_op, lankle=lankle_op,
-            rtoe=rtoe_op, ltoe=ltoe_op,
-            pel_vec=pel_bec_op, thigh_r=thigh_r_op, thigh_l=thigh_l_op,
-            shank_r=shank_r_op, shank_l=shank_l_op,
-            foot_r=foot_r_op, foot_l=foot_l_op,
-            n_axis=n_axis, n_axis_adab=n_axis_adab, n_axis_inex=n_axis_inex,
-            title="OpenPose Vectors"
-        )
-        
-        
+        # pel_vecを内旋外旋の回転軸とする
+        rhip_inex_op = op.culc_angle_all_frames(thigh_r_op, n_axis_adab, pel_up_bec_op, degrees=True, angle_type='hip_inex')
+        lhip_inex_op = op.culc_angle_all_frames(thigh_l_op, n_axis_adab, pel_up_bec_op, degrees=True, angle_type='hip_inex')
 
         # 右足の歩行周期ごとに関節角度を100%に正規化
         normalized_gait_cycles_r_op = []

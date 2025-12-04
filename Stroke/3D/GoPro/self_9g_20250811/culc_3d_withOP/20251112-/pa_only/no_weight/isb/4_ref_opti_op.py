@@ -1,7 +1,3 @@
-"""
-たぶんどこかふるいやつ 4_ref_poti_opの中の方が最新
-"""
-
 import pandas as pd
 from pathlib import Path
 import numpy as np
@@ -10,10 +6,11 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt, resample
 import json
 import m_opti as opti
+import m_openpose as op
 
 def main():
-    # csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera0-3\mocap")
-    csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\mocap")
+    csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera0-3\mocap")
+    # csv_path_dir = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\mocap")
     start_frame = 0
     end_frame = 10000
 
@@ -62,352 +59,369 @@ def main():
 
         print(f"csv_path = {csv_path}")
         print(f"keypoints_mocap shape: {keypoints_mocap.shape}")
+        
+        # ISBようにテスト
+        #######################
+        from joint_angles_isb import process_mocap_data_isb
 
-        # サンプリング周波数を設定
-        sampling_freq = 100
+        angles_df = process_mocap_data_isb(
+            keypoints_mocap, 
+            full_range,
+            sampling_freq=100,
+            filter_order=4,
+            cutoff_freq=6,
+            marker_radius=0.0127,
+            height=1.76  # 被験者の身長に変更
+        )
+        angles_df.to_csv(csv_path.parent / f"{csv_path.stem}_angles_isb.csv", index=False)
+        exit()
+        #######################
 
-        angle_list = []
-        sac2hee_r_list = []
-        sac2hee_l_list = []
-        heel_z_list = []
+        # # サンプリング周波数を設定
+        # sampling_freq = 100
 
-        # バターワースフィルタのサンプリング周波数を動的に設定
-        rasi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 10, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lasi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 2, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rpsi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 14, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lpsi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 6, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rank = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 8, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lank = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 0, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rank2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 9, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lank2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 1, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rknee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 12, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lknee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 4, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rknee2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 13, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lknee2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 5, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rtoe = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 15, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        ltoe = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 7, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        rhee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 11, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
-        lhee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 3, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # angle_list = []
+        # sac2hee_r_list = []
+        # sac2hee_l_list = []
+        # heel_z_list = []
 
-        # full_range = range(1, len(rasi))  #差分取るために0からではなく1フレーム目からにする
-        print(f"full_range(開始点は1フレーム後から): {full_range}")
+        # # バターワースフィルタのサンプリング周波数を動的に設定
+        # rasi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 10, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # lasi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 2, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # rpsi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 14, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # lpsi = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 6, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # rank = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 8, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # lank = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 0, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # rank2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 9, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # lank2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 1, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # rknee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 12, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # lknee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 4, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # rknee2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 13, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # lknee2 = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 5, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # rtoe = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 15, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # ltoe = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 7, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # rhee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 11, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
+        # lhee = np.array([opti.butter_lowpass_filter(keypoints_mocap[:, 3, x], order=4, cutoff_freq=6, frame_list=full_range, sampling_freq=sampling_freq) for x in range(3)]).T
 
-        hip_list = []
-        angle_list = []
+        # # full_range = range(1, len(rasi))  #差分取るために0からではなく1フレーム目からにする
+        # print(f"full_range(開始点は1フレーム後から): {full_range}")
+
+        # hip_list = []
+        # angle_list = []
 
 
-        for frame_num in full_range:
-            #メモ
-            d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
-            d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:])) / 2
-            r = 0.0127 #[m] Opti確認：https://www.optitrack.jp/products/accessories/marker.html
-            h = 1.76 #[m]
-            k = h/1.7
-            beta = 0.1 * np.pi #[rad]
-            theta = 0.496 #[rad]
-            c = 0.115 * d_leg - 0.0153  #SKYCOMだと0.00153だけどDavisモデルは0.0153  https://wiki.has-motion.com/doku.php?id=visual3d:documentation:modeling:segments:hip_joint_landmarks
-            x_dis = 0.1288 * d_leg - 0.04856
+        # for frame_num in full_range:
+        #     #メモ
+        #     d_asi = np.linalg.norm(rasi[frame_num,:] - lasi[frame_num,:])
+        #     d_leg = (np.linalg.norm(rank[frame_num,:] - rasi[frame_num,:]) + np.linalg.norm(lank[frame_num, :] - lasi[frame_num,:])) / 2
+        #     r = 0.0127 #[m] Opti確認：https://www.optitrack.jp/products/accessories/marker.html
+        #     h = 1.76 #[m]
+        #     k = h/1.7
+        #     beta = 0.1 * np.pi #[rad]
+        #     theta = 0.496 #[rad]
+        #     c = 0.115 * d_leg - 0.0153  #SKYCOMだと0.00153だけどDavisモデルは0.0153  https://wiki.has-motion.com/doku.php?id=visual3d:documentation:modeling:segments:hip_joint_landmarks
+        #     x_dis = 0.1288 * d_leg - 0.04856
 
-            """
-            変更後
-            """
-            # skycom + davis
-            x_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
-            x_lthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
-            y_rthigh = +(c * np.sin(theta) - d_asi/2)
-            y_lthigh = -(c * np.sin(theta)- d_asi/2)
-            z_rthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
-            z_lthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
-            rthigh_pelvis = np.array([x_rthigh, y_rthigh, z_rthigh]).T
-            lthigh_pelvis = np.array([x_lthigh, y_lthigh, z_lthigh]).T
+        #     """
+        #     変更後
+        #     """
+        #     # skycom + davis
+        #     x_rthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+        #     x_lthigh = -(x_dis +r) * np.cos(beta) + c * np.cos(theta) * np.sin(beta)
+        #     y_rthigh = +(c * np.sin(theta) - d_asi/2)
+        #     y_lthigh = -(c * np.sin(theta)- d_asi/2)
+        #     z_rthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
+        #     z_lthigh = -(x_dis + r) * np.sin(beta) - c * np.cos(theta) * np.cos(beta)
+        #     rthigh_pelvis = np.array([x_rthigh, y_rthigh, z_rthigh]).T
+        #     lthigh_pelvis = np.array([x_lthigh, y_lthigh, z_lthigh]).T
 
-            # 骨盤原点1 ASISの中点
-            hip_0 = (rasi[frame_num,:] + lasi[frame_num,:]) / 2
-            # 仙骨 PSISの中点
-            sacrum = (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2
+        #     # 骨盤原点1 ASISの中点
+        #     hip_0 = (rasi[frame_num,:] + lasi[frame_num,:]) / 2
+        #     # 仙骨 PSISの中点
+        #     sacrum = (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2
 
-            #骨盤節座標系1（原点はhip_0）
-            e_x0_pelvis_0 = (hip_0 - sacrum)/np.linalg.norm(hip_0 - sacrum)
-            e_y_pelvis_0 = (lasi[frame_num,:] - rasi[frame_num,:])/np.linalg.norm(lasi[frame_num,:] - rasi[frame_num,:])
-            e_z_pelvis_0 = np.cross(e_x0_pelvis_0, e_y_pelvis_0)/np.linalg.norm(np.cross(e_x0_pelvis_0, e_y_pelvis_0))
-            e_x_pelvis_0 = np.cross(e_y_pelvis_0, e_z_pelvis_0)
+        #     #骨盤節座標系1（原点はhip_0）
+        #     e_x0_pelvis_0 = (hip_0 - sacrum)/np.linalg.norm(hip_0 - sacrum)
+        #     e_y_pelvis_0 = (lasi[frame_num,:] - rasi[frame_num,:])/np.linalg.norm(lasi[frame_num,:] - rasi[frame_num,:])
+        #     e_z_pelvis_0 = np.cross(e_x0_pelvis_0, e_y_pelvis_0)/np.linalg.norm(np.cross(e_x0_pelvis_0, e_y_pelvis_0))
+        #     e_x_pelvis_0 = np.cross(e_y_pelvis_0, e_z_pelvis_0)
             
-            # Davidモデルを参考に骨盤座標系1を骨盤の座標系として定義
-            e_x_pelvis = e_x_pelvis_0
-            e_y_pelvis = e_y_pelvis_0
-            e_z_pelvis = e_z_pelvis_0
-            rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
+        #     # Davidモデルを参考に骨盤座標系1を骨盤の座標系として定義
+        #     e_x_pelvis = e_x_pelvis_0
+        #     e_y_pelvis = e_y_pelvis_0
+        #     e_z_pelvis = e_z_pelvis_0
+        #     rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
 
-            transformation_matrix = np.array([[e_x_pelvis_0[0], e_y_pelvis_0[0], e_z_pelvis_0[0], hip_0[0]],
-                                                [e_x_pelvis_0[1], e_y_pelvis_0[1], e_z_pelvis_0[1], hip_0[1]],
-                                                [e_x_pelvis_0[2], e_y_pelvis_0[2], e_z_pelvis_0[2], hip_0[2]],
-                                                [0,       0,       0,       1]])
+        #     transformation_matrix = np.array([[e_x_pelvis_0[0], e_y_pelvis_0[0], e_z_pelvis_0[0], hip_0[0]],
+        #                                         [e_x_pelvis_0[1], e_y_pelvis_0[1], e_z_pelvis_0[1], hip_0[1]],
+        #                                         [e_x_pelvis_0[2], e_y_pelvis_0[2], e_z_pelvis_0[2], hip_0[2]],
+        #                                         [0,       0,       0,       1]])
 
-            #グローバル座標に変換して再度計算
-            rthigh = np.dot(transformation_matrix, np.append(rthigh_pelvis, 1))[:3]
-            lthigh = np.dot(transformation_matrix, np.append(lthigh_pelvis, 1))[:3]
-            hip = (rthigh + lthigh) / 2
+        #     #グローバル座標に変換して再度計算
+        #     rthigh = np.dot(transformation_matrix, np.append(rthigh_pelvis, 1))[:3]
+        #     lthigh = np.dot(transformation_matrix, np.append(lthigh_pelvis, 1))[:3]
+        #     hip = (rthigh + lthigh) / 2
 
-            # 腰椎節原点
-            lumbar = (0.47 * (rasi[frame_num,:] + lasi[frame_num,:]) / 2 + 0.53 * (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2) + 0.02 * k * np.array([0, 1, 0])
+        #     # 腰椎節原点
+        #     lumbar = (0.47 * (rasi[frame_num,:] + lasi[frame_num,:]) / 2 + 0.53 * (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2) + 0.02 * k * np.array([0, 1, 0])
 
-            hip_list.append(hip)
-            hip_array = np.array(hip_list)
+        #     hip_list.append(hip)
+        #     hip_array = np.array(hip_list)
 
-            #必要な原点の設定
-            rshank = (rknee[frame_num, :] + rknee2[frame_num, :]) / 2
-            lshank = (lknee[frame_num, :] + lknee2[frame_num, :]) / 2
-            rfoot = (rank[frame_num,:] + rank2[frame_num,:]) / 2
-            lfoot = (lank[frame_num, :] + lank2[frame_num,:]) / 2
+        #     #必要な原点の設定
+        #     rshank = (rknee[frame_num, :] + rknee2[frame_num, :]) / 2
+        #     lshank = (lknee[frame_num, :] + lknee2[frame_num, :]) / 2
+        #     rfoot = (rank[frame_num,:] + rank2[frame_num,:]) / 2
+        #     lfoot = (lank[frame_num, :] + lank2[frame_num,:]) / 2
 
-            #右大腿節座標系（原点はrthigh）
-            e_y0_rthigh = rknee2[frame_num, :] - rknee[frame_num, :]
-            e_z_rthigh = (rshank - rthigh)/np.linalg.norm(rshank - rthigh)
-            e_x_rthigh = np.cross(e_y0_rthigh, e_z_rthigh)/np.linalg.norm(np.cross(e_y0_rthigh, e_z_rthigh))
-            e_y_rthigh = np.cross(e_z_rthigh, e_x_rthigh)
-            rot_rthigh = np.array([e_x_rthigh, e_y_rthigh, e_z_rthigh]).T
+        #     #右大腿節座標系（原点はrthigh）
+        #     e_y0_rthigh = rknee2[frame_num, :] - rknee[frame_num, :]
+        #     e_z_rthigh = (rshank - rthigh)/np.linalg.norm(rshank - rthigh)
+        #     e_x_rthigh = np.cross(e_y0_rthigh, e_z_rthigh)/np.linalg.norm(np.cross(e_y0_rthigh, e_z_rthigh))
+        #     e_y_rthigh = np.cross(e_z_rthigh, e_x_rthigh)
+        #     rot_rthigh = np.array([e_x_rthigh, e_y_rthigh, e_z_rthigh]).T
 
-            #左大腿節座標系（原点はlthigh）
-            e_y0_lthigh = lknee[frame_num, :] - lknee2[frame_num, :]
-            e_z_lthigh = (lshank - lthigh)/np.linalg.norm(lshank - lthigh)
-            e_x_lthigh = np.cross(e_y0_lthigh, e_z_lthigh)/np.linalg.norm(np.cross(e_y0_lthigh, e_z_lthigh))
-            e_y_lthigh = np.cross(e_z_lthigh, e_x_lthigh)
-            rot_lthigh = np.array([e_x_lthigh, e_y_lthigh, e_z_lthigh]).T
+        #     #左大腿節座標系（原点はlthigh）
+        #     e_y0_lthigh = lknee[frame_num, :] - lknee2[frame_num, :]
+        #     e_z_lthigh = (lshank - lthigh)/np.linalg.norm(lshank - lthigh)
+        #     e_x_lthigh = np.cross(e_y0_lthigh, e_z_lthigh)/np.linalg.norm(np.cross(e_y0_lthigh, e_z_lthigh))
+        #     e_y_lthigh = np.cross(e_z_lthigh, e_x_lthigh)
+        #     rot_lthigh = np.array([e_x_lthigh, e_y_lthigh, e_z_lthigh]).T
 
-            #右下腿節座標系（原点はrshank）
-            e_y0_rshank = rknee2[frame_num, :] - rknee[frame_num, :]
-            e_z_rshank = (rfoot - rshank)/np.linalg.norm(rfoot - rshank)
-            e_x_rshank = np.cross(e_y0_rshank, e_z_rshank)/np.linalg.norm(np.cross(e_y0_rshank, e_z_rshank))
-            e_y_rshank = np.cross(e_z_rshank, e_x_rshank)
-            rot_rshank = np.array([e_x_rshank, e_y_rshank, e_z_rshank]).T
+        #     #右下腿節座標系（原点はrshank）
+        #     e_y0_rshank = rknee2[frame_num, :] - rknee[frame_num, :]
+        #     e_z_rshank = (rfoot - rshank)/np.linalg.norm(rfoot - rshank)
+        #     e_x_rshank = np.cross(e_y0_rshank, e_z_rshank)/np.linalg.norm(np.cross(e_y0_rshank, e_z_rshank))
+        #     e_y_rshank = np.cross(e_z_rshank, e_x_rshank)
+        #     rot_rshank = np.array([e_x_rshank, e_y_rshank, e_z_rshank]).T
 
-            #左下腿節座標系（原点はlshank）
-            e_y0_lshank = lknee[frame_num, :] - lknee2[frame_num, :]
-            e_z_lshank = (lfoot - lshank)/np.linalg.norm(lfoot - lshank)
-            e_x_lshank = np.cross(e_y0_lshank, e_z_lshank)/np.linalg.norm(np.cross(e_y0_lshank, e_z_lshank))
-            e_y_lshank = np.cross(e_z_lshank, e_x_lshank)
-            rot_lshank = np.array([e_x_lshank, e_y_lshank, e_z_lshank]).T
+        #     #左下腿節座標系（原点はlshank）
+        #     e_y0_lshank = lknee[frame_num, :] - lknee2[frame_num, :]
+        #     e_z_lshank = (lfoot - lshank)/np.linalg.norm(lfoot - lshank)
+        #     e_x_lshank = np.cross(e_y0_lshank, e_z_lshank)/np.linalg.norm(np.cross(e_y0_lshank, e_z_lshank))
+        #     e_y_lshank = np.cross(e_z_lshank, e_x_lshank)
+        #     rot_lshank = np.array([e_x_lshank, e_y_lshank, e_z_lshank]).T
 
-            #右足節座標系 AIST参照（原点はrfoot）
-            e_x_rfoot = (rtoe[frame_num,:] - rhee[frame_num,:]) / np.linalg.norm(rtoe[frame_num,:] - rhee[frame_num,:])
-            e_y0_rfoot = rank2[frame_num,:] - rank[frame_num,:]
-            e_z_rfoot = np.cross(e_x_rfoot, e_y0_rfoot)/np.linalg.norm(np.cross(e_x_rfoot, e_y0_rfoot))
-            e_y_rfoot = np.cross(e_z_rfoot, e_x_rfoot)
-            rot_rfoot = np.array([e_x_rfoot, e_y_rfoot, e_z_rfoot]).T
+        #     #右足節座標系 AIST参照（原点はrfoot）
+        #     e_x_rfoot = (rtoe[frame_num,:] - rhee[frame_num,:]) / np.linalg.norm(rtoe[frame_num,:] - rhee[frame_num,:])
+        #     e_y0_rfoot = rank2[frame_num,:] - rank[frame_num,:]
+        #     e_z_rfoot = np.cross(e_x_rfoot, e_y0_rfoot)/np.linalg.norm(np.cross(e_x_rfoot, e_y0_rfoot))
+        #     e_y_rfoot = np.cross(e_z_rfoot, e_x_rfoot)
+        #     rot_rfoot = np.array([e_x_rfoot, e_y_rfoot, e_z_rfoot]).T
             
 
-            #左足節座標系 AIST参照（原点はlfoot）
-            e_x_lfoot = (ltoe[frame_num,:] - lhee[frame_num, :]) / np.linalg.norm(ltoe[frame_num,:] - lhee[frame_num, :])
-            e_y0_lfoot = lank[frame_num,:] - lank2[frame_num,:]
-            e_z_lfoot = np.cross(e_x_lfoot, e_y0_lfoot)/np.linalg.norm(np.cross(e_x_lfoot, e_y0_lfoot))
-            e_y_lfoot = np.cross(e_z_lfoot, e_x_lfoot)
-            rot_lfoot = np.array([e_x_lfoot, e_y_lfoot, e_z_lfoot]).T
+        #     #左足節座標系 AIST参照（原点はlfoot）
+        #     e_x_lfoot = (ltoe[frame_num,:] - lhee[frame_num, :]) / np.linalg.norm(ltoe[frame_num,:] - lhee[frame_num, :])
+        #     e_y0_lfoot = lank[frame_num,:] - lank2[frame_num,:]
+        #     e_z_lfoot = np.cross(e_x_lfoot, e_y0_lfoot)/np.linalg.norm(np.cross(e_x_lfoot, e_y0_lfoot))
+        #     e_y_lfoot = np.cross(e_z_lfoot, e_x_lfoot)
+        #     rot_lfoot = np.array([e_x_lfoot, e_y_lfoot, e_z_lfoot]).T
 
-            # 相対回転行列の計算
-            r_hip_realative_rotation = np.dot(np.linalg.inv(rot_rthigh), rot_pelvis)  #骨盤節に合わせるための大腿節の回転行列
-            l_hip_realative_rotation = np.dot(np.linalg.inv(rot_lthigh), rot_pelvis)
-            r_knee_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rthigh)  #大腿節に合わせるための下腿節の回転行列
-            l_knee_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lthigh)
-            r_ankle_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rfoot)  #足節に合わせるための下腿節の回転行列
-            l_ankle_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lfoot)
+        #     # 相対回転行列の計算
+        #     r_hip_realative_rotation = np.dot(np.linalg.inv(rot_rthigh), rot_pelvis)  #骨盤節に合わせるための大腿節の回転行列
+        #     l_hip_realative_rotation = np.dot(np.linalg.inv(rot_lthigh), rot_pelvis)
+        #     r_knee_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rthigh)  #大腿節に合わせるための下腿節の回転行列
+        #     l_knee_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lthigh)
+        #     r_ankle_realative_rotation = np.dot(np.linalg.inv(rot_rshank), rot_rfoot)  #足節に合わせるための下腿節の回転行列
+        #     l_ankle_realative_rotation = np.dot(np.linalg.inv(rot_lshank), rot_lfoot)
 
-            r_hip_angle_rot = R.from_matrix(r_hip_realative_rotation)
-            l_hip_angle_rot = R.from_matrix(l_hip_realative_rotation)
-            r_knee_angle_rot = R.from_matrix(r_knee_realative_rotation)
-            l_knee_angle_rot = R.from_matrix(l_knee_realative_rotation)
-            r_ankle_angle_rot = R.from_matrix(r_ankle_realative_rotation)
-            l_ankle_angle_rot = R.from_matrix(l_ankle_realative_rotation)
+        #     r_hip_angle_rot = R.from_matrix(r_hip_realative_rotation)
+        #     l_hip_angle_rot = R.from_matrix(l_hip_realative_rotation)
+        #     r_knee_angle_rot = R.from_matrix(r_knee_realative_rotation)
+        #     l_knee_angle_rot = R.from_matrix(l_knee_realative_rotation)
+        #     r_ankle_angle_rot = R.from_matrix(r_ankle_realative_rotation)
+        #     l_ankle_angle_rot = R.from_matrix(l_ankle_realative_rotation)
 
-            # 回転行列から回転角を計算 XYZ大文字だと内因性，xyz小文字だと外因性
-            # 屈曲-伸展
-            r_hip_angle_flex = r_hip_angle_rot.as_euler('YZX', degrees=True)[0]
-            l_hip_angle_flex = l_hip_angle_rot.as_euler('YZX', degrees=True)[0]
-            r_knee_angle_flex = r_knee_angle_rot.as_euler('YZX', degrees=True)[0]
-            l_knee_angle_flex = l_knee_angle_rot.as_euler('YZX', degrees=True)[0]
-            r_ankle_angle_pldo = r_ankle_angle_rot.as_euler('YZX', degrees=True)[0]
-            l_ankle_angle_pldo = l_ankle_angle_rot.as_euler('YZX', degrees=True)[0]
+        #     # 回転行列から回転角を計算 XYZ大文字だと内因性，xyz小文字だと外因性
+        #     # 屈曲-伸展
+        #     r_hip_angle_flex = r_hip_angle_rot.as_euler('YZX', degrees=True)[0]
+        #     l_hip_angle_flex = l_hip_angle_rot.as_euler('YZX', degrees=True)[0]
+        #     r_knee_angle_flex = r_knee_angle_rot.as_euler('YZX', degrees=True)[0]
+        #     l_knee_angle_flex = l_knee_angle_rot.as_euler('YZX', degrees=True)[0]
+        #     r_ankle_angle_pldo = r_ankle_angle_rot.as_euler('YZX', degrees=True)[0]
+        #     l_ankle_angle_pldo = l_ankle_angle_rot.as_euler('YZX', degrees=True)[0]
             
-            # 内旋外旋
-            r_hip_angle_inex = r_hip_angle_rot.as_euler('YZX', degrees=True)[1]
-            l_hip_angle_inex = l_hip_angle_rot.as_euler('YZX', degrees=True)[1]
-            r_knee_angle_inex = r_knee_angle_rot.as_euler('YZX', degrees=True)[1]
-            l_knee_angle_inex = l_knee_angle_rot.as_euler('YZX', degrees=True)[1]
-            r_ankle_angle_inex = r_ankle_angle_rot.as_euler('YZX', degrees=True)[1]
-            l_ankle_angle_inex = l_ankle_angle_rot.as_euler('YZX', degrees=True)[1]
+        #     # 内旋外旋
+        #     r_hip_angle_inex = r_hip_angle_rot.as_euler('YZX', degrees=True)[1]
+        #     l_hip_angle_inex = l_hip_angle_rot.as_euler('YZX', degrees=True)[1]
+        #     r_knee_angle_inex = r_knee_angle_rot.as_euler('YZX', degrees=True)[1]
+        #     l_knee_angle_inex = l_knee_angle_rot.as_euler('YZX', degrees=True)[1]
+        #     r_ankle_angle_inex = r_ankle_angle_rot.as_euler('YZX', degrees=True)[1]
+        #     l_ankle_angle_inex = l_ankle_angle_rot.as_euler('YZX', degrees=True)[1]
 
-            # 内転外転
-            r_hip_angle_adab = r_hip_angle_rot.as_euler('YZX', degrees=True)[2]
-            l_hip_angle_adab = l_hip_angle_rot.as_euler('YZX', degrees=True)[2]
-            r_knee_angle_adab = r_knee_angle_rot.as_euler('YZX', degrees=True)[2]
-            l_knee_angle_adab = l_knee_angle_rot.as_euler('YZX', degrees=True)[2]
-            r_ankle_angle_adab = r_ankle_angle_rot.as_euler('YZX', degrees=True)[2]
-            l_ankle_angle_adab = l_ankle_angle_rot.as_euler('YZX', degrees=True)[2]
+        #     # 内転外転
+        #     r_hip_angle_adab = r_hip_angle_rot.as_euler('YZX', degrees=True)[2]
+        #     l_hip_angle_adab = l_hip_angle_rot.as_euler('YZX', degrees=True)[2]
+        #     r_knee_angle_adab = r_knee_angle_rot.as_euler('YZX', degrees=True)[2]
+        #     l_knee_angle_adab = l_knee_angle_rot.as_euler('YZX', degrees=True)[2]
+        #     r_ankle_angle_adab = r_ankle_angle_rot.as_euler('YZX', degrees=True)[2]
+        #     l_ankle_angle_adab = l_ankle_angle_rot.as_euler('YZX', degrees=True)[2]
 
-            angle_list.append([r_hip_angle_flex, l_hip_angle_flex, r_knee_angle_flex, l_knee_angle_flex, r_ankle_angle_pldo, l_ankle_angle_pldo,
-                                    r_hip_angle_inex, l_hip_angle_inex, r_knee_angle_inex, l_knee_angle_inex, r_ankle_angle_inex, l_ankle_angle_inex,
-                                    r_hip_angle_adab, l_hip_angle_adab, r_knee_angle_adab, l_knee_angle_adab, r_ankle_angle_adab, l_ankle_angle_adab])
+        #     angle_list.append([r_hip_angle_flex, l_hip_angle_flex, r_knee_angle_flex, l_knee_angle_flex, r_ankle_angle_pldo, l_ankle_angle_pldo,
+        #                             r_hip_angle_inex, l_hip_angle_inex, r_knee_angle_inex, l_knee_angle_inex, r_ankle_angle_inex, l_ankle_angle_inex,
+        #                             r_hip_angle_adab, l_hip_angle_adab, r_knee_angle_adab, l_knee_angle_adab, r_ankle_angle_adab, l_ankle_angle_adab])
 
-            plot_flag = False
-            if plot_flag:
-                # print(frame_num)  #相対フレーム数
-                if frame_num == 98:
-                    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
-                    ax.set_xlabel("x")
-                    ax.set_ylabel("y")
-                    ax.set_zlabel("z")
-                    ax.set_xlim(-1.5, 1.5)
-                    ax.set_ylim(-1, 2)
-                    ax.set_zlim(-2, 1)
-                    #frame数を表示
-                    ax.text2D(0.5, 0.01, f"frame = {frame_num}", transform=ax.transAxes)
-                    #方向を設定
-                    ax.view_init(elev=0, azim=0)
+        #     plot_flag = False
+        #     if plot_flag:
+        #         # print(frame_num)  #相対フレーム数
+        #         if frame_num == 98:
+        #             fig, ax = plt.subplots(figsize=(6, 6), subplot_kw={'projection': '3d'})
+        #             ax.set_xlabel("x")
+        #             ax.set_ylabel("y")
+        #             ax.set_zlabel("z")
+        #             ax.set_xlim(-1.5, 1.5)
+        #             ax.set_ylim(-1, 2)
+        #             ax.set_zlim(-2, 1)
+        #             #frame数を表示
+        #             ax.text2D(0.5, 0.01, f"frame = {frame_num}", transform=ax.transAxes)
+        #             #方向を設定
+        #             ax.view_init(elev=0, azim=0)
 
-                    ax.scatter(rasi[frame_num,:][0], rasi[frame_num,:][1], rasi[frame_num,:][2], color='black', s=5)
-                    ax.scatter(lasi[frame_num,:][0], lasi[frame_num,:][1], lasi[frame_num,:][2], color='black', s=5)
-                    ax.scatter(rpsi[frame_num,:][0], rpsi[frame_num,:][1], rpsi[frame_num,:][2], color='black', s=5)
-                    ax.scatter(lpsi[frame_num,:][0], lpsi[frame_num,:][1], lpsi[frame_num,:][2], color='black', s=5)
-                    ax.scatter(rank[frame_num,:][0], rank[frame_num,:][1], rank[frame_num,:][2], color='black', s=5)
-                    ax.scatter(lank[frame_num,:][0], lank[frame_num,:][1], lank[frame_num,:][2], color='black', s=5)
-                    ax.scatter(rank2[frame_num,:][0], rank2[frame_num,:][1], rank2[frame_num,:][2], color='black', s=5)
-                    ax.scatter(lank2[frame_num,:][0], lank2[frame_num,:][1], lank2[frame_num,:][2], color='black', s=5)
-                    ax.scatter(rknee[frame_num,:][0], rknee[frame_num,:][1], rknee[frame_num,:][2], color='black', s=5)
-                    ax.scatter(lknee[frame_num,:][0], lknee[frame_num,:][1], lknee[frame_num,:][2], color='black', s=5)
-                    ax.scatter(rknee2[frame_num,:][0], rknee2[frame_num,:][1], rknee2[frame_num,:][2], color='black', s=5)
-                    ax.scatter(lknee2[frame_num,:][0], lknee2[frame_num,:][1], lknee2[frame_num,:][2], color='black', s=5)
-                    ax.scatter(rtoe[frame_num,:][0], rtoe[frame_num,:][1], rtoe[frame_num,:][2], color='black', s=5)
-                    ax.scatter(ltoe[frame_num,:][0], ltoe[frame_num,:][1], ltoe[frame_num,:][2], color='black', s=5)
-                    ax.scatter(rhee[frame_num,:][0], rhee[frame_num,:][1], rhee[frame_num,:][2], color='black', s=5)
-                    ax.scatter(lhee[frame_num, :][0], lhee[frame_num, :][1], lhee[frame_num, :][2], color='black', s=5)
+        #             ax.scatter(rasi[frame_num,:][0], rasi[frame_num,:][1], rasi[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(lasi[frame_num,:][0], lasi[frame_num,:][1], lasi[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(rpsi[frame_num,:][0], rpsi[frame_num,:][1], rpsi[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(lpsi[frame_num,:][0], lpsi[frame_num,:][1], lpsi[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(rank[frame_num,:][0], rank[frame_num,:][1], rank[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(lank[frame_num,:][0], lank[frame_num,:][1], lank[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(rank2[frame_num,:][0], rank2[frame_num,:][1], rank2[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(lank2[frame_num,:][0], lank2[frame_num,:][1], lank2[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(rknee[frame_num,:][0], rknee[frame_num,:][1], rknee[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(lknee[frame_num,:][0], lknee[frame_num,:][1], lknee[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(rknee2[frame_num,:][0], rknee2[frame_num,:][1], rknee2[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(lknee2[frame_num,:][0], lknee2[frame_num,:][1], lknee2[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(rtoe[frame_num,:][0], rtoe[frame_num,:][1], rtoe[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(ltoe[frame_num,:][0], ltoe[frame_num,:][1], ltoe[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(rhee[frame_num,:][0], rhee[frame_num,:][1], rhee[frame_num,:][2], color='black', s=5)
+        #             ax.scatter(lhee[frame_num, :][0], lhee[frame_num, :][1], lhee[frame_num, :][2], color='black', s=5)
                     
-                    ax.scatter(rfoot[0], rfoot[1], rfoot[2], label='rfoot')
-                    ax.scatter(lfoot[0], lfoot[1], lfoot[2], label='lfoot')
-                    ax.scatter(rshank[0], rshank[1], rshank[2], label='rshank')
-                    ax.scatter(lshank[0], lshank[1], lshank[2], label='lshank')
-                    ax.scatter(lumbar[0], lumbar[1], lumbar[2], label='lumbar')
-                    ax.scatter(hip[0], hip[1], hip[2], label='hip')
-                    ax.scatter(rthigh[0], rthigh[1], rthigh[2], label='rthigh')
-                    ax.scatter(lthigh[0], lthigh[1], lthigh[2], label='lthigh')
+        #             ax.scatter(rfoot[0], rfoot[1], rfoot[2], label='rfoot')
+        #             ax.scatter(lfoot[0], lfoot[1], lfoot[2], label='lfoot')
+        #             ax.scatter(rshank[0], rshank[1], rshank[2], label='rshank')
+        #             ax.scatter(lshank[0], lshank[1], lshank[2], label='lshank')
+        #             ax.scatter(lumbar[0], lumbar[1], lumbar[2], label='lumbar')
+        #             ax.scatter(hip[0], hip[1], hip[2], label='hip')
+        #             ax.scatter(rthigh[0], rthigh[1], rthigh[2], label='rthigh')
+        #             ax.scatter(lthigh[0], lthigh[1], lthigh[2], label='lthigh')
 
-                    e_x_pelvis = e_x_pelvis * 0.1
-                    e_y_pelvis = e_y_pelvis * 0.1
-                    e_z_pelvis = e_z_pelvis * 0.1
-                    e_x_rthigh = e_x_rthigh * 0.1
-                    e_y_rthigh = e_y_rthigh * 0.1
-                    e_z_rthigh = e_z_rthigh * 0.1
-                    e_x_lthigh = e_x_lthigh * 0.1
-                    e_y_lthigh = e_y_lthigh * 0.1
-                    e_z_lthigh = e_z_lthigh * 0.1
-                    e_x_rshank = e_x_rshank * 0.1
-                    e_y_rshank = e_y_rshank * 0.1
-                    e_z_rshank = e_z_rshank * 0.1
-                    e_x_lshank = e_x_lshank * 0.1
-                    e_y_lshank = e_y_lshank * 0.1
-                    e_z_lshank = e_z_lshank * 0.1
-                    e_x_rfoot = e_x_rfoot * 0.1
-                    e_y_rfoot = e_y_rfoot * 0.1
-                    e_z_rfoot = e_z_rfoot * 0.1
-                    e_x_lfoot = e_x_lfoot * 0.1
-                    e_y_lfoot = e_y_lfoot * 0.1
-                    e_z_lfoot = e_z_lfoot * 0.1
+        #             e_x_pelvis = e_x_pelvis * 0.1
+        #             e_y_pelvis = e_y_pelvis * 0.1
+        #             e_z_pelvis = e_z_pelvis * 0.1
+        #             e_x_rthigh = e_x_rthigh * 0.1
+        #             e_y_rthigh = e_y_rthigh * 0.1
+        #             e_z_rthigh = e_z_rthigh * 0.1
+        #             e_x_lthigh = e_x_lthigh * 0.1
+        #             e_y_lthigh = e_y_lthigh * 0.1
+        #             e_z_lthigh = e_z_lthigh * 0.1
+        #             e_x_rshank = e_x_rshank * 0.1
+        #             e_y_rshank = e_y_rshank * 0.1
+        #             e_z_rshank = e_z_rshank * 0.1
+        #             e_x_lshank = e_x_lshank * 0.1
+        #             e_y_lshank = e_y_lshank * 0.1
+        #             e_z_lshank = e_z_lshank * 0.1
+        #             e_x_rfoot = e_x_rfoot * 0.1
+        #             e_y_rfoot = e_y_rfoot * 0.1
+        #             e_z_rfoot = e_z_rfoot * 0.1
+        #             e_x_lfoot = e_x_lfoot * 0.1
+        #             e_y_lfoot = e_y_lfoot * 0.1
+        #             e_z_lfoot = e_z_lfoot * 0.1
 
-                    ax.plot([hip[0], hip[0] + e_x_pelvis[0]], [hip[1], hip[1] + e_x_pelvis[1]], [hip[2], hip[2] + e_x_pelvis[2]], color='red')
-                    ax.plot([hip[0], hip[0] + e_y_pelvis[0]], [hip[1], hip[1] + e_y_pelvis[1]], [hip[2], hip[2] + e_y_pelvis[2]], color='green')
-                    ax.plot([hip[0], hip[0] + e_z_pelvis[0]], [hip[1], hip[1] + e_z_pelvis[1]], [hip[2], hip[2] + e_z_pelvis[2]], color='blue')
+        #             ax.plot([hip[0], hip[0] + e_x_pelvis[0]], [hip[1], hip[1] + e_x_pelvis[1]], [hip[2], hip[2] + e_x_pelvis[2]], color='red')
+        #             ax.plot([hip[0], hip[0] + e_y_pelvis[0]], [hip[1], hip[1] + e_y_pelvis[1]], [hip[2], hip[2] + e_y_pelvis[2]], color='green')
+        #             ax.plot([hip[0], hip[0] + e_z_pelvis[0]], [hip[1], hip[1] + e_z_pelvis[1]], [hip[2], hip[2] + e_z_pelvis[2]], color='blue')
 
-                    ax.plot([rthigh[0], rthigh[0] + e_x_rthigh[0]], [rthigh[1], rthigh[1] + e_x_rthigh[1]], [rthigh[2], rthigh[2] + e_x_rthigh[2]], color='red')
-                    ax.plot([rthigh[0], rthigh[0] + e_y_rthigh[0]], [rthigh[1], rthigh[1] + e_y_rthigh[1]], [rthigh[2], rthigh[2] + e_y_rthigh[2]], color='green')
-                    ax.plot([rthigh[0], rthigh[0] + e_z_rthigh[0]], [rthigh[1], rthigh[1] + e_z_rthigh[1]], [rthigh[2], rthigh[2] + e_z_rthigh[2]], color='blue')
+        #             ax.plot([rthigh[0], rthigh[0] + e_x_rthigh[0]], [rthigh[1], rthigh[1] + e_x_rthigh[1]], [rthigh[2], rthigh[2] + e_x_rthigh[2]], color='red')
+        #             ax.plot([rthigh[0], rthigh[0] + e_y_rthigh[0]], [rthigh[1], rthigh[1] + e_y_rthigh[1]], [rthigh[2], rthigh[2] + e_y_rthigh[2]], color='green')
+        #             ax.plot([rthigh[0], rthigh[0] + e_z_rthigh[0]], [rthigh[1], rthigh[1] + e_z_rthigh[1]], [rthigh[2], rthigh[2] + e_z_rthigh[2]], color='blue')
 
-                    ax.plot([lthigh[0], lthigh[0] + e_x_lthigh[0]], [lthigh[1], lthigh[1] + e_x_lthigh[1]], [lthigh[2], lthigh[2] + e_x_lthigh[2]], color='red')
-                    ax.plot([lthigh[0], lthigh[0] + e_y_lthigh[0]], [lthigh[1], lthigh[1] + e_y_lthigh[1]], [lthigh[2], lthigh[2] + e_y_lthigh[2]], color='green')
-                    ax.plot([lthigh[0], lthigh[0] + e_z_lthigh[0]], [lthigh[1], lthigh[1] + e_z_lthigh[1]], [lthigh[2], lthigh[2] + e_z_lthigh[2]], color='blue')
+        #             ax.plot([lthigh[0], lthigh[0] + e_x_lthigh[0]], [lthigh[1], lthigh[1] + e_x_lthigh[1]], [lthigh[2], lthigh[2] + e_x_lthigh[2]], color='red')
+        #             ax.plot([lthigh[0], lthigh[0] + e_y_lthigh[0]], [lthigh[1], lthigh[1] + e_y_lthigh[1]], [lthigh[2], lthigh[2] + e_y_lthigh[2]], color='green')
+        #             ax.plot([lthigh[0], lthigh[0] + e_z_lthigh[0]], [lthigh[1], lthigh[1] + e_z_lthigh[1]], [lthigh[2], lthigh[2] + e_z_lthigh[2]], color='blue')
 
-                    ax.plot([rshank[0], rshank[0] + e_x_rshank[0]], [rshank[1], rshank[1] + e_x_rshank[1]], [rshank[2], rshank[2] + e_x_rshank[2]], color='red')
-                    ax.plot([rshank[0], rshank[0] + e_y_rshank[0]], [rshank[1], rshank[1] + e_y_rshank[1]], [rshank[2], rshank[2] + e_y_rshank[2]], color='green')
-                    ax.plot([rshank[0], rshank[0] + e_z_rshank[0]], [rshank[1], rshank[1] + e_z_rshank[1]], [rshank[2], rshank[2] + e_z_rshank[2]], color='blue')
+        #             ax.plot([rshank[0], rshank[0] + e_x_rshank[0]], [rshank[1], rshank[1] + e_x_rshank[1]], [rshank[2], rshank[2] + e_x_rshank[2]], color='red')
+        #             ax.plot([rshank[0], rshank[0] + e_y_rshank[0]], [rshank[1], rshank[1] + e_y_rshank[1]], [rshank[2], rshank[2] + e_y_rshank[2]], color='green')
+        #             ax.plot([rshank[0], rshank[0] + e_z_rshank[0]], [rshank[1], rshank[1] + e_z_rshank[1]], [rshank[2], rshank[2] + e_z_rshank[2]], color='blue')
 
-                    ax.plot([lshank[0], lshank[0] + e_x_lshank[0]], [lshank[1], lshank[1] + e_x_lshank[1]], [lshank[2], lshank[2] + e_x_lshank[2]], color='red')
-                    ax.plot([lshank[0], lshank[0] + e_y_lshank[0]], [lshank[1], lshank[1] + e_y_lshank[1]], [lshank[2], lshank[2] + e_y_lshank[2]], color='green')
-                    ax.plot([lshank[0], lshank[0] + e_z_lshank[0]], [lshank[1], lshank[1] + e_z_lshank[1]], [lshank[2], lshank[2] + e_z_lshank[2]], color='blue')
+        #             ax.plot([lshank[0], lshank[0] + e_x_lshank[0]], [lshank[1], lshank[1] + e_x_lshank[1]], [lshank[2], lshank[2] + e_x_lshank[2]], color='red')
+        #             ax.plot([lshank[0], lshank[0] + e_y_lshank[0]], [lshank[1], lshank[1] + e_y_lshank[1]], [lshank[2], lshank[2] + e_y_lshank[2]], color='green')
+        #             ax.plot([lshank[0], lshank[0] + e_z_lshank[0]], [lshank[1], lshank[1] + e_z_lshank[1]], [lshank[2], lshank[2] + e_z_lshank[2]], color='blue')
 
-                    ax.plot([rfoot[0], rfoot[0] + e_x_rfoot[0]], [rfoot[1], rfoot[1] + e_x_rfoot[1]], [rfoot[2], rfoot[2] + e_x_rfoot[2]], color='red')
-                    ax.plot([rfoot[0], rfoot[0] + e_y_rfoot[0]], [rfoot[1], rfoot[1] + e_y_rfoot[1]], [rfoot[2], rfoot[2] + e_y_rfoot[2]], color='green')
-                    ax.plot([rfoot[0], rfoot[0] + e_z_rfoot[0]], [rfoot[1], rfoot[1] + e_z_rfoot[1]], [rfoot[2], rfoot[2] + e_z_rfoot[2]], color='blue')
+        #             ax.plot([rfoot[0], rfoot[0] + e_x_rfoot[0]], [rfoot[1], rfoot[1] + e_x_rfoot[1]], [rfoot[2], rfoot[2] + e_x_rfoot[2]], color='red')
+        #             ax.plot([rfoot[0], rfoot[0] + e_y_rfoot[0]], [rfoot[1], rfoot[1] + e_y_rfoot[1]], [rfoot[2], rfoot[2] + e_y_rfoot[2]], color='green')
+        #             ax.plot([rfoot[0], rfoot[0] + e_z_rfoot[0]], [rfoot[1], rfoot[1] + e_z_rfoot[1]], [rfoot[2], rfoot[2] + e_z_rfoot[2]], color='blue')
 
-                    ax.plot([lfoot[0], lfoot[0] + e_x_lfoot[0]], [lfoot[1], lfoot[1] + e_x_lfoot[1]], [lfoot[2], lfoot[2] + e_x_lfoot[2]], color='red')
-                    ax.plot([lfoot[0], lfoot[0] + e_y_lfoot[0]], [lfoot[1], lfoot[1] + e_y_lfoot[1]], [lfoot[2], lfoot[2] + e_y_lfoot[2]], color='green')
-                    ax.plot([lfoot[0], lfoot[0] + e_z_lfoot[0]], [lfoot[1], lfoot[1] + e_z_lfoot[1]], [lfoot[2], lfoot[2] + e_z_lfoot[2]], color='blue')
+        #             ax.plot([lfoot[0], lfoot[0] + e_x_lfoot[0]], [lfoot[1], lfoot[1] + e_x_lfoot[1]], [lfoot[2], lfoot[2] + e_x_lfoot[2]], color='red')
+        #             ax.plot([lfoot[0], lfoot[0] + e_y_lfoot[0]], [lfoot[1], lfoot[1] + e_y_lfoot[1]], [lfoot[2], lfoot[2] + e_y_lfoot[2]], color='green')
+        #             ax.plot([lfoot[0], lfoot[0] + e_z_lfoot[0]], [lfoot[1], lfoot[1] + e_z_lfoot[1]], [lfoot[2], lfoot[2] + e_z_lfoot[2]], color='blue')
                     
-                    e_x_pelvis_0 = e_x_pelvis_0 * 0.1
-                    e_y_pelvis_0 = e_y_pelvis_0 * 0.1
-                    e_z_pelvis_0 = e_z_pelvis_0 * 0.1
-                    ax.scatter(hip_0[0], hip_0[1], hip_0[2], label='hip_0', color='black')
-                    ax.plot([hip_0[0], hip_0[0] + e_x_pelvis_0[0]], [hip_0[1], hip_0[1] + e_x_pelvis_0[1]], [hip_0[2], hip_0[2] + e_x_pelvis_0[2]], color='red')
-                    ax.plot([hip_0[0], hip_0[0] + e_y_pelvis_0[0]], [hip_0[1], hip_0[1] + e_y_pelvis_0[1]], [hip_0[2], hip_0[2] + e_y_pelvis_0[2]], color='green')
-                    ax.plot([hip_0[0], hip_0[0] + e_z_pelvis_0[0]], [hip_0[1], hip_0[1] + e_z_pelvis_0[1]], [hip_0[2], hip_0[2] + e_z_pelvis_0[2]], color='blue')
+        #             e_x_pelvis_0 = e_x_pelvis_0 * 0.1
+        #             e_y_pelvis_0 = e_y_pelvis_0 * 0.1
+        #             e_z_pelvis_0 = e_z_pelvis_0 * 0.1
+        #             ax.scatter(hip_0[0], hip_0[1], hip_0[2], label='hip_0', color='black')
+        #             ax.plot([hip_0[0], hip_0[0] + e_x_pelvis_0[0]], [hip_0[1], hip_0[1] + e_x_pelvis_0[1]], [hip_0[2], hip_0[2] + e_x_pelvis_0[2]], color='red')
+        #             ax.plot([hip_0[0], hip_0[0] + e_y_pelvis_0[0]], [hip_0[1], hip_0[1] + e_y_pelvis_0[1]], [hip_0[2], hip_0[2] + e_y_pelvis_0[2]], color='green')
+        #             ax.plot([hip_0[0], hip_0[0] + e_z_pelvis_0[0]], [hip_0[1], hip_0[1] + e_z_pelvis_0[1]], [hip_0[2], hip_0[2] + e_z_pelvis_0[2]], color='blue')
                     
-                    plt.legend()
-                    plt.show()
+        #             plt.legend()
+        #             plt.show()
 
-            # e_z_lshank_list.append(e_z_lshank)
-            # e_z_lfoot_list.append(e_z_lfoot)
+        #     # e_z_lshank_list.append(e_z_lshank)
+        #     # e_z_lfoot_list.append(e_z_lfoot)
 
-            #仙骨とかかとのベクトル計算
-            sacuram = (rpsi[frame_num, :] + lpsi[frame_num, :]) / 2
-            sac2hee_r = rhee[frame_num, :] - sacuram
-            sac2hee_r_list.append(sac2hee_r)
-            sac2hee_l = lhee[frame_num, :] - sacuram
-            sac2hee_l_list.append(sac2hee_l)
+        #     #仙骨とかかとのベクトル計算
+        #     sacuram = (rpsi[frame_num, :] + lpsi[frame_num, :]) / 2
+        #     sac2hee_r = rhee[frame_num, :] - sacuram
+        #     sac2hee_r_list.append(sac2hee_r)
+        #     sac2hee_l = lhee[frame_num, :] - sacuram
+        #     sac2hee_l_list.append(sac2hee_l)
             
-            # 踵のZ座標記録
-            heel_z_list.append((rhee[frame_num, 2], lhee[frame_num, 2]))
+        #     # 踵のZ座標記録
+        #     heel_z_list.append((rhee[frame_num, 2], lhee[frame_num, 2]))
 
-        angle_array = np.array(angle_list)
-        angle_df = pd.DataFrame(angle_array, columns=["R_Hip_FlEx", "L_Hip_FlEx", "R_Knee_FlEx", "L_Knee_FlEx", "R_Ankle_PlDo", "L_Ankle_PlDo",
-                                                    "R_Hip_InEx", "L_Hip_InEx", "R_Knee_InEx", "L_Knee_InEx", "R_Ankle_InEx", "L_Ankle_InEx",
-                                                    "R_Hip_AdAb", "L_Hip_AdAb", "R_Knee_AdAb", "L_Knee_AdAb", "R_Ankle_AdAb", "L_Ankle_AdAb"], index=full_range)
+        # angle_array = np.array(angle_list)
+        # angle_df = pd.DataFrame(angle_array, columns=["R_Hip_FlEx", "L_Hip_FlEx", "R_Knee_FlEx", "L_Knee_FlEx", "R_Ankle_PlDo", "L_Ankle_PlDo",
+        #                                             "R_Hip_InEx", "L_Hip_InEx", "R_Knee_InEx", "L_Knee_InEx", "R_Ankle_InEx", "L_Ankle_InEx",
+        #                                             "R_Hip_AdAb", "L_Hip_AdAb", "R_Knee_AdAb", "L_Knee_AdAb", "R_Ankle_AdAb", "L_Ankle_AdAb"], index=full_range)
 
-        # 角度データの連続性保つ
-        for col in angle_df.columns:
-            prev = None
-            for i in angle_df.index:
-                curr = angle_df.at[i, col]
-                if prev is not None and pd.notna(curr) and pd.notna(prev):
-                    diff = curr - prev
-                    if diff > 180:
-                        angle_df.at[i, col] = curr - 360
-                    elif diff < -180:
-                        angle_df.at[i, col] = curr + 360
-                    prev = angle_df.at[i, col]
-                elif pd.notna(curr):
-                    prev = curr
+        # # 角度データの連続性保つ
+        # for col in angle_df.columns:
+        #     prev = None
+        #     for i in angle_df.index:
+        #         curr = angle_df.at[i, col]
+        #         if prev is not None and pd.notna(curr) and pd.notna(prev):
+        #             diff = curr - prev
+        #             if diff > 180:
+        #                 angle_df.at[i, col] = curr - 360
+        #             elif diff < -180:
+        #                 angle_df.at[i, col] = curr + 360
+        #             prev = angle_df.at[i, col]
+        #         elif pd.notna(curr):
+        #             prev = curr
                     
-        # Hip, Knee, Ankle角度のオフセット補正
-        if 'R_Hip_FlEx' in angle_df.columns:
-            for frame in angle_df.index:
-                if angle_df.at[frame, 'R_Hip_FlEx'] > 0:
-                    angle_df.loc[frame, 'R_Hip_FlEx'] = angle_df.at[frame, 'R_Hip_FlEx'] - 180
-                else:
-                    angle_df.loc[frame, 'R_Hip_FlEx'] = 180 + angle_df.at[frame, 'R_Hip_FlEx']
-        if 'L_Hip_FlEx' in angle_df.columns:
-            for frame in angle_df.index:
-                if angle_df.at[frame, 'L_Hip_FlEx'] > 0:
-                    angle_df.loc[frame, 'L_Hip_FlEx'] = angle_df.at[frame, 'L_Hip_FlEx'] - 180
-                else:
-                    angle_df.loc[frame, 'L_Hip_FlEx'] = 180 + angle_df.at[frame, 'L_Hip_FlEx']
-        if 'R_Knee_FlEx' in angle_df.columns:
-            for frame in angle_df.index:
-                angle_df.loc[frame, 'R_Knee_FlEx'] = - angle_df.at[frame, 'R_Knee_FlEx']
-        if 'L_Knee_FlEx' in angle_df.columns:
-            for frame in angle_df.index:
-                angle_df.loc[frame, 'L_Knee_FlEx'] = - angle_df.at[frame, 'L_Knee_FlEx']
-        if 'R_Ankle_PlDo' in angle_df.columns:
-            for frame in angle_df.index:
-                angle_df.loc[frame, 'R_Ankle_PlDo'] = 180 - angle_df.at[frame, 'R_Ankle_PlDo']
-        if 'L_Ankle_PlDo' in angle_df.columns:
-            for frame in angle_df.index:
-                angle_df.loc[frame, 'L_Ankle_PlDo'] = 180 - angle_df.at[frame, 'L_Ankle_PlDo']
+        # # Hip, Knee, Ankle角度のオフセット補正
+        # if 'R_Hip_FlEx' in angle_df.columns:
+        #     for frame in angle_df.index:
+        #         if angle_df.at[frame, 'R_Hip_FlEx'] > 0:
+        #             angle_df.loc[frame, 'R_Hip_FlEx'] = angle_df.at[frame, 'R_Hip_FlEx'] - 180
+        #         else:
+        #             angle_df.loc[frame, 'R_Hip_FlEx'] = 180 + angle_df.at[frame, 'R_Hip_FlEx']
+        # if 'L_Hip_FlEx' in angle_df.columns:
+        #     for frame in angle_df.index:
+        #         if angle_df.at[frame, 'L_Hip_FlEx'] > 0:
+        #             angle_df.loc[frame, 'L_Hip_FlEx'] = angle_df.at[frame, 'L_Hip_FlEx'] - 180
+        #         else:
+        #             angle_df.loc[frame, 'L_Hip_FlEx'] = 180 + angle_df.at[frame, 'L_Hip_FlEx']
+        # if 'R_Knee_FlEx' in angle_df.columns:
+        #     for frame in angle_df.index:
+        #         angle_df.loc[frame, 'R_Knee_FlEx'] = - angle_df.at[frame, 'R_Knee_FlEx']
+        # if 'L_Knee_FlEx' in angle_df.columns:
+        #     for frame in angle_df.index:
+        #         angle_df.loc[frame, 'L_Knee_FlEx'] = - angle_df.at[frame, 'L_Knee_FlEx']
+        # if 'R_Ankle_PlDo' in angle_df.columns:
+        #     for frame in angle_df.index:
+        #         angle_df.loc[frame, 'R_Ankle_PlDo'] = 180 - angle_df.at[frame, 'R_Ankle_PlDo']
+        # if 'L_Ankle_PlDo' in angle_df.columns:
+        #     for frame in angle_df.index:
+        #         angle_df.loc[frame, 'L_Ankle_PlDo'] = 180 - angle_df.at[frame, 'L_Ankle_PlDo']
         
                 
         # DataFrameのインデックスを絶対フレーム番号に設定
@@ -1257,12 +1271,32 @@ def main():
         gait_params_r = calculate_gait_parameters(gait_cycles_r, hip_array, rhee, lhee, side='R', sampling_freq=100)
         gait_params_l = calculate_gait_parameters(gait_cycles_l, hip_array, rhee, lhee, side='L', sampling_freq=100)
         
-        # step_length_oppositeはそれぞれ対側のパラメータなので入れ替える
-        for params_r, params_l in zip(gait_params_r, gait_params_l):
-            params_r['step_length'] = params_l['step_length_opposite']
-            params_l['step_length'] = params_r['step_length_opposite']
-            del params_r['step_length_opposite']
-            del params_l['step_length_opposite']
+        # step_length_oppositeを入れ替える
+        # 右足の各サイクルに対して処理
+        for i, params_r in enumerate(gait_params_r):
+            if i < len(gait_params_l):
+                # 対応する左足サイクルがある場合
+                params_r['step_length'] = gait_params_l[i]['step_length_opposite']
+            else:
+                # 対応する左足サイクルがない場合はNoneに設定
+                params_r['step_length'] = None
+
+        # 左足の各サイクルに対して処理
+        for i, params_l in enumerate(gait_params_l):
+            if i < len(gait_params_r):
+                # 対応する右足サイクルがある場合
+                params_l['step_length'] = gait_params_r[i]['step_length_opposite']
+            else:
+                # 対応する右足サイクルがない場合はNoneに設定
+                params_l['step_length'] = None
+
+        # step_length_oppositeを削除
+        for params in gait_params_r:
+            del params['step_length_opposite']
+        for params in gait_params_l:
+            del params['step_length_opposite']
+            
+        print(f"gait_paramsのキー例: {gait_params_r[0].keys()}")
         
         # シンメトリインデックスを計算
         def calculate_symmetry_index(params_r, params_l):
@@ -1289,8 +1323,14 @@ def main():
             symmetry_indices = {}
             
             for key in keys:
-                r_values = [p[key] for p in params_r]
-                l_values = [p[key] for p in params_l]
+                # None値を除外してリストを作成
+                r_values = [p[key] for p in params_r if p.get(key) is not None]
+                l_values = [p[key] for p in params_l if p.get(key) is not None]
+                
+                # 有効な値がない場合はスキップ
+                if len(r_values) == 0 or len(l_values) == 0:
+                    print(f"Warning: No valid values for {key}. Skipping.")
+                    continue
                 
                 r_mean = np.mean(r_values)
                 l_mean = np.mean(l_values)
@@ -1316,9 +1356,6 @@ def main():
         gait_params_r_df = pd.DataFrame(gait_params_r)
         gait_params_l_df = pd.DataFrame(gait_params_l)
         
-        gait_params_r_df.to_csv(csv_path_dir / f"gait_parameters_R_{csv_path.stem}.csv", index=False)
-        gait_params_l_df.to_csv(csv_path_dir / f"gait_parameters_L_{csv_path.stem}.csv", index=False)
-        
         # シンメトリインデックスをCSVに保存
         si_data = []
         for key, values in symmetry_indices.items():
@@ -1329,7 +1366,6 @@ def main():
                 'Symmetry_Index': values['symmetry_index']
             })
         si_df = pd.DataFrame(si_data)
-        si_df.to_csv(csv_path_dir / f"symmetry_indices_{csv_path.stem}.csv", index=False)
         
         print(f"\n歩行パラメータ（Mocap）:")
         print(f"右足: 平均歩行速度 = {np.mean([p['gait_speed'] for p in gait_params_r]):.3f} m/s")
