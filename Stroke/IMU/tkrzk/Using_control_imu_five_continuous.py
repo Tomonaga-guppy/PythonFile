@@ -492,7 +492,7 @@ def run_imu_on_port(port, barrier, start_queue, continue_flag, measurement_num):
         set_expantion_terminal(ser)  # 拡張端子の出力記録
         # AD入力を有効にするため、端子3,4を10:AD入力に設定
         # 端子1をHigh出力(9)、端子2を入力(1)に設定
-        set_voltage(ser, params=[9, 1, 10, 10]) 
+        set_voltage(ser, params=[9, 1, 9, 0]) 
         print(f"拡張端子の設定が完了しました")
         print(f"{port} IMUの初期設定が完了しました。")
 
@@ -508,10 +508,10 @@ def run_imu_on_port(port, barrier, start_queue, continue_flag, measurement_num):
             raise Exception(f"計測の開始に失敗しました。 計測を終了します({port})")
 
         # 計測開始の合図として端子1をLow(8)に1秒間設定
-        set_voltage(ser, params=[8, 1, 0, 0]) 
+        set_voltage(ser, params=[8, 1, 8, 0]) 
         time.sleep(1)
         # 端子1をHigh(9)に戻す
-        set_voltage(ser, params=[9, 1, 0, 0])
+        set_voltage(ser, params=[9, 1, 9, 0])
 
         # 計測中(stop_eventがセットされるまで待機)
         while not stop_event.is_set():
@@ -529,13 +529,13 @@ def run_imu_on_port(port, barrier, start_queue, continue_flag, measurement_num):
 
     except KeyboardInterrupt:
         # 終了時に端子1をHighに戻す
-        set_voltage(ser, params=[9, 1, 0, 0])
+        set_voltage(ser, params=[9, 1, 9, 0])
         stop_measurement(ser, port)
         start_queue.put((port, start_time))
     except Exception as e:
         print(f"エラーが発生しました: {e}")
         # 終了時に端子1をHighに戻す
-        set_voltage(ser, params=[9, 1, 0, 0])
+        set_voltage(ser, params=[9, 1, 9, 0])
         stop_measurement(ser, port)
         start_queue.put((port, start_time))
     # finally:
