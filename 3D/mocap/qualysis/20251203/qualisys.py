@@ -5,11 +5,44 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.ticker as mticker
 from scipy.signal import butter, filtfilt
+import tkinter as tk
+from tkinter import filedialog
 
-# qualysisファイルのあるディレクトリ
-tsv_dir = Path(r"G:\gait_pattern\aikawa_data\20240911-0912\label1_nofill")
+# # qualysisファイルのあるディレクトリ
+# tsv_dir = Path(r"G:\gait_pattern\aikawa_data\20241016\label1_nofill")
+
+def select_directory():
+    """
+    ファイルダイアログを表示してディレクトリを選択する
+    Returns:
+        Path: 選択されたディレクトリのパス、キャンセルされた場合はNone
+    """
+    root = tk.Tk()
+    root.withdraw()  # メインウィンドウを非表示
+    root.attributes('-topmost', True)  # ダイアログを最前面に表示
+    
+    folder_path = filedialog.askdirectory(
+        title="qualysisのtsvファイルがあるフォルダを選択してください"
+    )
+    
+    root.destroy()
+    
+    if folder_path:
+        return Path(folder_path)
+    else:
+        return None
+
+# qualysisファイルのあるディレクトリをダイアログで選択
+tsv_dir = select_directory()
+
+if tsv_dir is None:
+    print("フォルダが選択されませんでした。終了します。")
+    exit()
+
+print(f"選択されたフォルダ: {tsv_dir}")
+
 # qualysisisのtsvファイルを取得(QTMで補間処理を実施している前提)
-tsv_files = tsv_dir.glob("*.tsv") 
+tsv_files = tsv_dir.glob("*.tsv")
 tsv_files = list(tsv_files)
 
 def read_tsv(tsv_path):
@@ -114,7 +147,7 @@ def interpolate_short_gaps(df, max_gap_size, method='spline', order=3):
 
 def main():
     for itsv, tsv_file in enumerate(tsv_files):
-        print(f"Processing {itsv+1}/{len(tsv_files)}: {tsv_file.name}")
+        print(f"\nProcessing {itsv+1}/{len(tsv_files)}: {tsv_file.name}")
         full_df = read_tsv(tsv_file)  #tsvファイルの読み込み
         target_df = full_df.copy()
         nan_df = target_df.replace(0, np.nan)  #0をNaNに置き換え
@@ -297,7 +330,7 @@ def main():
 
                     #左足節座標系 AIST参照（原点はlfoot）
                     e_x_lfoot = (ltoe[frame_idx_in_range,:] - lhee[frame_idx_in_range,:]) / np.linalg.norm(ltoe[frame_idx_in_range,:] - lhee[frame_idx_in_range,:])
-                    e_y0_lfoot = lank2[frame_idx_in_range,:] - lank[frame_idx_in_range,:]
+                    e_y0_lfoot = lank[frame_idx_in_range,:] - lank2[frame_idx_in_range,:]
                     e_z_lfoot = np.cross(e_x_lfoot, e_y0_lfoot)/np.linalg.norm(np.cross(e_x_lfoot, e_y0_lfoot))
                     e_y_lfoot = np.cross(e_z_lfoot, e_x_lfoot)
                     rot_lfoot = np.array([e_x_lfoot, e_y_lfoot, e_z_lfoot]).T
@@ -327,7 +360,7 @@ def main():
                     l_ankle_angle = l_ankle_angle_rot.as_euler('YZX', degrees=True)[0]
 
                     angle_list_range.append([r_hip_angle, l_hip_angle, r_knee_angle, l_knee_angle, r_ankle_angle, l_ankle_angle])
-                     
+                    
                     plot_flag = False
                     if plot_flag:
                         if original_frame_num == 166:
@@ -436,36 +469,22 @@ def main():
         else:
             print("警告: 有効な角度データが計算されませんでした。")
             continue
-
-
-        # 角度データの連続性保つ
-        for col in angle_df.columns:
-            prev = None
-            for i in angle_df.index:
-                curr = angle_df.at[i, col]
-                if prev is not None and pd.notna(curr) and pd.notna(prev):
-                    diff = curr - prev
-                    if diff > 180:
-                        angle_df.at[i, col] = curr - 360
-                    elif diff < -180:
-                        angle_df.at[i, col] = curr + 360
-                    prev = angle_df.at[i, col]
-                elif pd.notna(curr):
-                    prev = curr
-                    
+        
+        # 角度を正に変換 (-90度未満（適当）の値に360度を加算)
+        angle_df['R_Hip'] = np.where(angle_df['R_Hip'] < -90, angle_df['R_Hip'] + 360, angle_df['R_Hip'])
+        angle_df['L_Hip'] = np.where(angle_df['L_Hip'] < -90, angle_df['L_Hip'] + 360, angle_df['L_Hip'])
+        angle_df['R_Knee'] = np.where(angle_df['R_Knee'] < -90, angle_df['R_Knee'] + 360, angle_df['R_Knee'])
+        angle_df['L_Knee'] = np.where(angle_df['L_Knee'] < -90, angle_df['L_Knee'] + 360, angle_df['L_Knee'])
+        angle_df['R_Ankle'] = np.where(angle_df['R_Ankle'] < -90, angle_df['R_Ankle'] + 360, angle_df['R_Ankle'])
+        angle_df['L_Ankle'] = np.where(angle_df['L_Ankle'] < -90, angle_df['L_Ankle'] + 360, angle_df['L_Ankle'])
+            
         # Hip, Knee, Ankle角度のオフセット補正
         if 'R_Hip' in angle_df.columns:
             for frame in angle_df.index:
-                if angle_df.at[frame, 'R_Hip'] > 0:
-                    angle_df.loc[frame, 'R_Hip'] = angle_df.at[frame, 'R_Hip'] - 180
-                else:
-                    angle_df.loc[frame, 'R_Hip'] = 180 + angle_df.at[frame, 'R_Hip']
+                angle_df.loc[frame, 'R_Hip'] = angle_df.at[frame, 'R_Hip'] - 180
         if 'L_Hip' in angle_df.columns:
             for frame in angle_df.index:
-                if angle_df.at[frame, 'L_Hip'] > 0:
-                    angle_df.loc[frame, 'L_Hip'] = angle_df.at[frame, 'L_Hip'] - 180
-                else:
-                    angle_df.loc[frame, 'L_Hip'] = 180 + angle_df.at[frame, 'L_Hip']
+                angle_df.loc[frame, 'L_Hip'] = angle_df.at[frame, 'L_Hip'] - 180
         if 'R_Knee' in angle_df.columns:
             for frame in angle_df.index:
                 angle_df.loc[frame, 'R_Knee'] = - angle_df.at[frame, 'R_Knee']
@@ -484,41 +503,42 @@ def main():
         print(f"角度データを保存しました: {tsv_file.with_name(f'{tsv_file.stem}_angles.csv')}")
         
         
-        # 左右股関節の屈曲伸展角度をプロット
-        plt.plot(angle_df['L_Hip'], label='Left Hip Flexion/Extension', color='orange')
-        plt.plot(angle_df['R_Hip'], label='Right Hip Flexion/Extension', color='blue')
-        plt.xlabel('Frame')
-        plt.ylabel('Angle (degrees)')
-        plt.title('Hip Flexion/Extension Angles Over Time')
-        plt.ylim(-40, 40)
-        plt.grid()
-        plt.legend()
-        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Hip_L_Flexion_Extension.png"))
+        # 左右股関節・膝関節・足関節の角度を1枚の画像にまとめてプロット
+        fig, axes = plt.subplots(3, 1, figsize=(12, 12))
+        
+        # 股関節の屈曲伸展角度
+        axes[0].plot(angle_df['L_Hip'], label='Left Hip', color='orange')
+        axes[0].plot(angle_df['R_Hip'], label='Right Hip', color='blue')
+        axes[0].set_ylabel('Angle [deg]')
+        axes[0].set_title('Hip Flexion Angles')
+        axes[0].set_ylim(-30, 50)
+        axes[0].grid(True, alpha=0.3)
+        axes[0].legend(loc='upper right')
+        
+        # 膝関節の屈曲伸展角度
+        axes[1].plot(angle_df['L_Knee'], label='Left Knee', color='orange')
+        axes[1].plot(angle_df['R_Knee'], label='Right Knee', color='blue')
+        axes[1].set_ylabel('Angle [deg]')
+        axes[1].set_title('Knee Flexion Angles')
+        axes[1].set_ylim(-10, 70)
+        axes[1].grid(True, alpha=0.3)
+        axes[1].legend(loc='upper right')
+        
+        # 足関節の底屈背屈角度
+        axes[2].plot(angle_df['L_Ankle'], label='Left Ankle', color='orange')
+        axes[2].plot(angle_df['R_Ankle'], label='Right Ankle', color='blue')
+        axes[2].set_xlabel('Frame [-]')
+        axes[2].set_ylabel('Angle [deg]')
+        axes[2].set_title('Ankle Dorsiflexion Angles')
+        axes[2].set_ylim(-30, 50)
+        axes[2].grid(True, alpha=0.3)
+        axes[2].legend(loc='upper right')
+
+        plt.tight_layout()
+        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_angles.png"), dpi=300)
         plt.close()
         
-        # 左右膝関節の屈曲伸展角度をプロット
-        plt.plot(angle_df['L_Knee'], label='Left Knee Flexion/Extension', color='orange')
-        plt.plot(angle_df['R_Knee'], label='Right Knee Flexion/Extension', color='blue')
-        plt.xlabel('Frame')
-        plt.ylabel('Angle (degrees)')
-        plt.title('Knee Flexion/Extension Angles Over Time')
-        plt.ylim(-10, 70)
-        plt.grid()
-        plt.legend()
-        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Knee_L_Flexion_Extension.png"))
-        plt.close()
-
-        # 左右足関節の底屈背屈角度をプロット
-        plt.plot(angle_df['L_Ankle'], label='Left Ankle Plantarflexion/Dorsiflexion', color='orange')
-        plt.plot(angle_df['R_Ankle'], label='Right Ankle Plantarflexion/Dorsiflexion', color='blue')
-        plt.xlabel('Frame')
-        plt.ylabel('Angle (degrees)')
-        plt.title('Ankle Plantarflexion/Dorsiflexion Angles Over Time')
-        plt.ylim(-30, 50)
-        plt.grid()
-        plt.legend()
-        plt.savefig(tsv_file.with_name(f"{tsv_file.stem}_Ankle_L_Plantarflexion_Dorsiflexion.png"))
-        plt.close()
+        print(f"角度プロットを保存しました: {tsv_file.with_name(f'{tsv_file.stem}_angles.png')}")
         
 if __name__ == "__main__":
     main()
