@@ -2,3 +2,6 @@
 ViTPose
 .venv_vithf
 easy_ViTPose
+*.pt
+yolov8x-seg.pt
+yolo11x-seg.pt
