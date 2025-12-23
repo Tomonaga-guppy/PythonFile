@@ -1,12 +1,53 @@
 """
-OpenPose処理用スクリプト（拡張版）
+OpenPose処理用スクリプト（出力を direction/<結果フォルダ>/ 以下にまとめる版）
+時間の都合でまだ実際に動かしていないので確認必要
+
+出力構成（例）
+gopro/<direction>/<結果フォルダ>/
+    images/   (jpg)
+    json/     (json)
+    video/    (avi)
+
 - 介助歩行 thera{i}-0 (i=1..6) は
-    1) undistorted_seg        -> OpenPose (最大検出1人)
-    2) undistorted_facemasked -> OpenPose (最大検出2人)  
-- それ以外は undistorted_facemasked -> OpenPose (最大検出1人) で実施
+    1) undistorted_seg        -> openpose_seg                 (最大検出1人)
+    2) undistorted_facemasked -> openpose_facemasked_mp1      (最大検出1人)
+    3) undistorted_facemasked -> openpose_facemasked_mp2      (最大検出2人)
+
+- それ以外は
+    undistorted_facemasked -> openpose_facemasked             (最大検出1人)
+
 - OpenPose実行ごとの処理時間と累計を表示
 """
 
+
+
+
+
+
+
+
+
+"""
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+
+
+
+まだ動かしてないので慎重に！ subの方が確実に動くけど出力がdirction直下になっちゃう!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+"""
 import os
 import subprocess
 from pathlib import Path
@@ -38,7 +79,7 @@ SCALE_NUMBER = 2
 SCALE_GAP = 0.2
 NET_RESOLUTION = "-1x368"
 
-# 既に出力があれば飛ばす
+# 既に出力があれば飛ばす（video があれば skip）
 SKIP_IF_OUTPUT_EXISTS = True
 
 # thera0-1 などを除外する
@@ -82,13 +123,25 @@ def is_thera_i_0(thera_name: str) -> bool:
     return any(thera_name.startswith(p) for p in THERA_I_0_PATTERNS)
 
 
-def build_openpose_cmd(image_dir: Path, stem: str, max_people: int):
+def has_pngs(img_dir: Path) -> bool:
+    return img_dir.exists() and any(img_dir.glob("*.png"))
+
+
+def build_openpose_cmd(image_dir: Path, out_root: Path, max_people: int):
     """
-    OpenPoseの出力先は image_dir と同じ階層（directionフォルダ直下）にまとめる
+    出力先を out_root 配下にまとめる
+      out_root/
+        images/
+        json/
+        openpose.avi
     """
-    out_video = image_dir.with_name(stem + ".avi")
-    out_images = image_dir.with_name(stem)         # フォルダ
-    out_json = image_dir.with_name(stem + "_json") # フォルダ
+    out_images = out_root / "images"
+    out_json = out_root / "json"
+    out_video = out_root / "openpose.avi"
+
+    # 親を作っておく（OpenPoseはディレクトリは作るが、念のため）
+    out_images.mkdir(parents=True, exist_ok=True)
+    out_json.mkdir(parents=True, exist_ok=True)
 
     cmd = (
         f'{PROGRAM}'
@@ -105,37 +158,34 @@ def build_openpose_cmd(image_dir: Path, stem: str, max_people: int):
     )
     return cmd, out_video
 
+
 def iter_runs_for_thera_direction(thera_dir: Path, direction: str):
     """
-    実行すべき (img_dir, stem, max_people) を列挙
-    - thera{i}-0:
-        undistorted_seg        -> openpose_seg        (max_people=1)
-        undistorted_facemasked -> openpose_facemasked (max_people=2)
+    実行すべき (img_dir, out_folder_name, max_people) を列挙
+
+    - 介助歩行 thera{i}-0:
+        1) undistorted_seg        -> openpose_seg                 (max_people=1)
+        2) undistorted_facemasked -> openpose_facemasked_mp1      (max_people=1)
+        3) undistorted_facemasked -> openpose_facemasked_mp2      (max_people=2)
+
     - それ以外:
-        undistorted_facemasked -> openpose_facemasked (max_people=1)
+        undistorted_facemasked -> openpose_facemasked             (max_people=1)
     """
     gopro_dir = thera_dir / "gopro" / direction
     runs = []
 
     if is_thera_i_0(thera_dir.name):
-        # seg : max_people=1
         img_seg = gopro_dir / DIR_FROM_PTSEG
         runs.append((img_seg, "openpose_seg", 1))
 
-        # facemasked : max_people=2
         img_face = gopro_dir / DIR_FROM_FACEMASK
-        runs.append((img_face, "openpose_facemasked", 2))
+        runs.append((img_face, "openpose_facemasked_mp1", 1))
+        runs.append((img_face, "openpose_facemasked_mp2", 2))
     else:
-        # facemasked : max_people=1
         img_face = gopro_dir / DIR_FROM_FACEMASK
         runs.append((img_face, "openpose_facemasked", 1))
 
     return runs
-
-
-
-def has_pngs(img_dir: Path) -> bool:
-    return img_dir.exists() and any(img_dir.glob("*.png"))
 
 
 # =========================
@@ -147,16 +197,16 @@ def main():
 
     # 実行予定数（SKIPを除いたOpenPose実行数）を先に数える
     total_runs = 0
-    planned = []  # (img_dir, stem, max_people, out_video)
 
     for subject_dir in subject_dirs:
         for thera_dir in list_thera_dirs(subject_dir):
             for direction in directions:
-                for img_dir, stem, mp in iter_runs_for_thera_direction(thera_dir, direction):
+                gopro_dir = thera_dir / "gopro" / direction
+                for img_dir, out_folder, mp in iter_runs_for_thera_direction(thera_dir, direction):
                     if not has_pngs(img_dir):
                         continue
-                    cmd, out_video = build_openpose_cmd(img_dir, stem, mp)
-                    planned.append((img_dir, stem, mp, cmd, out_video))
+                    out_root = gopro_dir / out_folder
+                    cmd, out_video = build_openpose_cmd(img_dir, out_root, mp)
                     if SKIP_IF_OUTPUT_EXISTS and out_video.exists():
                         continue
                     total_runs += 1
@@ -173,7 +223,9 @@ def main():
 
         for thera_dir in thera_dirs:
             for direction in directions:
-                for img_dir, stem, mp in iter_runs_for_thera_direction(thera_dir, direction):
+                gopro_dir = thera_dir / "gopro" / direction
+
+                for img_dir, out_folder, mp in iter_runs_for_thera_direction(thera_dir, direction):
                     if not img_dir.exists():
                         print(f"[SKIP] 入力が存在しません: {img_dir}")
                         continue
@@ -183,7 +235,8 @@ def main():
                         print(f"[SKIP] pngが見つかりません: {img_dir}")
                         continue
 
-                    cmd, out_video = build_openpose_cmd(img_dir, stem, mp)
+                    out_root = gopro_dir / out_folder
+                    cmd, out_video = build_openpose_cmd(img_dir, out_root, mp)
 
                     if SKIP_IF_OUTPUT_EXISTS and out_video.exists():
                         print(f"[SKIP] すでに存在: {out_video}")
@@ -192,7 +245,8 @@ def main():
                     run_count += 1
                     print(f"\n[RUN {run_count}/{total_runs}] {img_dir}")
                     print(f"  thera: {thera_dir.name} / dir: {direction} / input: {img_dir.name} / max_people={mp}")
-                    print(f"  out: {out_video.name}")
+                    print(f"  out_root: {out_root}")
+                    print(f"  out_video: {out_video}")
 
                     t0 = time.perf_counter()
                     # Windowsで文字列コマンドを確実に動かすため shell=True
