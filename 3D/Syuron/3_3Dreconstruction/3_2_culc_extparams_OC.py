@@ -593,7 +593,7 @@ def main():
                 selected_solution, all_solutions, accuracy_metrics = result
 
                 # jsonを sub*/cali/extparams/{direction}/ にまとめて保存（動画ごとに1ファイル）
-                output_file = out_base / f"camera_params_with_ext_OC_{tag}.json"
+                output_file = out_base / f"camera_params_with_ext.json"
 
                 complete_params = {
                     **camera_params,

@@ -371,10 +371,8 @@ def process_one_json_dir(json_dir: Path, direction: str):
     df_spline, mask0_by_kp = zero_nan_and_spline(df_raw)
 
     # 保存（frame列はdrop）
-    df_raw_out = df_raw.drop(columns=["frame"])
-    df_spline_out = df_spline.drop(columns=["frame"])
-    df_raw_out.to_csv(csv_raw, index=False)
-    df_spline_out.to_csv(csv_spline, index=False)
+    df_raw.to_csv(csv_raw, index=False)
+    df_spline.to_csv(csv_spline, index=False)
 
     # プロット（pa_plots）
     save_plots_single_person(
