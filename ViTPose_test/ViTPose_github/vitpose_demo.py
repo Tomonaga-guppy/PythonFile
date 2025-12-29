@@ -190,7 +190,7 @@ def run(
             show=False,
         )
 
-        # ★ HDへリサイズ（出力のみ）
+        # HDへリサイズ（出力のみ）
         vis_img = cv2.resize(
             vis_img,
             (output_width, output_height),
@@ -213,15 +213,22 @@ def run(
 
 if __name__ == "__main__":
     run(
-        img_dir=r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\gopro\fl\undistorted_facemasked",
+        img_dir=r"G:\gait_pattern\2025_shuron_BR9G\sub1\thera1-0\gopro\fl\undistorted_facemasked",
         det_config=r"demo/mmdetection_cfg/faster_rcnn_r50_fpn_coco.py",
         det_checkpoint=r"https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth",
         pose_config=r"C:\Users\Tomson\StrokeProject\ViTPose\configs\wholebody\2d_kpt_sview_rgb_img\topdown_heatmap\coco-wholebody\ViTPose_large_wholebody_256x192.py",
         pose_checkpoint=r"C:\Users\Tomson\StrokeProject\ViTPose\models\wholebody.pth",
-        out_dir=r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\gopro\fl\vitpose_output",
+        out_dir=r"G:\gait_pattern\2025_shuron_BR9G\sub1\thera1-0\gopro\fl\vitposeofficial_test",
         fps=60.0,
     )
     
-    # """
-    # "C:\Users\Tomson\StrokeProject\ViTPose\configs\body\2d_kpt_sview_rgb_img\topdown_heatmap\coco\vitPose+_large_coco+aic+mpii+ap10k+apt36k+wholebody_256x192_udp.py"
-    # """
+    # # config変えたけどkey indexエラーが出るので保留
+    #     run(
+    #     img_dir=r"G:\gait_pattern\2025_shuron_BR9G\sub1\thera1-0\gopro\fl\undistorted_facemasked",
+    #     det_config=r"demo/mmdetection_cfg/faster_rcnn_r50_fpn_coco.py",
+    #     det_checkpoint=r"https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth",
+    #     pose_config=r"C:\Users\Tomson\StrokeProject\ViTPose\configs\body\2d_kpt_sview_rgb_img\topdown_heatmap\coco\vitPose+_large_coco+aic+mpii+ap10k+apt36k+wholebody_256x192_udp.py",
+    #     pose_checkpoint=r"C:\Users\Tomson\StrokeProject\ViTPose\models\wholebody.pth",
+    #     out_dir=r"G:\gait_pattern\2025_shuron_BR9G\sub1\thera1-0\gopro\fl\vitposeofficial_test",
+    #     fps=60.0,
+    # )

@@ -1,9 +1,6 @@
 """
-easy_ViTPose を使って OpenPose BODY_25 形式で画像群を処理
-- FHDで可視化画像を書き出し(frame_00000_rendered.jpg)
-- cv2.VideoWriter で mp4 も同時に出力
-- OpenPose互換の「フレームごとの json (frame_00000_keypoints.json)」を出力
-- 推論と保存を並行化（Queue + writer thread）
+easy_ViTPose を使って OpenPose BODY_25 っぽく出力するサンプルコード
+パスとかを適当に変えて試してください．
 """
 
 import json
@@ -18,7 +15,7 @@ from easy_ViTPose import VitInference
 
 
 # =========================
-# 設定（ここだけ調整）
+# 設定
 # =========================
 IMG_DIR = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\gopro\fr\undistorted_facemasked")
 OUT_DIR = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\gopro\fr\vit_dir")
@@ -72,7 +69,7 @@ POSE_PAIRS = [
     (14,19),(19,20),(14,21),(11,22),(22,23),(11,24),
 ]
 
-# easy_ViTPose coco_25 → OpenPose BODY_25（あなたの確定結果）
+# easy_ViTPose coco_25 → OpenPose BODY_25のキーポイント対応順の修正用
 ORDER_MAP = [
     0, 5, 7, 9, 11, 6, 8, 10, 14, 13, 16, 18, 12, 15, 17, 2, 1, 4, 3, 19, 20, 21, 22, 23, 24
 ]

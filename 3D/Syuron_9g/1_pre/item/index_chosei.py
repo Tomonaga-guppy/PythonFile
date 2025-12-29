@@ -19,6 +19,7 @@ def rename_files(folder_path):
     # サブディレクトリを含めて全てのファイルを取得（再帰的）
     for file_path in folder.rglob('*'):
         if file_path.is_file():
+            
             total_files += 1
             # ファイル名（拡張子含む）を取得
             filename = file_path.name

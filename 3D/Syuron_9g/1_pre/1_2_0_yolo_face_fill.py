@@ -175,7 +175,9 @@ def main():
     model = YOLO(model_path)
 
     subject_dirs = list_subject_dirs(root_dir)
-    subject_dirs = [d for d in subject_dirs if int(d.name.replace("sub", "")) < 7]
+    subject_dirs = [d for d in subject_dirs if int(d.name.replace("sub", "")) < 11]
+    
+    print(f"対象サブジェクト: {subject_dirs}")
 
     tasks = []
     for sub_dir in subject_dirs:

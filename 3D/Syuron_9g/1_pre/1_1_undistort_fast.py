@@ -22,16 +22,15 @@ USE_COPY_FOR_THREAD = True      # 参照事故防止。基本True推奨
 # =========================
 # 基本のパス設定
 # =========================
-root_dir = Path(r"G:\gait_pattern\BR9G_shuron")
+root_dir = Path(r"G:\gait_pattern\2025_shuron_BR9G")
 subject_dir_list = [d for d in root_dir.iterdir() if d.is_dir() and d.name.startswith("sub")]
 
 # 時間足りないのでsub7以降を除外 ###################################################################################################################
-subject_dir_list = [d for d in subject_dir_list if int(d.name.replace("sub", "")) < 7]
+subject_dir_list = [d for d in subject_dir_list if int(d.name.replace("sub", "")) < 11]
 
 print(f"対象のPAディレクトリ: {[d.name for d in subject_dir_list]}")
-
-directions = ["fl", "fr"]#####################################################################################################################
-# directions = ["fl", "fr", "sagi"]
+# directions = ["fl", "fr"]#####################################################################################################################
+directions = ["sagi"]
 
 
 
