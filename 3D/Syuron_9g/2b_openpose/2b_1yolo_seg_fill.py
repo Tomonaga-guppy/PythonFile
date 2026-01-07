@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # =========================
 # 設定
 # =========================
-root_dir = Path(r"G:\gait_pattern\BR9G_shuron")
+root_dir = Path(r"G:\gait_pattern\2025_shuron_BR9G")
 
 directions = ["fl", "fr"]
 OUT_DIR_NAME = "undistorted_seg"            # 出力
@@ -61,7 +61,7 @@ def list_thera_dirs(subject_dir: Path):
     thera = [d for d in subject_dir.iterdir() if d.is_dir() and d.name.startswith("thera")]
 
     # 介助歩行の条件のみ対象
-    target_patterns = [f"thera{i}-0" for i in range(1, 7)]
+    target_patterns = [f"thera{i}-0" for i in range(1, 11)]
     thera = [d for d in thera if any(d.name.startswith(pattern) for pattern in target_patterns)]
     return thera
 
@@ -116,6 +116,13 @@ def main():
         for sub_dir, thera_dir, direction, input_dir, output_dir, image_files in tqdm(
             tasks, desc="全体(フォルダ)", unit="task"
         ):
+            # すでに処理済みならスキップ
+            if output_dir.exists():
+                existing_files = list(output_dir.glob("*.png"))
+                if len(existing_files) == len(image_files):
+                    tqdm.write(f"SKIP(already processed): {output_dir}")
+                    continue
+            
             output_dir.mkdir(exist_ok=True)
             tqdm.write(f"\nSEG: {input_dir} -> {output_dir} ({len(image_files)} frames)")
 

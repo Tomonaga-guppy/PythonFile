@@ -6,7 +6,7 @@ OpenPose処理用スクリプト（出力を direction/<結果フォルダ>/ 以
 gopro/<direction>/<結果フォルダ>/
     images/   (jpg)
     json/     (json)
-    video/    (avi)
+    openpose.avi    (avi)
 
 - 介助歩行 thera{i}-0 (i=1..6) は
     1) undistorted_seg        -> openpose_seg                 (最大検出1人)
@@ -63,12 +63,11 @@ PROGRAM = r".\build\x64\Release\OpenPoseDemo.exe"
 # =========================
 # データ設定
 # =========================
-root_dir = Path(r"G:\gait_pattern\BR9G_shuron")
+root_dir = Path(r"G:\gait_pattern\2025_shuron_BR9G")
 directions = ["fl", "fr"]
 
 # thera{i}-0 のパターン（i=1..6）
-THERA_I_0_PATTERNS = [f"thera{i}-0" for i in range(1, 7)]
-
+THERA_I_0_PATTERNS = [f"thera{i}-0" for i in range(1, 11)]
 # 入力ディレクトリ名
 DIR_FROM_FACEMASK = "undistorted_facemasked"
 DIR_FROM_PTSEG = "undistorted_seg"
@@ -112,7 +111,7 @@ def list_thera_dirs(subject_dir: Path):
         thera = [d for d in thera if not d.name.startswith("thera0-1")]
         thera = [d for d in thera if not d.name.startswith("thera0-2_1")]
         # thera1-1* ～ thera6-1* を除外
-        exclude_patterns = [f"thera{i}-1" for i in range(1, 7)]
+        exclude_patterns = [f"thera{i}-1" for i in range(1, 11)]
         for pattern in exclude_patterns:
             thera = [d for d in thera if not d.name.startswith(pattern)]
 

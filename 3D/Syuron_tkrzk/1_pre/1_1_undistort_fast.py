@@ -22,18 +22,11 @@ USE_COPY_FOR_THREAD = True      # 参照事故防止。基本True推奨
 # =========================
 # 基本のパス設定
 # =========================
-root_dir = Path(r"G:\gait_pattern\2025_shuron_BR9G")
+root_dir = Path(r"G:\gait_pattern\2025_shuron_tkrzk")
 subject_dir_list = [d for d in root_dir.iterdir() if d.is_dir() and d.name.startswith("sub")]
 
-# 時間足りないのでsub7以降を除外 ###################################################################################################################
-subject_dir_list = [d for d in subject_dir_list if int(d.name.replace("sub", "")) < 11]
-
 print(f"対象のPAディレクトリ: {[d.name for d in subject_dir_list]}")
-directions = ["fl", "fr"]#####################################################################################################################
-# directions = ["sagi"]
-
-
-
+directions = ["fl", "fr","sagi"]#####################################################################################################################
 
 # ----------------------------
 # 1) まず処理対象タスク（動画）を全部リストアップ
@@ -41,9 +34,6 @@ directions = ["fl", "fr"]#######################################################
 tasks = []
 for subject_dir in subject_dir_list:
     therapist_dir_list = [d for d in subject_dir.iterdir() if d.is_dir() and d.name.startswith("thera")]
-    
-    # thera0-1で始まるものを除外 #################################################################################################################
-    therapist_dir_list = [d for d in therapist_dir_list if not d.name.startswith("thera0-1")]
     
     for thera_dir in therapist_dir_list:
         for direction in directions:
@@ -58,7 +48,7 @@ for subject_dir in subject_dir_list:
             video_path = mp4_files[0]
             output_img_dir = video_dir / "undistorted"
 
-            camera_params_path = root_dir.parent / "int_cali" / "9g_20250807_6x5" / direction / "camera_params.json"
+            camera_params_path = root_dir.parent / "int_cali" / "tkrzk" / direction / "camera_params.json"
 
             tasks.append({
                 "subject_dir": subject_dir,
