@@ -21,7 +21,7 @@ from collections import Counter
 # =========================
 # 設定
 # =========================
-ROOT_DIR = Path(r"G:\gait_pattern\BR9G_shuron")
+ROOT_DIR = Path(r"G:\gait_pattern\2025_shuron_BR9G")
 FRAME_RATE = 60
 ANIM_TARGET_KEY = "butter"
 CONF_DRAW_TH = 0.4

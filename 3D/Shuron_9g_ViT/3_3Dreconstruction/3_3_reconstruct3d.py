@@ -33,7 +33,7 @@ from tqdm import tqdm
 
 # optional（プロットを使う場合のみ）
 import matplotlib
-matplotlib.use("Agg")
+# matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
 from scipy.signal import butter, filtfilt
@@ -54,21 +54,20 @@ EXT_JSON_PART_NAME = "camera_params_with_ext"
 # 3視点（fl, fr, sagi）で三角測量します
 DIRECTIONS = ["fl", "fr", "sagi"]
 
-# # CSV_SUFFIX = "_PA_spline.csv"  # 例: ViTPose_pa_spline.csv
-# # CSV_SUFFIX = "_PT_spline.csv"  # 例: ViTPose_pa_spline.csv
-# # CSV_SUFFIX = "_PA.csv"  # 例: ViTPose_pa_spline.csv
-# CSV_SUFFIX = "_PT.csv"  # 例: ViTPose_pa_spline.csv
-
 CSV_SUFFIXES = [
-    "ViTPose_PA_spline.csv",
-    "ViTPose_PT_spline.csv",
-    "ViTPose_PA.csv",
-    "ViTPose_PT.csv",
+    "_PA_spline.csv",
+    "_PT_spline.csv",
+    "_PA.csv",
+    "_PT.csv",
 ]
 
+TARGET_METHOD = "ViTPose"  # 対象とする手法名（OpenPoseの結果は使用しない）
 
-CONF_TH_3D = 0.4
-VALID_RANGE_X = (-2000, 2000)
+CONF_TH_3D = 0.5  # 3D信頼度閾値（この値以下の3D点はNaNにする）
+VALID_RANGE_Z = (-2000, 2000)
+
+# 1フレームでの3Dジャンプがこの閾値[mm]を超える点は外れ値としてNaN化
+OUTLIER_JUMP_MM = 500.0
 
 USE_BUTTERWORTH = True
 BUTTERWORTH_CUTOFF = 6.0
@@ -171,11 +170,70 @@ def confidence_filter_keypoints(data_3d, confidences, conf_threshold=0.5):
     filtered[low] = np.nan
     return filtered
 
+def remove_jump_outliers_3d(data_3d: np.ndarray, jump_th_mm: float = 100.0) -> np.ndarray:
+    """フレーム間の急激なジャンプを外れ値としてNaN化する。
 
-def detect_valid_frame_range(data_3d, x_min=-2500, x_max=2500, midhip_idx=8):
+    連続フレーム間で ||p_t - p_{t-1}|| > jump_th_mm のとき、そのフレームtの点をNaN化する。
+    NaNをまたぐ比較は行わず、次に有効な点から再開する。
+    """
+    out = data_3d.copy()
+    num_frames, num_kp, _ = out.shape
+
+    for kp in range(num_kp):
+        prev = out[0, kp].copy()
+        prev_ok = np.isfinite(prev).all()
+
+        for i in range(1, num_frames):
+            cur = out[i, kp]
+            cur_ok = np.isfinite(cur).all()
+
+            if prev_ok and cur_ok:
+                if np.linalg.norm(cur - prev) > jump_th_mm:
+                    out[i, kp] = np.nan
+                    # prev は更新しない（外れ値に引っ張られないようにする）
+                    prev_ok = False
+                    continue
+                prev = cur.copy()
+                prev_ok = True
+            elif cur_ok:
+                # ここから新しい連続区間として開始
+                prev = cur.copy()
+                prev_ok = True
+            # curがNaNなら何もしない（prevは維持）
+
+    return out
+
+def remove_short_valid_runs_3d(data_3d: np.ndarray, min_len: int = 12) -> np.ndarray:
+    """各キーポイントの「連続して有効な区間」がmin_len未満なら、その区間をNaN化する。
+
+    - 有効判定: xyzすべてがfiniteのフレーム
+    - 連続区間長 < min_len を削除（NaN化）
+    """
+    out = data_3d.copy()
+    n, k, _ = out.shape
+
+    for kp in range(k):
+        valid = np.isfinite(out[:, kp, :]).all(axis=1)
+        i = 0
+        while i < n:
+            if not valid[i]:
+                i += 1
+                continue
+            j = i
+            while j < n and valid[j]:
+                j += 1
+            run_len = j - i
+            if run_len < min_len:
+                out[i:j, kp, :] = np.nan
+            i = j
+
+    return out
+
+
+def detect_valid_frame_range(data_3d, z_min=-2000, z_max=2000, midhip_idx=8):
     num_frames = len(data_3d)
-    midhip_x = data_3d[:, midhip_idx, 0]
-    valid = (~np.isnan(midhip_x)) & (midhip_x >= x_min) & (midhip_x <= x_max)
+    midhip_z = data_3d[:, midhip_idx, 2]
+    valid = (~np.isnan(midhip_z)) & (midhip_z >= z_min) & (midhip_z <= z_max)
 
     if not np.any(valid):
         return 0, num_frames - 1
@@ -188,23 +246,121 @@ def detect_valid_frame_range(data_3d, x_min=-2500, x_max=2500, midhip_idx=8):
 # =============================================================================
 # 補間 & フィルタ
 # =============================================================================
-def spline_interpolate(data):
+def _fill_short_gaps_cubic_1d(y: np.ndarray, max_gap: int, neighbor_pts: int = 2) -> np.ndarray:
+    """
+    1D系列のNaN欠損を、連続欠損run長 < max_gap の区間だけ局所CubicSplineで埋める。
+    neighbor_pts: run前後から使う有効点数（片側）。2なら最大4点でcubic、足りなければ線形。
+    """
+    out = y.copy()
+    n = len(out)
+    i = 0
+    while i < n:
+        if not np.isnan(out[i]):
+            i += 1
+            continue
+
+        # 欠損run [i, j)
+        j = i
+        while j < n and np.isnan(out[j]):
+            j += 1
+
+        run_len = j - i
+        if run_len >= max_gap:
+            i = j
+            continue  # 長欠損は埋めない
+
+        # 前後の有効点を集める
+        left_idx = []
+        k = i - 1
+        while k >= 0 and len(left_idx) < neighbor_pts:
+            if np.isfinite(out[k]):
+                left_idx.append(k)
+            k -= 1
+        left_idx = left_idx[::-1]
+
+        right_idx = []
+        k = j
+        while k < n and len(right_idx) < neighbor_pts:
+            if np.isfinite(out[k]):
+                right_idx.append(k)
+            k += 1
+
+        xs = np.array(left_idx + right_idx, dtype=int)
+        ys = out[xs]
+        x_fill = np.arange(i, j, dtype=int)
+
+        if len(xs) >= 4 and np.all(np.diff(xs) > 0):
+            cs = CubicSpline(xs, ys)
+            out[x_fill] = cs(x_fill)
+        elif len(xs) >= 2:
+            out[x_fill] = np.interp(x_fill, xs, ys)
+        # それすら無理なら埋めない（NaNのまま）
+
+        i = j
+
+    return out
+
+def expand_nan_gaps_1d(y: np.ndarray, max_gap: int, expand: int = 2) -> np.ndarray:
+    """
+    連続NaN run長 < max_gap の欠損について，
+    その前後 expand フレームも含めて NaN 化する（非カスケード版）
+    """
+    n = len(y)
+    nan0 = np.isnan(y)  # ★元のマスクを固定
+    if not nan0.any():
+        return y.copy()
+
+    to_nan = nan0.copy()
+    i = 0
+    while i < n:
+        if not nan0[i]:
+            i += 1
+            continue
+
+        j = i
+        while j < n and nan0[j]:
+            j += 1
+
+        run_len = j - i
+        if run_len < max_gap:
+            s = max(0, i - expand)
+            e = min(n, j + expand)
+            to_nan[s:e] = True
+
+        i = j
+
+    out = y.copy()
+    out[to_nan] = np.nan
+    return out
+
+def spline_interpolate(data, max_gap: int = 30):
+    """
+    3DデータのNaN欠損を、連続欠損run長 < max_gap(0.2秒：12フレーム以内 の区間だけ補間する。
+    →したかったけど欠損がそれよりも長くなることが多いので結局30フレームまでは補間することにした。（ただ根拠が弱い）
+    長欠損(>=max_gap)はNaNのまま残す。
+    """
     interp = np.copy(data)
     num_frames, num_kp, _ = interp.shape
 
     for kp in range(num_kp):
         for c in range(3):
-            s = interp[:, kp, c]
-            m = ~np.isnan(s)
-            if np.sum(m) < 2:
+            s = interp[:, kp, c].astype(float)
+
+            # 有効点が2点未満なら何もできない
+            if np.isfinite(s).sum() < 2:
                 continue
-            xs = np.where(m)[0]
-            try:
-                cs = CubicSpline(xs, s[m])
-                interp[:, kp, c] = cs(np.arange(num_frames))
-            except Exception:
-                ser = pd.Series(s)
-                interp[:, kp, c] = ser.interpolate(limit_direction="both").to_numpy()
+
+            # # 短欠損だけ埋める（局所補間）
+            # interp[:, kp, c] = _fill_short_gaps_cubic_1d(
+            #     s, max_gap=max_gap, neighbor_pts=2
+            # )
+
+            # 短欠損の前後2フレームも削除
+            s2 = expand_nan_gaps_1d(s, max_gap=max_gap, expand=2)
+
+            interp[:, kp, c] = _fill_short_gaps_cubic_1d(
+                s2, max_gap=max_gap, neighbor_pts=2
+            )
 
     return interp
 
@@ -262,7 +418,16 @@ def plot_keypoint_timeseries(data_3d_dict, conf_3d, save_dir: Path, frame_range=
             ax = axes[c]
             for name, arr in data_3d_dict.items():
                 series = arr[s:e+1, kp_idx, c]
-                ax.plot(frames, series, linewidth=1.2, label=name)
+                if name == "raw":
+                    label_width = 10
+                    _alpha = 0.4
+                elif name == "outlier_filt":
+                    label_width = 5
+                    _alpha = 0.6
+                else:
+                    label_width = 1.2
+                    _alpha = 0.9
+                ax.plot(frames, series, linewidth=label_width, label=name, alpha=_alpha)
             ax.set_ylabel(coord_labels[c])
             ax.grid(True, alpha=0.3)
             ax.legend(fontsize=8, ncol=4)
@@ -279,6 +444,8 @@ def plot_keypoint_timeseries(data_3d_dict, conf_3d, save_dir: Path, frame_range=
         out = save_dir / f"kp{kp_idx:02d}_{kp_name}.png"
         fig.tight_layout()
         fig.savefig(out, dpi=150)
+        # if kp_name == "RHeel" and save_dir.name.endswith("_PA"):
+        #     plt.show()
         plt.close(fig)
 
 
@@ -318,6 +485,10 @@ def collect_pairs_for_thera(thera_dir: Path, csv_suffix: str):
 
     # 3つすべてに同じmethodフォルダがあるものだけ採用
     common = set(fl_methods) & set(fr_methods) & set(sagi_methods)
+    
+    # 対象をViTPoseのみに限定
+    common = [m for m in common if m == TARGET_METHOD]
+
     common = sorted(common, key=lambda x: natural_sort_key(Path(x)))
     return [(m, fl_methods[m], fr_methods[m], sagi_methods[m]) for m in sorted(common)]
 
@@ -385,20 +556,28 @@ def _run_one_job(job: Job) -> Tuple[bool, str, float]:
 
         raw_3d, conf_3d = calculate_raw_3d_coordinates_multi(kps_list, P_list)
 
+        # 信頼度によるフィルタリング
         conf_filt_3d = confidence_filter_keypoints(raw_3d, conf_3d, conf_threshold=CONF_TH_3D)
 
-        if VALID_RANGE_X is not None:
-            s, e = detect_valid_frame_range(
-                conf_filt_3d, x_min=VALID_RANGE_X[0], x_max=VALID_RANGE_X[1]
-            )
-        else:
-            s, e = 0, len(frames) - 1
+        # 1フレームで100mm以上のジャンプがある点を外れ値として除外（NaN化）
+        outlier_filt_3d_0 = remove_jump_outliers_3d(conf_filt_3d, jump_th_mm=OUTLIER_JUMP_MM)
+        # outlier_filt後に残った「連続して有効な区間」が短すぎるものは削除（NaN化）
+        outlier_filt_3d = remove_short_valid_runs_3d(outlier_filt_3d_0, min_len=12)
 
-        spline_3d = spline_interpolate(conf_filt_3d)
+
+        spline_3d = spline_interpolate(outlier_filt_3d)
 
         butter_3d = None
         if USE_BUTTERWORTH:
             butter_3d = butterworth_filter(spline_3d, BUTTERWORTH_CUTOFF, FRAME_RATE)
+
+        if VALID_RANGE_Z is not None:
+            s, e = detect_valid_frame_range(
+                butter_3d, z_min=VALID_RANGE_Z[0], z_max=VALID_RANGE_Z[1]
+            )
+        else:
+            s, e = 0, len(frames) - 1
+        # print(f"Valid frame range for {csv_sagi.name} {sub.name}/{thera.name}/{method_name}: {s} - {e} / {len(frames)}")
 
         csv_suffix = job.csv_suffix
         csv_tag = csv_suffix.replace(".csv", "").lstrip("_")
@@ -409,6 +588,7 @@ def _run_one_job(job: Job) -> Tuple[bool, str, float]:
             frame=np.array(frames, dtype=int),
             raw=raw_3d,
             conf_filt=conf_filt_3d,
+            outlier_filt=outlier_filt_3d,
             spline=spline_3d,
             butter=(butter_3d if butter_3d is not None else np.array([])),
             conf=conf_3d,
@@ -429,7 +609,7 @@ def _run_one_job(job: Job) -> Tuple[bool, str, float]:
 
         if SAVE_TIMESERIES_PLOTS:
             ts_dir = thera / f"keypoint_timeseries_3d_{method_name}_{csv_tag}"
-            data_dict = {"raw": raw_3d, "conf_filt": conf_filt_3d, "spline": spline_3d}
+            data_dict = {"raw": raw_3d, "conf_filt": conf_filt_3d, "outlier_filt": outlier_filt_3d, "spline": spline_3d}
             if butter_3d is not None and getattr(butter_3d, "size", 0) != 0:
                 data_dict["butter"] = butter_3d
             plot_keypoint_timeseries(data_dict, conf_3d, ts_dir, frame_range=(s, e))

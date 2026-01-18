@@ -1,29 +1,36 @@
 """
-OpenPose / ViTPose の JSON 出力（people[...].pose_keypoints_2d）を
-フレーム時系列の CSV に変換するスクリプト。
+OpenPose / ViTPose の JSON 出力（people[].pose_keypoints_2d）を、
+フレーム時系列の CSV（PA / PT）に変換するスクリプト。
+スプライン補間などする処理も入れているが結局三次元化の際には生データを使用している
 
-主な処理内容:
-- 各フレームで最大2人までの人物を抽出
-- MidHip（なければ bbox 中心）を代表点とした簡易トラッキングにより
-  フレーム間で人物ID（PA / PT）を安定化
-- bbox 面積・有効キーポイント数・移動量に基づく人物フィルタリング
-- 各人物ごとに BODY_25 キーポイントを CSV 出力
+想定フォルダ構造（例）
+----------------------
+root_dir/subXX/theraY-0/gopro/{fl,fr,sagi}/{method}/json/*.json
 
-欠損処理・補間:
-- x または y が 0 の座標を欠損（NaN）として扱う
-- 欠損座標は 3 次スプライン補間で補完
-- スプライン補間によって補完された座標点については，
-  対応する confidence（p）値を 0.6 として補完する
-- 補間不可能な場合は座標を 0 のまま保持し，p も 0 とする
+主な処理手順
+------------
+1) 対象 json フォルダを探索（thera0* と thera*-1 は除外）
+2) 各フレームで人物候補を抽出し、最大3トラックで簡易トラッキング
+   - bbox面積（AREA_TH）と有効キーポイント数（MIN_VALID_KPTS）で候補をフィルタ
+   - 代表点は MidHip 優先（無ければ bbox 中心）
+   - last_pos との距離（MAX_TRACK_DIST）でフレーム間の同一人物を対応付け
+3) 検出が少ないフォルダをスキップ（MIN_DET_RATIO）
+4) 静止人物を除外（代表点の移動範囲 dx,dy が小さいトラックを除外）
+5) PA/PT を位置関係で判定（direction ごとの MidHip_x の左右関係を多数決）
+   - 判定フレーム: mid, mid+30, mid+60, mid+90, mid+120（範囲内のみ）
+6) 欠損処理と補間
+   - x==0 または y==0 を欠損（NaN）として扱う
+   - 欠損座標は 3次スプライン補間（不足時は補間しない）
+   - スプライン補間で埋まった点の confidence(p) は 0.6 とする
+   - それ以外の欠損は (x,y,p)=(0,0,0) を維持
+7) 出力
+   - {base}_PA.csv / {base}_PA_spline.csv
+   - {base}_PT.csv / {base}_PT_spline.csv
+   - キーポイント時系列プロット（Raw / Spline / Confidence）
 
-出力:
-- {base}_PA.csv / {base}_PA_spline.csv
-- {base}_PT.csv / {base}_PT_spline.csv
-- 各キーポイントの時系列プロット（Raw / Spline / Confidence）
-
-用途:
-- 多視点RGBカメラによる2D姿勢推定結果の前処理
-- 3次元再構成・歩行解析・臨床動作解析の入力データ生成
+用途
+----
+- 3視点（fl, fr, sagi）の2D姿勢推定結果を、3D再構成や歩行解析の入力に整形する前処理。
 """
 
 import json
@@ -38,6 +45,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from scipy.interpolate import CubicSpline
 
 # =========================
 # 設定（ここだけ調整）
@@ -45,8 +53,12 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 root_dir = Path(r"G:\gait_pattern\2025_shuron_BR9G")
 directions = ["fl", "fr", "sagi"]
 
+TARGET_METHODS = ["ViTPose"]  # 対象とする姿勢推定手法名リスト
+
 # 採用条件（元のまま）
-AREA_TH = 200 * 300  # bbox面積閾値
+CONF_TH = 0.4  # confidence閾値
+AREA_TH = 200 * 300  # bbox面積閾値ざっくり
+AREA_TH_SAGI = 450 * 200  # sagi方向のみbbox面積閾値ざっくり
 MIN_VALID_KPTS = 5  # 有効キーポイント数閾値
 MIN_DET_RATIO = 0.10  # 検出フレーム割合閾値
 
@@ -57,6 +69,7 @@ OUT_PERSON_TAGS = ["PA", "PT"]   # 一人目, 二人目
 
 # トラッキング閾値（画素距離）
 MAX_TRACK_DIST = 100.0
+
 
 # 画像座標レンジ
 XLIM = (0, 3840)
@@ -86,7 +99,7 @@ MAX_WORKERS = 4
 # 探索
 # =========================
 def iter_poseestimate_json_dirs(root: Path, directions_list):
-    for sub in sorted(root.glob("sub*")):
+    for sub in sorted(root.glob("sub10*")):
         if not sub.is_dir():
             continue
         for thera in sub.iterdir():
@@ -103,6 +116,9 @@ def iter_poseestimate_json_dirs(root: Path, directions_list):
                 for poseestimate_dir in gopro_dir.iterdir():
                     if not poseestimate_dir.is_dir():
                         continue
+                    if poseestimate_dir.name not in (TARGET_METHODS or "undistorted"):
+                        # 対象外の手法はスキップ
+                        continue
                     json_dir = poseestimate_dir / "json"
                     if json_dir.exists() and json_dir.is_dir():
                         yield json_dir, d
@@ -110,7 +126,23 @@ def iter_poseestimate_json_dirs(root: Path, directions_list):
 # =========================
 # bbox/代表点
 # =========================
-def person_bbox_area_from_kpts(kpts, p_th=0.0):
+def prefilter_kpts_by_conf(kpts, conf_th: float):
+    """
+    conf_th 未満の点を (0,0,0) にして無効化する（bbox/valid/MidHipの判定に使わせない）
+    """
+    if not kpts or len(kpts) < len(keypoint_names) * 3:
+        return kpts
+
+    k = list(kpts)  # copy
+    for i in range(len(keypoint_names)):
+        p = float(k[i * 3 + 2])
+        if p < conf_th:
+            k[i * 3 + 0] = 0.0
+            k[i * 3 + 1] = 0.0
+            k[i * 3 + 2] = 0.0
+    return k
+
+def person_bbox_area_from_kpts(kpts):
     if not kpts or len(kpts) < len(keypoint_names) * 3:
         return 0.0, 0, None  # area, valid, (xmin,ymin,xmax,ymax)
 
@@ -123,8 +155,6 @@ def person_bbox_area_from_kpts(kpts, p_th=0.0):
             continue
         x = float(x); y = float(y); p = float(p)
         if x == 0 or y == 0:
-            continue
-        if p <= p_th:
             continue
         xs.append(x); ys.append(y)
 
@@ -167,9 +197,9 @@ def representative_point(kpts, bbox):
     return np.array([(xmin + xmax) / 2.0, (ymin + ymax) / 2.0], dtype=float)
 
 # =========================
-# 2人トラッキング本体
+# 3人トラッキング本体
 # =========================
-def load_sequence_two_tracks(json_dir: Path):
+def load_sequence_three_tracks(json_dir: Path):
     json_files = sorted(glob.glob(str(json_dir / "*.json")))
     frame_count = len(json_files)
     if frame_count == 0:
@@ -194,9 +224,10 @@ def load_sequence_two_tracks(json_dir: Path):
         # 候補生成
         candidates = []
         for person in people:
-            kpts = person.get("pose_keypoints_2d", []) or []
-            area, valid, bbox = person_bbox_area_from_kpts(kpts, p_th=0.0)
-            if area < AREA_TH:
+            kpts_raw = person.get("pose_keypoints_2d", []) or []
+            kpts = prefilter_kpts_by_conf(kpts_raw, conf_th=CONF_TH)
+            area, valid, bbox = person_bbox_area_from_kpts(kpts)
+            if area < (AREA_TH_SAGI if json_dir.parent.parent.name == "sagi" else AREA_TH):
                 continue
             rp = representative_point(kpts, bbox)
             if rp is None:
@@ -235,7 +266,7 @@ def load_sequence_two_tracks(json_dir: Path):
                 assigned[ti] = best_j
                 used.add(best_j)
 
-        # 2) last_pos がないトラック or まだ未割当を、残り候補から面積順で埋める
+        # 2) last_pos がないトラック or まだ未割当を、残り候補から面積順(面積閾値を超えている場合のみ)で埋める
         for ti in [0, 1, 2]:
             if assigned[ti] is not None:
                 continue
@@ -303,7 +334,84 @@ def load_sequence_two_tracks(json_dir: Path):
 # =========================
 # 0→NaN → 3次スプライン補間（×は0由来のみ）
 # =========================
+
+def _short_nan_runs_mask(is_nan: np.ndarray, max_len: int) -> np.ndarray:
+    """
+    短いNaNのrunをTrueにするマスクを返す
+    """
+    n = len(is_nan)
+    out = np.zeros(n, dtype=bool)
+    i = 0
+    while i < n:
+        if not is_nan[i]:
+            i += 1
+            continue
+        j = i
+        while j < n and is_nan[j]:
+            j += 1
+        run_len = j - i
+        if run_len < max_len:
+            out[i:j] = True
+        i = j
+    return out
+
+def _fill_short_gaps_cubic(y: np.ndarray, short_gap_mask: np.ndarray, neighbor_pts: int) -> np.ndarray:
+    """
+    短い欠損を3次スプライン補間
+    """
+    out = y.copy()
+    n = len(out)
+    i = 0
+    while i < n:
+        if not (np.isnan(out[i]) and short_gap_mask[i]):
+            i += 1
+            continue
+
+        j = i
+        while j < n and np.isnan(out[j]) and short_gap_mask[j]:
+            j += 1
+
+        # runの前後から有効点を集める
+        left_idx = []
+        k = i - 1
+        while k >= 0 and len(left_idx) < neighbor_pts:
+            if np.isfinite(out[k]):
+                left_idx.append(k)
+            k -= 1
+        left_idx = left_idx[::-1]
+
+        right_idx = []
+        k = j
+        while k < n and len(right_idx) < neighbor_pts:
+            if np.isfinite(out[k]):
+                right_idx.append(k)
+            k += 1
+
+        xs = np.array(left_idx + right_idx, dtype=int)
+        ys = out[xs]
+        x_fill = np.arange(i, j, dtype=int)
+
+        if len(xs) >= 4 and np.all(np.diff(xs) > 0):
+            cs = CubicSpline(xs, ys)
+            out[x_fill] = cs(x_fill)
+        elif len(xs) >= 2:
+            # 点が足りないなら線形
+            out[x_fill] = np.interp(x_fill, xs, ys)
+        # それすら無理なら埋めない（NaNのまま）
+
+        i = j
+
+    return out
+
+
+
 def zero_nan_and_spline(df_raw: pd.DataFrame):
+    """
+    欠損が0.2秒(60Hzだと12フレーム)未満は3次スプライン補間を実行（論文doi：10.1080/10255841003664701）
+    """
+    MAX_SPLINE_GAP = 12  # 補完する最大欠損フレーム
+    NEIGHBOR_PTS   = 2      # 欠損runの前後から何点ずつ使うか（2→合計4点狙い）
+    
     df0 = df_raw.copy()
     mask0_by_kp = {}
 
@@ -324,37 +432,31 @@ def zero_nan_and_spline(df_raw: pd.DataFrame):
 
     df_s = df0.copy()
 
-    # 2) 座標 spline 補間
+    # 2) 座標補間：短い欠損run（< MAX_SPLINE_GAP）だけ局所CubicSplineで埋める
     for k in keypoint_names:
         xcol = f"{k}_x"
         ycol = f"{k}_y"
         pcol = f"{k}_p"
 
-        # --- X ---
-        sx = df_s[xcol].astype(float)
-        if sx.notna().sum() >= 4:
-            sx_i = sx.interpolate(method="spline", order=3, limit_direction="both")
-        else:
-            sx_i = sx
+        x = df_s[xcol].astype(float).to_numpy()
+        y = df_s[ycol].astype(float).to_numpy()
 
-        # --- Y ---
-        sy = df_s[ycol].astype(float)
-        if sy.notna().sum() >= 4:
-            sy_i = sy.interpolate(method="spline", order=3, limit_direction="both")
-        else:
-            sy_i = sy
+        # 0由来欠損（NaN化した場所）だけを対象に、短欠損runマスクを作る
+        m0 = mask0_by_kp[k]  # True = 0由来欠損
+        short_gap_mask = _short_nan_runs_mask(m0, MAX_SPLINE_GAP)
 
-        # spline により新たに埋まった点
-        spline_filled = sx.isna() & sx_i.notna() & sy.isna() & sy_i.notna()
+        # 局所補間（短欠損runのみ）
+        x_filled = _fill_short_gaps_cubic(x, short_gap_mask, NEIGHBOR_PTS)
+        y_filled = _fill_short_gaps_cubic(y, short_gap_mask, NEIGHBOR_PTS)
 
-        df_s[xcol] = sx_i.fillna(0)
-        df_s[ycol] = sy_i.fillna(0)
+        # 「実際に埋まった点」→ p=0.6（XもYもNaN→値になったところ）
+        filled_mask = short_gap_mask & np.isnan(x) & np.isfinite(x_filled) & np.isnan(y) & np.isfinite(y_filled)
 
-        # 3) p 値の補完ルール
-        # spline で補完された点 → p = 0.6
-        df_s.loc[spline_filled, pcol] = 0.6
+        # 仕上げ：残NaNは0
+        df_s[xcol] = np.where(np.isfinite(x_filled), x_filled, 0.0)
+        df_s[ycol] = np.where(np.isfinite(y_filled), y_filled, 0.0)
 
-        # それ以外で p が NaN の場合は 0
+        df_s.loc[filled_mask, pcol] = 0.6
         df_s[pcol] = df_s[pcol].fillna(0)
 
     return df_s, mask0_by_kp
@@ -473,7 +575,7 @@ def process_one_json_dir(json_dir: Path, direction: str):
         if ok:
             return "skip_exists"
 
-    df_a, df_b, df_c, frame_count, any_det_frames, (det_a, det_b, det_c), (dx0, dy0, dx1, dy1, dx2, dy2) = load_sequence_two_tracks(json_dir)
+    df_a, df_b, df_c, frame_count, any_det_frames, (det_a, det_b, det_c), (dx0, dy0, dx1, dy1, dx2, dy2) = load_sequence_three_tracks(json_dir)
     if df_a is None:
         return "skip"
 
@@ -568,7 +670,15 @@ def process_one_json_dir(json_dir: Path, direction: str):
         PA_df, PT_df = tr0["df"], tr1["df"]
     else:
         PA_df, PT_df = tr1["df"], tr0["df"]
-
+        
+    # ここは後で目視で確認して調整したもの
+    check_thera_dir = out_root.parent.parent.parent
+    # 6-6-0 fl，10-10-0 frは前額面左カメラでの位置関係がis_pa_firstの定義にはあてはまらないため今回は強制的に入れ替え
+    if check_thera_dir.parent.name == "sub6"  and check_thera_dir.name == "thera6-0" and direction == "fl":
+        PA_df, PT_df = PT_df, PA_df
+    elif check_thera_dir.parent.name == "sub10"  and check_thera_dir.name == "thera10-0" and direction == "fr":
+        PA_df, PT_df = PT_df, PA_df
+            
     valid_tracks = [("PA", PA_df), ("PT", PT_df)]
 
     if len(valid_tracks) == 0:
