@@ -29,10 +29,12 @@ theraX-0/
 
 import re
 from pathlib import Path
+import json
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import m_openpose as op  # culc_angle_all_frames (for Pose3D angle computation)
 
 
 # =========================
@@ -62,6 +64,13 @@ YLIM_BY_ANGLE = {
     "Ankle_PlDo": (-30,  50),
 }
 
+def ylims_for_angle_key(k):
+    # k: 'R_Hip_FlEx' のような角度キー
+    if not isinstance(k, str) or '_' not in k:
+        return None
+    base = k.split('_', 1)[1]  # 'Hip_FlEx' など
+    return YLIM_BY_ANGLE.get(base, None)
+
 # 比較する角度系列（4_2 側に存在する範囲に合わせる）
 ANGLE_BASE_KEYS = [
     "Hip_FlEx",
@@ -76,15 +85,10 @@ GAIT_PARAM_KEYS = [
     ("gait_speed", "Gait Speed [m/s]"),
     ("stride_length", "Stride Length [m]"),
     ("step_width", "Step Width [m]"),
+    ("step_length_opposite", "Step Length Opposite [m]"),
+    ("stance_phase_percent", "Stance Phase [%]"),
+    ("swing_phase_percent", "Swing Phase [%]"),
 ]
-# GAIT_PARAM_KEYS = [
-#     ("gait_speed", "Gait Speed [m/s]"),
-#     ("stride_length", "Stride Length [m]"),
-#     ("step_width", "Step Width [m]"),
-#     ("step_length_opposite", "Step Length Opposite [m]"),
-#     ("stance_phase_percent", "Stance Phase [%]"),
-#     ("swing_phase_percent", "Swing Phase [%]"),
-# ]
 
 
 
@@ -387,6 +391,221 @@ def gait_param_mean_std(df: pd.DataFrame, key: str):
     return float(np.mean(v)), float(np.std(v))
 
 
+
+# =========================
+# 追加: Pose3D 時系列角度を再計算して Mocap と比較プロット
+# =========================
+PREFERRED_3D_KEY_ORDER = ["butter", "spline", "conf_filt", "raw"]
+FS_3D = 60.0
+FS_MOCAP = 100.0
+
+def pick_3d_array(npz, preferred_keys=PREFERRED_3D_KEY_ORDER):
+    for k in preferred_keys:
+        if k in npz.files:
+            arr = npz[k]
+            if isinstance(arr, np.ndarray) and arr.size == 0:
+                continue
+            return k, arr
+    raise KeyError(f"no usable 3d key found. available={npz.files}")
+
+def compute_angles_from_body25(kp3d: np.ndarray):
+    """
+    kp3d: (n_frames, 25, 3)  [mm]
+    returns dict of angle series (deg) and some points
+    """
+    neck = kp3d[:, 1, :]
+    midhip = kp3d[:, 8, :]
+
+    rhip = kp3d[:, 9, :]
+    rknee = kp3d[:, 10, :]
+    rankle = kp3d[:, 11, :]
+    rhee = kp3d[:, 24, :]
+    rtoe = (kp3d[:, 22, :] + kp3d[:, 23, :]) / 2.0
+
+    lhip = kp3d[:, 12, :]
+    lknee = kp3d[:, 13, :]
+    lankle = kp3d[:, 14, :]
+    lhee = kp3d[:, 21, :]
+    ltoe = (kp3d[:, 19, :] + kp3d[:, 20, :]) / 2.0
+
+    pel_up = neck - midhip
+    thigh_r = rknee - rhip
+    shank_r = rankle - rknee
+    foot_r = rtoe - rhee
+
+    thigh_l = lknee - lhip
+    shank_l = lankle - lknee
+    foot_l = ltoe - lhee
+
+    n_axis = rhip - lhip  # 左→右
+
+    rhip_flex = op.culc_angle_all_frames(pel_up, thigh_r, n_axis, degrees=True, angle_type="hip")
+    lhip_flex = op.culc_angle_all_frames(pel_up, thigh_l, n_axis, degrees=True, angle_type="hip")
+
+    rknee_flex = op.culc_angle_all_frames(thigh_r, shank_r, n_axis, degrees=True, angle_type="knee")
+    lknee_flex = op.culc_angle_all_frames(thigh_l, shank_l, n_axis, degrees=True, angle_type="knee")
+
+    rankle_pldo = op.culc_angle_all_frames(shank_r, foot_r, n_axis, degrees=True, angle_type="ankle")
+    lankle_pldo = op.culc_angle_all_frames(shank_l, foot_l, n_axis, degrees=True, angle_type="ankle")
+
+    n_axis_adab = np.cross(pel_up, n_axis)
+    eps = 1e-9
+    n_norm = np.linalg.norm(n_axis_adab, axis=1)
+    bad = n_norm < eps
+    if np.any(bad):
+        n_axis_adab[bad, :] = np.array([0.0, 0.0, 1.0])
+
+    rhip_adab = op.culc_angle_all_frames(pel_up, thigh_r, n_axis_adab, degrees=True, angle_type="hip_adab")
+    lhip_adab = op.culc_angle_all_frames(pel_up, thigh_l, n_axis_adab, degrees=True, angle_type="hip_adab")
+
+    rhip_inex = op.culc_angle_all_frames(thigh_r, n_axis_adab, pel_up, degrees=True, angle_type="hip_inex")
+    lhip_inex = op.culc_angle_all_frames(thigh_l, n_axis_adab, pel_up, degrees=True, angle_type="hip_inex")
+
+    return dict(
+        midhip=midhip, rhee=rhee, lhee=lhee,
+        R_Hip_FlEx=rhip_flex, R_Knee_FlEx=rknee_flex, R_Ankle_PlDo=rankle_pldo, R_Hip_AdAb=rhip_adab, R_Hip_InEx=rhip_inex,
+        L_Hip_FlEx=lhip_flex, L_Knee_FlEx=lknee_flex, L_Ankle_PlDo=lankle_pldo, L_Hip_AdAb=lhip_adab, L_Hip_InEx=lhip_inex,
+    )
+
+def find_mocap_angle_csv(mocap_dir: Path, mocap_stem: str) -> Path | None:
+    cands = sorted(mocap_dir.glob("angle_100Hz_*.csv"), key=lambda p: natural_sort_key(p.name))
+    if not cands:
+        return None
+    # stem一致優先
+    for p in cands:
+        if mocap_stem in p.name:
+            return p
+    return cands[0]
+
+def get_sync_offset_100hz(thera_dir: Path) -> float | None:
+    """
+    IMU同期(ext data) と GoPro trimming_info.json から、100Hz絶対フレームのオフセットを計算する。
+    返り値は 4_2 側の式に合わせた offset (float)。
+    """
+    imu_dir = thera_dir / "IMU"
+    sync_csv = next(imu_dir.glob("*SYNC*.csv"), None) if imu_dir.exists() else None
+    if sync_csv is None:
+        return None
+
+    df = pd.read_csv(sync_csv, sep=",", header=None)
+    ext_df = df[df[0] == "ext data"].reset_index(drop=True)
+    if len(ext_df) == 0:
+        return None
+
+    ext_df[2] = ext_df[2].astype(int)
+    ext_df[3] = ext_df[3].astype(int)
+
+    col2_fall = ext_df.index[(ext_df[2].shift(1) == 1) & (ext_df[2] == 0)]
+    col3_rise = ext_df.index[(ext_df[3].shift(1) == 0) & (ext_df[3] == 1)]
+    if len(col2_fall) == 0 or len(col3_rise) == 0:
+        return None
+
+    sync_frame_diff_100hz = float(col3_rise[0] - col2_fall[0])
+
+    gopro_json = thera_dir / "gopro" / "trimming_info.json"
+    if gopro_json.exists():
+        with open(str(gopro_json), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        gopro_cut_frame = float(data["trimming_settings"]["start_frame_relative"])
+        sync_frame_diff_100hz -= gopro_cut_frame * (FS_MOCAP / FS_3D)
+
+    return sync_frame_diff_100hz
+
+def hz100_abs_to_hz60_idx(frame_100_abs: float, offset_100hz: float) -> float:
+    """4_2 の変換式（既存結果との整合を優先）"""
+    return (frame_100_abs + offset_100hz) * (FS_3D / FS_MOCAP)
+
+def resample_mocap_to_pose_frames(mocap_df: pd.DataFrame, pose_n: int, offset_100hz: float, key: str) -> np.ndarray:
+    """mocap(100Hz)の角度を pose(60Hz)フレームへ線形補間して返す（長さ pose_n）"""
+    if key not in mocap_df.columns:
+        return np.full(pose_n, np.nan, dtype=float)
+
+    y100 = coerce_scalar_series(mocap_df[key])
+    f100 = mocap_df.index.to_numpy(dtype=float)
+    x60 = hz100_abs_to_hz60_idx(f100, offset_100hz)
+
+    m = np.isfinite(x60) & np.isfinite(y100)
+    if not np.any(m):
+        return np.full(pose_n, np.nan, dtype=float)
+
+    x = x60[m]
+    y = y100[m]
+
+    # x が単調増加でないケースに備えて sort
+    order = np.argsort(x)
+    x = x[order]
+    y = y[order]
+
+    # 同一xがあると np.interp が不安定なので集約（最後の値）
+    _, uniq_idx = np.unique(x, return_index=True)
+    x = x[uniq_idx]
+    y = y[uniq_idx]
+
+    xp = np.arange(pose_n, dtype=float)
+    # 外挿は NaN にしたいので、範囲内だけ埋める
+    out = np.full(pose_n, np.nan, dtype=float)
+    in_range = (xp >= x[0]) & (xp <= x[-1])
+    out[in_range] = np.interp(xp[in_range], x, y)
+    return out
+
+def plot_compare_timeseries_three_stack(out_dir: Path, tag: str, side: str, pose_label: str,
+                                       pose_angles: dict, mocap_angles_df: pd.DataFrame,
+                                       offset_100hz: float, keys: list[str], fname: str):
+    """
+    3段(hip/knee/ankle)の時系列(横軸=フレーム)を Mocap と Pose3D で重ね描き
+    """
+    n_pose = len(pose_angles[keys[0]])
+    x = np.arange(n_pose)
+
+    fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
+
+    for ax, k in zip(axes, keys):
+        y_pose = np.asarray(pose_angles.get(k, np.full(n_pose, np.nan)), dtype=float)
+        y_mocap = resample_mocap_to_pose_frames(mocap_angles_df, n_pose, offset_100hz, k)
+
+        ax.plot(x, y_mocap, label="Mocap")
+        ax.plot(x, y_pose, label=pose_label)
+
+        ylims = ylims_for_angle_key(k)
+        if ylims is not None:
+            ax.set_ylim(*ylims)
+
+        ax.set_ylabel("Angle [deg]")
+        ax.set_title(k)
+        ax.grid(True)
+        ax.legend()
+
+    axes[-1].set_xlabel("Frame (Pose3D 60Hz index)")
+    fig.suptitle(f"Timeseries compare ({side}) - {pose_label} - {tag}")
+    plt.tight_layout()
+    plt.savefig(out_dir / fname)
+    plt.close()
+
+def plot_compare_timeseries_single(out_dir: Path, tag: str, side: str, pose_label: str,
+                                  pose_angles: dict, mocap_angles_df: pd.DataFrame,
+                                  offset_100hz: float, key: str, fname: str):
+    n_pose = len(pose_angles[key])
+    x = np.arange(n_pose)
+    y_pose = np.asarray(pose_angles.get(key, np.full(n_pose, np.nan)), dtype=float)
+    y_mocap = resample_mocap_to_pose_frames(mocap_angles_df, n_pose, offset_100hz, key)
+
+    fig, ax = plt.subplots(1, 1, figsize=(14, 4))
+    ax.plot(x, y_mocap, label="Mocap")
+    ax.plot(x, y_pose, label=pose_label)
+
+    ylims = ylims_for_angle_key(key)
+    if ylims is not None:
+        ax.set_ylim(*ylims)
+
+    ax.set_xlabel("Frame (Pose3D 60Hz index)")
+    ax.set_ylabel("Angle [deg]")
+    ax.set_title(f"Timeseries compare - {key} - {pose_label} - {tag}")
+    ax.grid(True)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(out_dir / fname)
+    plt.close()
+
 def run_one_pair(thera_dir: Path, mocap_mid_npz: Path, method_dir: Path, tag: str,
                  r_csv: Path, l_csv: Path | None):
     """
@@ -425,6 +644,58 @@ def run_one_pair(thera_dir: Path, mocap_mid_npz: Path, method_dir: Path, tag: st
         plot_compare_cycle_flexext(compare_dir, tag, "L", mean_l_mocap, mean_l_pose, pose_label)
         plot_compare_cycle_single(compare_dir, tag, "L", "Hip_InEx", mean_l_mocap, mean_l_pose, pose_label)
         plot_compare_cycle_single(compare_dir, tag, "L", "Hip_AdAb", mean_l_mocap, mean_l_pose, pose_label)
+
+
+    # ---------- plots (timeseries: Mocap vs Pose3D) ----------
+    if globals().get('DO_COMPARE_TIMESERIES', True):
+        pose_npz = thera_dir / f"3d_kp_{tag}.npz"
+        angle_csv = find_mocap_angle_csv(mocap_dir, mocap_stem)
+        offset_100hz = get_sync_offset_100hz(thera_dir)
+
+        if (not pose_npz.exists()) or (angle_csv is None) or (offset_100hz is None):
+            print(f"[WARN] timeseries skipped (missing files/offset): {thera_dir.name} / {method_dir.name} / {tag}")
+        else:
+            try:
+                mocap_angles_df = pd.read_csv(angle_csv, index_col=0)
+                npz = np.load(pose_npz, allow_pickle=True)
+                used_key, kp3d = pick_3d_array(npz)
+                pose_angles = compute_angles_from_body25(kp3d)
+
+                # R
+                plot_compare_timeseries_three_stack(
+                    compare_dir, tag, "R", pose_label, pose_angles, mocap_angles_df, offset_100hz,
+                    ["R_Hip_FlEx", "R_Knee_FlEx", "R_Ankle_PlDo"],
+                    f"compare_timeseries_FlEx_R_{tag}.png",
+                )
+                plot_compare_timeseries_single(
+                    compare_dir, tag, "R", pose_label, pose_angles, mocap_angles_df, offset_100hz,
+                    "R_Hip_InEx",
+                    f"compare_timeseries_InEx_R_{tag}.png",
+                )
+                plot_compare_timeseries_single(
+                    compare_dir, tag, "R", pose_label, pose_angles, mocap_angles_df, offset_100hz,
+                    "R_Hip_AdAb",
+                    f"compare_timeseries_AdAb_R_{tag}.png",
+                )
+
+                # L
+                plot_compare_timeseries_three_stack(
+                    compare_dir, tag, "L", pose_label, pose_angles, mocap_angles_df, offset_100hz,
+                    ["L_Hip_FlEx", "L_Knee_FlEx", "L_Ankle_PlDo"],
+                    f"compare_timeseries_FlEx_L_{tag}.png",
+                )
+                plot_compare_timeseries_single(
+                    compare_dir, tag, "L", pose_label, pose_angles, mocap_angles_df, offset_100hz,
+                    "L_Hip_InEx",
+                    f"compare_timeseries_InEx_L_{tag}.png",
+                )
+                plot_compare_timeseries_single(
+                    compare_dir, tag, "L", pose_label, pose_angles, mocap_angles_df, offset_100hz,
+                    "L_Hip_AdAb",
+                    f"compare_timeseries_AdAb_L_{tag}.png",
+                )
+            except Exception as e:
+                print(f"[WARN] timeseries plotting failed: {thera_dir.name} / {method_dir.name} / {tag}: {e}")
 
     # ---------- gait parameter comparison ----------
     mocap_r, mocap_l, pose_r, pose_l = load_gait_params_pair(mocap_dir, mocap_stem, method_dir, tag)

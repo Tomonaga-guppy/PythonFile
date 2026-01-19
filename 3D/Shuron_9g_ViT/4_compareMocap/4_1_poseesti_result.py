@@ -299,6 +299,34 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
         k: [int(f) + valid_start for f in v]
         for k, v in event_frame_dict_local.items()
     }
+    
+    # mocapとの比較用にグローバル版で歩行周期を保存する
+    def _cycles_local_to_global(cycles_local, offset):
+        # cycles_local: [[ic, ic_opp, to, ic_end], ...]
+        out = []
+        for c in cycles_local:
+            if c is None or len(c) != 4:
+                continue
+            out.append([float(c[0]) + offset,
+                        float(c[1]) + offset,
+                        float(c[2]) + offset,
+                        float(c[3]) + offset])
+        return out
+    
+
+    gait_cycle_r_global = _cycles_local_to_global(gait_cycles_r, valid_start)
+    gait_cycle_l_global = _cycles_local_to_global(gait_cycles_l, valid_start)
+    print(f"gait_cycle_r_global: {gait_cycle_r_global}")
+    print(f"gait_cycle_l_global: {gait_cycle_l_global}")
+
+    # 保存
+    np.savez(
+        out_root / f"gait_cycles_{tag_short}.npz",
+        gait_cycle_r=np.asarray(gait_cycle_r_global, dtype=float),
+        gait_cycle_l=np.asarray(gait_cycle_l_global, dtype=float),
+        valid_start=int(valid_start),
+        valid_end=int(valid_end),
+    )
 
     # デバック用に(全体通しての)初期接地フレームを取得しておく
     ic_r = event_frame_dict_global.get("ic_r", [])
@@ -314,7 +342,10 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
         if isinstance(angles_dict[k], np.ndarray):
             pad = np.full((valid_start,), np.nan)
             angles_dict[k] = np.concatenate([pad, angles_dict[k]])
-        
+    
+    angles_dict_df = pd.DataFrame(angles_dict)
+    angles_dict_df.to_csv(out_root / f"angles.csv", index_label="Frame")
+    
     def plot_three_timeseries(title, keys_r, keys_l, angles_dict, fname, ic_r=None, ic_l=None):
         """
         keys_r: ["R_Hip_FlEx","R_Knee_FlEx","R_Ankle_PlDo"] など
@@ -417,31 +448,29 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
     gait_params_r = calculate_gait_parameters_3d(gait_cycles_r, midhip, rhee, lhee, side="R", sampling_freq=FS_3D)
     gait_params_l = calculate_gait_parameters_3d(gait_cycles_l, midhip, rhee, lhee, side="L", sampling_freq=FS_3D)
 
-    # 時間的対称性指標（遊脚期比のSI）を算出
-    if paralyzed_side == "R":
-        swing_duration_para = np.array([p['swing_duration'] for p in gait_params_r]).mean()
-        swing_duration_nonpara = np.array([p['swing_duration'] for p in gait_params_l]).mean()
-        symmetry_index_sw = (swing_duration_para - swing_duration_nonpara) / (0.5 * (swing_duration_para + swing_duration_nonpara)) * 100
-    elif paralyzed_side == "L":
-        swing_duration_para = np.array([p['swing_duration'] for p in gait_params_l]).mean()
-        swing_duration_nonpara = np.array([p['swing_duration'] for p in gait_params_r]).mean()
-        symmetry_index_sw = (swing_duration_para - swing_duration_nonpara) / (0.5 * (swing_duration_para + swing_duration_nonpara)) * 100
+    # 時間的対称性指標（遊脚期比のSI）を算出 右麻痺前提 歩行周期ごとでの算出が難しいため全体平均で算出
+    swing_duration_para = np.array([p['swing_duration'] for p in gait_params_r]).mean()
+    swing_duration_nonpara = np.array([p['swing_duration'] for p in gait_params_l]).mean()
+    symmetry_index_sw = (swing_duration_para - swing_duration_nonpara) / (0.5 * (swing_duration_para + swing_duration_nonpara)) * 100
+
+    # 歩行パラメータを保存
+    gait_params_r_df = pd.DataFrame(gait_params_r)
+    gait_params_l_df = pd.DataFrame(gait_params_l)
+    gait_params_r_df.to_csv(out_root / f"gait_parameters_R_{tag_short}.csv", index=False)
+    gait_params_l_df.to_csv(out_root / f"gait_parameters_L_{tag_short}.csv", index=False)
     
-    # 関節角度情報をまとめる
-    if paralyzed_side == "R":
-        hip_flex = angles_dict["R_Hip_FlEx"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1] if len(gait_cycles_r) > 0 else np.array([])
-        hip_max_flex = np.max(hip_flex) if hip_flex.size > 0 else np.nan
-        hip_max_ext = np.min(hip_flex) if hip_flex.size > 0 else np.nan
-        knee_max_flex = np.max(angles_dict["R_Knee_FlEx"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
-        ankle_max_pl = np.min(angles_dict["R_Ankle_PlDo"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
-        hip_max_ab = np.max(angles_dict["R_Hip_AdAb"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
-    elif paralyzed_side == "L":
-        hip_flex = angles_dict["L_Hip_FlEx"][gait_cycles_l[0][0]:gait_cycles_l[0][3]+1] if len(gait_cycles_l) > 0 else np.array([])
-        hip_max_flex = np.max(hip_flex) if hip_flex.size > 0 else np.nan
-        hip_max_ext = np.min(hip_flex) if hip_flex.size > 0 else np.nan
-        knee_max_flex = np.max(angles_dict["L_Knee_FlEx"][gait_cycles_l[0][0]:gait_cycles_l[0][3]+1]) if len(gait_cycles_l) > 0 else np.nan
-        ankle_max_pl = np.min(angles_dict["L_Ankle_PlDo"][gait_cycles_l[0][0]:gait_cycles_l[0][3]+1]) if len(gait_cycles_l) > 0 else np.nan
-        hip_max_ab = np.max(angles_dict["L_Hip_AdAb"][gait_cycles_l[0][0]:gait_cycles_l[0][3]+1]) if len(gait_cycles_l) > 0 else np.nan
+    symmetry_df = pd.DataFrame({
+        'SI_swing_duration': [symmetry_index_sw]
+    })
+    symmetry_df.to_csv(out_root / f"SI_{tag_short}.csv", index=False)
+    
+    # 関節角度情報をまとめる (右麻痺前提：あと9号館データではこれいらない)
+    hip_flex = angles_dict["R_Hip_FlEx"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1] if len(gait_cycles_r) > 0 else np.array([])
+    hip_max_flex = np.max(hip_flex) if hip_flex.size > 0 else np.nan
+    hip_max_ext = np.min(hip_flex) if hip_flex.size > 0 else np.nan
+    knee_max_flex = np.max(angles_dict["R_Knee_FlEx"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
+    ankle_max_pl = np.min(angles_dict["R_Ankle_PlDo"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
+    hip_max_ab = np.max(angles_dict["R_Hip_AdAb"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
     max_angle_list = [hip_max_flex, hip_max_ext, knee_max_flex, ankle_max_pl, hip_max_ab]
     
     # 歩行パラメータのまとめ

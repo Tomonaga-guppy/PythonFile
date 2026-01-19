@@ -64,10 +64,10 @@ CSV_SUFFIXES = [
 TARGET_METHOD = "ViTPose"  # 対象とする手法名（OpenPoseの結果は使用しない）
 
 CONF_TH_3D = 0.5  # 3D信頼度閾値（この値以下の3D点はNaNにする）
-VALID_RANGE_Z = (-2000, 2000)
+VALID_RANGE_Z = (-2000, 2000)  # MidHipのZ座標による有効範囲[mm] およそ+-2mになるように
 
 # 1フレームでの3Dジャンプがこの閾値[mm]を超える点は外れ値としてNaN化
-OUTLIER_JUMP_MM = 500.0
+OUTLIER_JUMP_MM = 100.0
 
 USE_BUTTERWORTH = True
 BUTTERWORTH_CUTOFF = 6.0
@@ -350,17 +350,17 @@ def spline_interpolate(data, max_gap: int = 30):
             if np.isfinite(s).sum() < 2:
                 continue
 
-            # # 短欠損だけ埋める（局所補間）
-            # interp[:, kp, c] = _fill_short_gaps_cubic_1d(
-            #     s, max_gap=max_gap, neighbor_pts=2
-            # )
-
-            # 短欠損の前後2フレームも削除
-            s2 = expand_nan_gaps_1d(s, max_gap=max_gap, expand=2)
-
+            # 短欠損だけ埋める（局所補間）
             interp[:, kp, c] = _fill_short_gaps_cubic_1d(
-                s2, max_gap=max_gap, neighbor_pts=2
+                s, max_gap=max_gap, neighbor_pts=2
             )
+
+            # # 短欠損の前後2フレームも削除
+            # s2 = expand_nan_gaps_1d(s, max_gap=max_gap, expand=2)
+
+            # interp[:, kp, c] = _fill_short_gaps_cubic_1d(
+            #     s2, max_gap=max_gap, neighbor_pts=2
+            # )
 
     return interp
 
@@ -562,7 +562,7 @@ def _run_one_job(job: Job) -> Tuple[bool, str, float]:
         # 1フレームで100mm以上のジャンプがある点を外れ値として除外（NaN化）
         outlier_filt_3d_0 = remove_jump_outliers_3d(conf_filt_3d, jump_th_mm=OUTLIER_JUMP_MM)
         # outlier_filt後に残った「連続して有効な区間」が短すぎるものは削除（NaN化）
-        outlier_filt_3d = remove_short_valid_runs_3d(outlier_filt_3d_0, min_len=12)
+        outlier_filt_3d = remove_short_valid_runs_3d(outlier_filt_3d_0, min_len=3)
 
 
         spline_3d = spline_interpolate(outlier_filt_3d)

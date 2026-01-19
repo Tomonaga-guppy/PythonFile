@@ -256,7 +256,7 @@ def cucl_gait_event(kp3d, valid_start=0, out_root=None):
 
         plt.tight_layout()
         plt.savefig(out_root / "z-distance_for_gait_events.png")
-        plt.show()
+        # plt.show()
         plt.close(fig)
     
     return event_frame_dict
