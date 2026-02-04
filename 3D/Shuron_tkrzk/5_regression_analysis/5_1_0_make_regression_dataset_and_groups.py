@@ -29,34 +29,45 @@ import pandas as pd
 
 # ===== ユーザー指定のグループ（列名） =====
 GROUPS = {
-    "speed": [
-        "speed",
-        "speed_delta",
-    ],
+    # "speed": [
+    #     "speed_delta",
+    # ],
+    # # "PA_gait": [
+    # #     "SI_sw",
+    # #     "stride_time",
+    # #     "stride_width",
+    # #     "hip_fl_max",
+    # #     "hip_ex_max",
+    # #     "kne_fl_max",
+    # #     "ank_do_max",
+    # #     "hip_ab_max",
+    # # ],
     "PA_gait": [
-        "SI_sw",
-        "stride_time",
-        "stride_width",
-        "hip_fl_max",
-        "hip_ex_max",
-        "kne_fl_max",
-        "ank_do_max",
-        "hip_ab_max",
+        "speed_delta",
+        "SI_sw_delta",
+        "stride_time_delta",
+        "stride_width_delta",
+        "hip_ex_max_delta",
+        "kne_fl_max_delta",
+        "ank_do_max_delta",
+        "hip_ab_max_delta",
     ],
     "PT_assist": [
         "hip_dist",
+        "hip_dist_n",
+        "wri_para_s",
+        "wri_nonpara_s",
+        "cos_sim",
         "hip_cc_x",
         "hip_cc_y",
         "hip_cc_z",
-        "Hip_cc_lag",
+        "hip_cc_3d",
+        "hip_cc_lag",
     ],
     "PA_basic": [
         "pa_age",
-        "pa_sex",
         "pa_height",
         "pa_weight",
-        "pa_foot_len",
-        "knee_lat_to_malleolus",
         "fac",
         "brs_lower",
         "sias_m_hip",
@@ -77,13 +88,10 @@ GROUPS = {
     ],
     "PT_basic": [
         "pt_age",
-        "pt_sex",
         "pt_height",
         "pt_weight",
-        "pt_foot_len",
         "grip_power",
         "exp",
-        "certified",
     ],
 }
 
@@ -94,18 +102,28 @@ ID_COLS = ["pa_id", "pt_id"]
 RENAME_PA_GAIT = {
     "gait_speed": "speed",
     "gait_speed_delta": "speed_delta",
+
     "symmetry_index_sw": "SI_sw",
-    "hip_max_flex": "hip_fl_max",
+    "symmetry_index_sw_delta": "SI_sw_delta",
+
+    "stride_time": "stride_time",
+    "stride_time_delta": "stride_time_delta",
+
+    "stride_width": "stride_width",
+    "stride_width_delta": "stride_width_delta",
+
     "hip_max_ext": "hip_ex_max",
+    "hip_max_ext_delta": "hip_ex_max_delta",
+
     "knee_max_flex": "kne_fl_max",
-    "ankle_max_pl": "ank_do_max",
+    "knee_max_flex_delta": "kne_fl_max_delta",
+
+    "ankle_max_do": "ank_do_max",
+    "ankle_max_do_delta": "ank_do_max_delta",
+
     "hip_max_ab": "hip_ab_max",
+    "hip_max_ab_delta": "hip_ab_max_delta",
 }
-RENAME_PT_ASSIST = {
-    "hip_cc_lag": "Hip_cc_lag",
-}
-
-
 def read_csv(p: Path) -> pd.DataFrame:
     if not p.exists():
         raise FileNotFoundError(f"not found: {p}")
@@ -123,7 +141,7 @@ def main():
 
     # 入力
     pa_gait = read_csv(ROOT_DIR / "pa_gait_parameters.csv").rename(columns=RENAME_PA_GAIT)
-    pt_assist = read_csv(ROOT_DIR / "pt_assist_parameters.csv").rename(columns=RENAME_PT_ASSIST)
+    pt_assist = read_csv(ROOT_DIR / "pt_assist_parameters.csv")
     pa_basic = read_csv(ROOT_DIR / "pa_basic_data.csv")
     pt_basic = read_csv(ROOT_DIR / "pt_basic_data.csv")
 
@@ -160,7 +178,6 @@ def main():
     # 保存
     out_csv = ROOT_DIR / "regression_dataset.csv"
     out_json = ROOT_DIR / "regression_groups.json"
-    out_xlsx = ROOT_DIR / "regression_dataset_grouped.xlsx"
 
     df_ordered.to_csv(out_csv, index=False, encoding="utf-8-sig")
     with open(out_json, "w", encoding="utf-8") as f:
@@ -174,16 +191,21 @@ def main():
             ensure_ascii=False,
             indent=2,
         )
-    df_ordered.to_excel(out_xlsx, index=False)
 
     # 画面表示
     print("OK")
     print(f"- saved: {out_csv}")
     print(f"- saved: {out_json}")
-    print(f"- saved: {out_xlsx}")
     print("\n[groups]")
     for k, v in groups_available.items():
         print(f"{k}: {len(v)} cols -> {v}")
+        
+        
+        
+        
+        
+    # df = pd.read_csv(r"G:\gait_pattern\2025_shuron_tkrzk\regression\regression_dataset.csv")
+    # print([c for c in df.columns if "delta" in c])
 
 
 if __name__ == "__main__":

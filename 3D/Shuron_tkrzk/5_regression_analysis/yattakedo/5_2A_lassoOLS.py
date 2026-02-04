@@ -48,6 +48,8 @@ COEF_ZERO_TOL = 1e-12
 # 強制的に常に入れたい説明変数があれば
 FORCE_INCLUDE = [
     # "hip_dist",
+    # 'wri_para_s',
+    # 'wri_nonpara_s',
 ]
 
 # p_keptがこれ以上だとOLSが不安定になりやすいので制限（必要なら変更）
@@ -253,23 +255,25 @@ def main():
     _mkdir(outdir)
 
     # 目的変数
-    y_list = [c for c in groups.get("speed", []) if c in df.columns]
+    # この段階だと歩行指標の変化量すべて拾ってる
+    y_list = [c for c in groups.get("PA_gait", []) if c in df.columns]
+    print(f"ylist: {y_list}")
     if len(y_list) == 0:
         raise KeyError("speed group is empty in json or columns missing.")
+    
+    # 目的変数をspeed_deltaのみに限定
+    y_list = [c for c in y_list if c in ["speed_delta"]]
 
     # 説明変数グループ
     X_PT = [c for c in groups.get("PT_assist", []) if c in df.columns]
-    X_PG = [c for c in groups.get("PA_gait", []) if c in df.columns]
     X_PB = [c for c in groups.get("PA_basic", []) if c in df.columns]
     X_TB = [c for c in groups.get("PT_basic", []) if c in df.columns]
 
     model_specs = [
         ("PTassist", X_PT),
-        ("PTassist+PAgait", X_PT + X_PG),
         ("PTassist+PAbasic", X_PT + X_PB),
         ("PTassist+PTbasic", X_PT + X_TB),
-        ("PTassist+PAgait+PAbasic", X_PT + X_PG + X_PB),
-        ("PTassist+PAgait+PAbasic+PTbasic", X_PT + X_PG + X_PB + X_TB),
+        ("PTassist+PAbasic+PTbasic", X_PT + X_PB + X_TB),
     ]
 
     summaries, all_ols, all_lasso = [], [], []
@@ -294,7 +298,7 @@ def main():
         lasso_long = pd.concat(all_lasso, ignore_index=True)
         lasso_long.to_csv(outdir / "lasso_select_long.csv", index=False, encoding="utf-8-sig")
 
-        for gname in ["PT_assist", "PA_gait", "PA_basic", "PT_basic"]:
+        for gname in ["PT_assist", "PA_basic", "PT_basic"]:
             rate = adoption_rate(lasso_long, groups, gname)
             if len(rate) > 0:
                 rate.to_csv(outdir / f"adoption_rate_{gname}.csv", index=False, encoding="utf-8-sig")

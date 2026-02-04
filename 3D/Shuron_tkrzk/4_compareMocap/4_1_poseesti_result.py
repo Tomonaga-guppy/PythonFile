@@ -58,12 +58,12 @@ PARALYZED_SIDES = {"sub2": "R",    "sub3": "R",    "sub15": "L",    "sub16": "R"
 # =========================
 YLIM_BY_ANGLE = {
     # Hip
-    "Hip_FlEx":  (-40,  50),
+    "Hip_FlEx":  (-40,  60),
     "Hip_AdAb":  (-20,  20),
     "Hip_InEx":  (-20,  20),
 
     # Knee
-    "Knee_FlEx": (-10, 70),
+    "Knee_FlEx": (-20, 80),
 
     # Ankle  ※あなたの系列名は Ankle_PlDo (背屈/底屈)
     "Ankle_PlDo": (-30,  50),
@@ -338,10 +338,10 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
     
     #######################################################################################
     #######################################################################################
-    # 重要！
-    # 今回は使用する歩行周期を最後から1つだけに絞る（一番安定して検出可能）
-    gait_cycles_r = gait_cycles_r[-1:] if len(gait_cycles_r) > 0 else []
-    gait_cycles_l = gait_cycles_l[-1:] if len(gait_cycles_l) > 0 else []
+    # # 重要！
+    # # 今回は使用する歩行周期を最後から1つだけに絞る（一番安定して検出可能）
+    # gait_cycles_r = gait_cycles_r[-1:] if len(gait_cycles_r) > 0 else []
+    # gait_cycles_l = gait_cycles_l[-1:] if len(gait_cycles_l) > 0 else []
     
     #######################################################################################
     #######################################################################################
@@ -459,32 +459,108 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
     gait_params_r = calculate_gait_parameters_3d(gait_cycles_r, midhip, rhee, lhee, side="R", sampling_freq=FS_3D)
     gait_params_l = calculate_gait_parameters_3d(gait_cycles_l, midhip, rhee, lhee, side="L", sampling_freq=FS_3D)
 
-    # 時間的対称性指標（遊脚期比のSI）を算出
+    # 時間的対称性指標（遊脚期比のSI）および最大関節角度を算出
     if paralyzed_side == "R":
         swing_duration_para = np.array([p['swing_duration'] for p in gait_params_r]).mean()
         swing_duration_nonpara = np.array([p['swing_duration'] for p in gait_params_l]).mean()
-        symmetry_index_sw = (swing_duration_para - swing_duration_nonpara) / (0.5 * (swing_duration_para + swing_duration_nonpara)) * 100
+        symmetry_index_sw = abs(swing_duration_para - swing_duration_nonpara) / (0.5 * (swing_duration_para + swing_duration_nonpara)) * 100
+        # symmetry_index_swも保存　一度の施行で一回算出する値なので各サイクルに同じ値を入れておく
+        for i_cycle, cycle_frames in enumerate(gait_cycles_r):
+            gait_params_r[i_cycle]['SI_sw'] = symmetry_index_sw
+            ic_start = int(cycle_frames[0])
+            ic_end = int(cycle_frames[3])
+            hip_flex = angles_dict["R_Hip_FlEx"][ic_start:ic_end+1]
+            knee_flex = angles_dict["R_Knee_FlEx"][ic_start:ic_end+1]
+            ankle_pldo = angles_dict["R_Ankle_PlDo"][ic_start:ic_end+1]
+            hip_abad = angles_dict["R_Hip_AdAb"][ic_start:ic_end+1]
+            hip_max_ext = - np.min(hip_flex)  # 股関節最大伸展　伸展は負の値になるので正にするために符号反転
+            knee_max_flex = np.max(knee_flex)  # 膝関節最大屈曲
+            ankle_max_do = np.max(ankle_pldo)  # 足関節最大背屈
+            hip_max_ab = np.max(hip_abad)  # 股関節最大外転
+            gait_params_r[i_cycle]['hip_max_ext'] = hip_max_ext
+            gait_params_r[i_cycle]['knee_max_flex'] = knee_max_flex
+            gait_params_r[i_cycle]['ankle_max_do'] = ankle_max_do
+            gait_params_r[i_cycle]['hip_max_ab'] = hip_max_ab
+        
     elif paralyzed_side == "L":
         swing_duration_para = np.array([p['swing_duration'] for p in gait_params_l]).mean()
         swing_duration_nonpara = np.array([p['swing_duration'] for p in gait_params_r]).mean()
-        symmetry_index_sw = (swing_duration_para - swing_duration_nonpara) / (0.5 * (swing_duration_para + swing_duration_nonpara)) * 100
-    
-    # 関節角度情報をまとめる
-    if paralyzed_side == "R":
-        hip_flex = angles_dict["R_Hip_FlEx"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1] if len(gait_cycles_r) > 0 else np.array([])
-        hip_max_flex = np.max(hip_flex) if hip_flex.size > 0 else np.nan
-        hip_max_ext = np.min(hip_flex) if hip_flex.size > 0 else np.nan
-        knee_max_flex = np.max(angles_dict["R_Knee_FlEx"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
-        ankle_max_pl = np.min(angles_dict["R_Ankle_PlDo"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
-        hip_max_ab = np.max(angles_dict["R_Hip_AdAb"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
-    elif paralyzed_side == "L":
-        hip_flex = angles_dict["L_Hip_FlEx"][gait_cycles_l[0][0]:gait_cycles_l[0][3]+1] if len(gait_cycles_l) > 0 else np.array([])
-        hip_max_flex = np.max(hip_flex) if hip_flex.size > 0 else np.nan
-        hip_max_ext = np.min(hip_flex) if hip_flex.size > 0 else np.nan
-        knee_max_flex = np.max(angles_dict["L_Knee_FlEx"][gait_cycles_l[0][0]:gait_cycles_l[0][3]+1]) if len(gait_cycles_l) > 0 else np.nan
-        ankle_max_pl = np.min(angles_dict["L_Ankle_PlDo"][gait_cycles_l[0][0]:gait_cycles_l[0][3]+1]) if len(gait_cycles_l) > 0 else np.nan
-        hip_max_ab = np.max(angles_dict["L_Hip_AdAb"][gait_cycles_l[0][0]:gait_cycles_l[0][3]+1]) if len(gait_cycles_l) > 0 else np.nan
-    max_angle_list = [hip_max_flex, hip_max_ext, knee_max_flex, ankle_max_pl, hip_max_ab]
+        symmetry_index_sw = abs(swing_duration_para - swing_duration_nonpara) / (0.5 * (swing_duration_para + swing_duration_nonpara)) * 100
+        # symmetry_index_swも保存　一度の施行で一回算出する値なので各サイクルに同じ値を入れておく
+        for i_cycle, cycle_frames in enumerate(gait_cycles_l):
+            gait_params_l[i_cycle]['SI_sw'] = symmetry_index_sw
+            ic_start = int(cycle_frames[0])
+            ic_end = int(cycle_frames[3])
+            hip_flex = angles_dict["L_Hip_FlEx"][ic_start:ic_end+1]
+            knee_flex = angles_dict["L_Knee_FlEx"][ic_start:ic_end+1]
+            ankle_pldo = angles_dict["L_Ankle_PlDo"][ic_start:ic_end+1]
+            hip_abad = angles_dict["L_Hip_AdAb"][ic_start:ic_end+1]
+            hip_max_ext = - np.min(hip_flex)  # 股関節最大伸展　伸展は負の値になるので正にするために符号反転
+            knee_max_flex = np.max(knee_flex)  # 膝関節最大屈曲
+            ankle_max_do = np.max(ankle_pldo)  # 足関節最大背屈
+            hip_max_ab = np.max(hip_abad)  # 股関節最大外転
+            gait_params_l[i_cycle]['hip_max_ext'] = hip_max_ext
+            gait_params_l[i_cycle]['knee_max_flex'] = knee_max_flex
+            gait_params_l[i_cycle]['ankle_max_do'] = ankle_max_do
+            gait_params_l[i_cycle]['hip_max_ab'] = hip_max_ab
+            
+    # def _cycle_max_mean(angle_series: np.ndarray, gait_cycles, mode: str = "max"):
+    #     """
+    #     各歩行周期 [ic..ic_end] ごとに max/min を計算し、その平均を返す
+    #     mode: "max" or "min"
+    #     """
+    #     if angle_series is None:
+    #         return np.nan
+    #     angle_series = np.asarray(angle_series, dtype=float)
+
+    #     vals = []
+    #     n = len(angle_series)
+    #     for cyc in gait_cycles:
+    #         ic = int(np.round(cyc[0]))
+    #         ic_end = int(np.round(cyc[3]))
+    #         if ic_end <= ic:
+    #             continue
+    #         ic = max(0, min(n - 1, ic))
+    #         ic_end = max(0, min(n - 1, ic_end))
+
+    #         seg = angle_series[ic:ic_end + 1]
+    #         if seg.size == 0:
+    #             continue
+
+    #         if mode == "max":
+    #             v = np.nanmax(seg)
+    #         elif mode == "min":
+    #             v =  - np.nanmin(seg) # 元が負の場合は正に変換して扱う
+    #         else:
+    #             raise ValueError("mode must be 'max' or 'min'")
+
+    #         vals.append(v)
+
+    #     return float(np.nanmean(vals)) if len(vals) > 0 else np.nan
+
+
+    # # ---- 関節角度情報をまとめる（各周期→中央値）----
+    # if paralyzed_side == "R":
+    #     cycles = gait_cycles_r
+    #     hip_key   = "R_Hip_FlEx"
+    #     knee_key  = "R_Knee_FlEx"
+    #     ankle_key = "R_Ankle_PlDo"
+    #     hipab_key = "R_Hip_AdAb"
+    # elif paralyzed_side == "L":
+    #     cycles = gait_cycles_l
+    #     hip_key   = "L_Hip_FlEx"
+    #     knee_key  = "L_Knee_FlEx"
+    #     ankle_key = "L_Ankle_PlDo"
+    #     hipab_key = "L_Hip_AdAb"
+
+    # hip_max_flex = _cycle_max_mean(angles_dict[hip_key],   cycles, mode="max")
+    # hip_max_ext  = _cycle_max_mean(angles_dict[hip_key],   cycles, mode="min")  # 伸展は最小値（そもそもが負の値）
+    # knee_max_flex = _cycle_max_mean(angles_dict[knee_key], cycles, mode="max")
+    # ankle_max_do  = _cycle_max_mean(angles_dict[ankle_key], cycles, mode="min")  # 足底屈も最小値(そもそもが負の値)
+    # hip_max_ab    = _cycle_max_mean(angles_dict[hipab_key], cycles, mode="max")
+
+    # max_angle_list = [hip_max_flex, hip_max_ext, knee_max_flex, ankle_max_do, hip_max_ab]
+    max_angle_list = [hip_max_ext, knee_max_flex, ankle_max_do, hip_max_ab]
     
     # 歩行パラメータのまとめ
     def summarize_gait_parameters(gait_params_r, gait_params_l, symmetry_index_sw, max_angle_list, paralyzed_side):
@@ -504,11 +580,10 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             'symmetry_index_sw': symmetry_index_sw,
             'stride_time': stride_time,
             'stride_width': stride_width,
-            'hip_max_flex': max_angle_list[0],
-            'hip_max_ext': max_angle_list[1],
-            'knee_max_flex': max_angle_list[2],
-            'ankle_max_pl': max_angle_list[3],
-            'hip_max_ab': max_angle_list[4],
+            'hip_max_ext': max_angle_list[0],
+            'knee_max_flex': max_angle_list[1],
+            'ankle_max_do': max_angle_list[2],
+            'hip_max_ab': max_angle_list[3],
         }
         return summary
     
@@ -528,49 +603,81 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             return np.full_like(x, np.nan)
         return (x - m) / s
 
-    def _norm_xcorr_max(a, b, max_lag, def_lag=None):
-        a = _nan_safe_zscore(a)
-        b = _nan_safe_zscore(b)
-
-        mask = np.isfinite(a) & np.isfinite(b)
-        a = a[mask]
-        b = b[mask]
+    def _norm_xcorr_at_lag(a, b, lag: int, min_valid: int = 5):
+        """
+        zscore 済み 1D 配列 a, b について，指定 lag の正規化相互相関（平均(a*b)）を返す。
+        lag > 0: b が遅れる（b を +lag シフト）
+        lag < 0: b が先行
+        """
+        a = np.asarray(a, float)
+        b = np.asarray(b, float)
         n = len(a)
-        if n < 5:
+        if n != len(b) or n < min_valid:
             return np.nan
 
-        if def_lag is not None:
-            lag = def_lag
-            if lag < 0:
-                aa, bb = a[-lag:], b[:n+lag]
-            elif lag > 0:
-                aa, bb = a[:n-lag], b[lag:]
-            else:
-                aa, bb = a, b
-            if len(aa) < 5:
-                return np.nan
-            cc = np.nanmean(aa * bb)
-            return float(cc), int(lag)
+        if lag < 0:
+            aa, bb = a[-lag:], b[:n + lag]
+        elif lag > 0:
+            aa, bb = a[:n - lag], b[lag:]
         else:
-            best = -np.inf
-            for lag in range(-max_lag, max_lag + 1):
-                if lag < 0:
-                    aa, bb = a[-lag:], b[:n+lag]
-                elif lag > 0:
-                    aa, bb = a[:n-lag], b[lag:]
-                else:
-                    aa, bb = a, b
-                if len(aa) < 5:
-                    continue
-                cc = np.nanmean(aa * bb)
-                if np.isfinite(cc):
-                    if best < cc:
-                        best = cc
-                        best_lag = lag
+            aa, bb = a, b
 
-        return np.nan if best == -np.inf else float(best), int(best_lag)
+        if len(aa) < min_valid:
+            return np.nan
 
-    def calculate_pt_assist_metrics_by_cycle(gait_cycles,pa_midhip,pt_midhip,sampling_freq=60.0,max_lag=30):
+        mask = np.isfinite(aa) & np.isfinite(bb)
+        if np.sum(mask) < min_valid:
+            return np.nan
+
+        return float(np.nanmean(aa[mask] * bb[mask]))
+    
+    def _norm_xcorr_xyz_max(pa_xyz, pt_xyz, max_lag: int, min_valid: int = 5):
+        """
+        3軸(x,y,z)の相互相関を計算し，
+        C3D(lag)=sqrt(Cx(lag)^2 + Cy(lag)^2 + Cz(lag)^2) を最大化する lag を返す（方法B）．
+
+        Returns:
+            ccx, ccy, ccz, c3d, best_lag
+        """
+        pa_xyz = np.asarray(pa_xyz, float)
+        pt_xyz = np.asarray(pt_xyz, float)
+        if pa_xyz.ndim != 2 or pt_xyz.ndim != 2 or pa_xyz.shape[1] != 3 or pt_xyz.shape[1] != 3:
+            raise ValueError("pa_xyz and pt_xyz must be (N,3)")
+
+        # 軸ごとに z-score（NaN安全）
+        pa_x = _nan_safe_zscore(pa_xyz[:, 0])
+        pa_y = _nan_safe_zscore(pa_xyz[:, 1])
+        pa_z = _nan_safe_zscore(pa_xyz[:, 2])
+
+        pt_x = _nan_safe_zscore(pt_xyz[:, 0])
+        pt_y = _nan_safe_zscore(pt_xyz[:, 1])
+        pt_z = _nan_safe_zscore(pt_xyz[:, 2])
+
+        best_c3d = -np.inf
+        best_lag = 0
+        best = (np.nan, np.nan, np.nan, np.nan)
+
+        for lag in range(-max_lag, max_lag + 1):
+            ccx = _norm_xcorr_at_lag(pa_x, pt_x, lag, min_valid=min_valid)
+            ccy = _norm_xcorr_at_lag(pa_y, pt_y, lag, min_valid=min_valid)
+            ccz = _norm_xcorr_at_lag(pa_z, pt_z, lag, min_valid=min_valid)
+
+            if not (np.isfinite(ccx) and np.isfinite(ccy) and np.isfinite(ccz)):
+                continue
+
+            c3d = float(np.sqrt(ccx * ccx + ccy * ccy + ccz * ccz))
+            if np.isfinite(c3d) and c3d > best_c3d:
+                best_c3d = c3d
+                best_lag = lag
+                best = (ccx, ccy, ccz, c3d)
+
+        if best_c3d == -np.inf:
+            return (np.nan, np.nan, np.nan, np.nan, 0)
+
+        ccx, ccy, ccz, c3d = best
+        return float(ccx), float(ccy), float(ccz), float(c3d), int(best_lag)
+
+    def calculate_pt_assist_metrics_by_cycle(gait_cycles,pa_midhip,pt_midhip,pa_neck,pt_neck,pt_wrist_para,pt_wrist_nonpara,pt_forearm_length,sampling_freq=60.0,max_lag=30):
         """
         gait_cycles: [[ic, ic_opp, to, ic_end], ...]
         pa_midhip, pt_midhip: (N,3) [mm]
@@ -578,41 +685,84 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
         max_lag_frames = int(max_lag)
 
         hip_dist_cycle = []
+        hip_dist_normalized_cycle = []
+        wri_para_s_cycle = []
+        wri_nonpara_s_cycle = []
+        cos_sim_cycle = []
         hip_cc_x_cycle = []
         hip_cc_y_cycle = []
         hip_cc_z_cycle = []
+        hip_cc_3d_cycle = []
         hip_cc_lag_cycle = []
 
         for ic, _, _, ic_end in gait_cycles:
             if ic_end <= ic:
                 continue
 
-            pa = pa_midhip[ic:ic_end]
-            pt = pt_midhip[ic:ic_end]
-            if len(pa) < 5:
+            pa_midhip_seg = pa_midhip[ic:ic_end]
+            pt_midhip_seg = pt_midhip[ic:ic_end]
+            pa_neck_seg = pa_neck[ic:ic_end]
+            pt_neck_seg = pt_neck[ic:ic_end]
+            pt_wrist_para_seg = pt_wrist_para[ic:ic_end]
+            pt_wrist_nonpara_seg = pt_wrist_nonpara[ic:ic_end]
+            if len(pa_midhip_seg) < 5:
                 continue
+            
 
-            # --- hip_dist (m) ---
-            dist = np.linalg.norm(pa - pt, axis=1) / 1000.0
+            # --- hip_dist [m] ---
+            dist = np.linalg.norm(pa_midhip_seg - pt_midhip_seg, axis=1) / 1000.0
             hip_dist_cycle.append(np.nanmedian(dist))
+            
+            # --- hip_dist normalized [-] ---
+            dist_normalized = dist / (pt_forearm_length / 1000.0)
+            hip_dist_normalized_cycle.append(np.nanmedian(dist_normalized))
+            
+            # --- wri_pos_scale [-] ---
+            u = pa_neck_seg - pa_midhip_seg
+            num_para = np.sum((pt_wrist_para_seg - pa_midhip_seg) * u, axis=1)  # (N,)
+            num_nonpara = np.sum((pt_wrist_nonpara_seg - pa_midhip_seg) * u, axis=1)  # (N,)
+            den = np.sum(u * u, axis=1)                          # (N,)
 
+            wri_para_s = num_para / den
+            wri_nonpara_s = num_nonpara / den
+            valid_para = np.isfinite(wri_para_s)
+            if np.any(valid_para):
+                wri_para_s_cycle.append(np.nanmedian(wri_para_s))
+            else:
+                wri_para_s_cycle.append(np.nan)
+            valid_nonpara = np.isfinite(wri_nonpara_s)
+            if np.any(valid_nonpara):
+                wri_nonpara_s_cycle.append(np.nanmedian(wri_nonpara_s))
+            else:
+                wri_nonpara_s_cycle.append(np.nan)
+            
+            # --- cos_sim ----
+            trunk_pa = pa_neck_seg - pa_midhip_seg
+            trunk_pt = pt_neck_seg - pt_midhip_seg
+            dot = np.sum(trunk_pa * trunk_pt, axis=1)
+            den = np.linalg.norm(trunk_pa, axis=1) * np.linalg.norm(trunk_pt, axis=1)
+            cos_sim = dot / den
+            cos_sim[~np.isfinite(cos_sim)] = np.nan
+            cos_sim_cycle.append(np.nanmedian(cos_sim))
+            
             # --- hip_cc (x,y,z), lag ---
-            hip_cc_x_cycle_, lag = _norm_xcorr_max(pa[:,0], pt[:,0], max_lag_frames)
-            hip_cc_y_cycle_, _ = _norm_xcorr_max(pa[:,1], pt[:,1], max_lag_frames, def_lag=lag)
-            hip_cc_z_cycle_, _ = _norm_xcorr_max(pa[:,2], pt[:,2], max_lag_frames, def_lag=lag)
+            hip_cc_x_cycle_, hip_cc_y_cycle_, hip_cc_z_cycle_, hip_cc_3d_cycle_, lag = _norm_xcorr_xyz_max(
+                pa_midhip_seg, pt_midhip_seg, max_lag_frames
+            )
             hip_cc_x_cycle.append(hip_cc_x_cycle_)
             hip_cc_y_cycle.append(hip_cc_y_cycle_)
             hip_cc_z_cycle.append(hip_cc_z_cycle_)
+            hip_cc_3d_cycle.append(hip_cc_3d_cycle_)
             hip_cc_lag_cycle.append(lag / sampling_freq)
             
             save_hip_x_fig = True  # デバッグ用にTrueにすると各周期のヒップ座標をプロット
             if save_hip_x_fig:
                 fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-                frames = np.arange(len(pa))
+                frames = np.arange(len(pa_midhip_seg))
                 
                 # X座標
-                axes[0].plot(frames, pa[:, 0], label='PA', color='tab:red', linewidth=2)
-                axes[0].plot(frames, pt[:, 0], label='PT', color='tab:blue', linewidth=2)
+                axes[0].plot(frames, pa_midhip_seg[:, 0], label='PA', color='tab:red', linewidth=2)
+                axes[0].plot(frames, pt_midhip_seg[:, 0], label='PT', color='tab:blue', linewidth=2)
                 axes[0].set_xlabel('Frame')
                 axes[0].set_ylabel('X [mm]')
                 axes[0].set_title(f'Hip X')
@@ -620,8 +770,8 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
                 axes[0].grid(True)
                 
                 # Y座標
-                axes[1].plot(frames, pa[:, 1], label='PA', color='tab:red', linewidth=2)
-                axes[1].plot(frames, pt[:, 1], label='PT', color='tab:blue', linewidth=2)
+                axes[1].plot(frames, pa_midhip_seg[:, 1], label='PA', color='tab:red', linewidth=2)
+                axes[1].plot(frames, pt_midhip_seg[:, 1], label='PT', color='tab:blue', linewidth=2)
                 axes[1].set_xlabel('Frame')
                 axes[1].set_ylabel('Y [mm]')
                 axes[1].set_title('Hip Y')
@@ -629,8 +779,8 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
                 axes[1].grid(True)
                 
                 # Z座標
-                axes[2].plot(frames, pa[:, 2], label='PA', color='tab:red', linewidth=2)
-                axes[2].plot(frames, pt[:, 2], label='PT', color='tab:blue', linewidth=2)
+                axes[2].plot(frames, pa_midhip_seg[:, 2], label='PA', color='tab:red', linewidth=2)
+                axes[2].plot(frames, pt_midhip_seg[:, 2], label='PT', color='tab:blue', linewidth=2)
                 axes[2].set_xlabel('Frame')
                 axes[2].set_ylabel('Z [mm]')
                 axes[2].set_title('Hip Z')
@@ -648,21 +798,38 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
                 
         return dict(
             hip_dist=np.nanmean(hip_dist_cycle),
+            hip_dist_n=np.nanmean(hip_dist_normalized_cycle),
+            wri_para_s=np.nanmedian(wri_para_s_cycle),  #手の検出はぶれが多いので中央値を使用
+            wri_nonpara_s=np.nanmedian(wri_nonpara_s_cycle),  #手の検出はぶれが多いので中央値を使用
+            cos_sim=np.nanmean(cos_sim_cycle),
             hip_cc_x=np.nanmean(hip_cc_x_cycle),
             hip_cc_y=np.nanmean(hip_cc_y_cycle),
             hip_cc_z=np.nanmean(hip_cc_z_cycle),
+            hip_cc_3d=np.nanmean(hip_cc_3d_cycle),
             hip_cc_lag=np.nanmean(hip_cc_lag_cycle),
         )
         
     if paralyzed_side == "R":
         gait_cycles = gait_cycles_r
+        pt_wrist_para = kp3d_pt[:, 4, :]  # 右手首
+        pt_wrist_nonpara = kp3d_pt[:, 7, :]  # 左手首
     elif paralyzed_side == "L":
         gait_cycles = gait_cycles_l
-        
+        pt_wrist_para = kp3d_pt[:, 7, :]  # 左手首
+        pt_wrist_nonpara = kp3d_pt[:, 4, :]  # 右手首
+    right_forearm = np.nanmean(np.linalg.norm(kp3d_pt[:, 4, :] - kp3d_pt[:, 3, :], axis=1))  # 右前腕長
+    left_forearm = np.nanmean(np.linalg.norm(kp3d_pt[:, 7, :] - kp3d_pt[:, 6, :], axis=1))  # 左前腕長
+    pt_forearm_length = (right_forearm + left_forearm) / 2  # 両側の平均を使用[mm]
+    
     assist_metrics = calculate_pt_assist_metrics_by_cycle(
     gait_cycles=gait_cycles,
     pa_midhip=kp3d[:, 8, :],
     pt_midhip=kp3d_pt[:, 8, :],
+    pa_neck=kp3d[:, 1, :],
+    pt_neck=kp3d_pt[:, 1, :],
+    pt_wrist_para=pt_wrist_para,
+    pt_wrist_nonpara=pt_wrist_nonpara,
+    pt_forearm_length=pt_forearm_length,
     sampling_freq=FS_3D,)
 
     pd.DataFrame([assist_metrics]).to_csv(

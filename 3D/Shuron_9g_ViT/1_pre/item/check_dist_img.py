@@ -1,3 +1,7 @@
+"""
+試しにカメラパラメータの歪み補正を可視化するスクリプト
+"""
+
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt

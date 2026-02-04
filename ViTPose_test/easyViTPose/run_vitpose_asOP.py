@@ -20,8 +20,10 @@ from easy_ViTPose import VitInference
 # =========================
 # 設定（ここだけ調整）
 # =========================
-IMG_DIR = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\gopro\fr\undistorted_facemasked")
-OUT_DIR = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\gopro\fr\vit_dir")
+# IMG_DIR = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\gopro\fr\undistorted_facemasked")
+# OUT_DIR = Path(r"G:\gait_pattern\BR9G_shuron\sub1\thera1-0\gopro\fr\vit_dir")
+IMG_DIR = Path(r"C:\Users\Tomson\Desktop\vitpose_kasa\pa5_pt1_cali_frames")
+OUT_DIR = Path(r"C:\Users\Tomson\Desktop\vitpose_kasa\pa5_pt1_cali_vitpose_results")
 
 MODEL_PATH = Path(r"C:\Users\Tomson\StrokeProject\easy_ViTPose\models\vitpose-l-coco_25.pth")
 YOLO_PATH  = Path(r"C:\Users\Tomson\StrokeProject\easy_ViTPose\yolov8x.pt")

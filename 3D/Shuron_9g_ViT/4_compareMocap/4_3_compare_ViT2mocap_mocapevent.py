@@ -14,12 +14,13 @@ def plot_angles_compare(vit_angle_df, mocap_angle_df,vit_gait_cycles_r, vit_gait
     """
     関節角度csvを読み込み、Mocap結果と比較プロット
     """
+
+    # 比較フレーム範囲の決定：vit_angle_dfとmocap_angle_dfの共通インデックスのみを使用
+    vit_frames = set(vit_angle_df.index)
+    mocap_frames = set(mocap_angle_df.index)
     
-    # 比較フレーム範囲の決定 mocapデータを参照(vitのフレームを参考にmocap側の使用フレームを決定している)
-    compare_frame_range = mocap_angle_df.index
-    print(f"compare_frame_range: {compare_frame_range}")
-
-
+    compare_frame_range = sorted(vit_frames.intersection(mocap_frames))
+    
     # 股関節の屈曲伸展プロット
     fig, axs = plt.subplots(1, 1, figsize=(12, 8))
     axs.set_title("Hip Flexion/Extension Comparison")
@@ -29,8 +30,6 @@ def plot_angles_compare(vit_angle_df, mocap_angle_df,vit_gait_cycles_r, vit_gait
     plt.plot(compare_frame_range, vit_angle_df['L_Hip_FlEx'].loc[compare_frame_range], label='ViT L', color='tab:blue')
     plt.plot(compare_frame_range, mocap_angle_df['R_Hip_FlEx'].loc[compare_frame_range], label='Mocap R', color='tab:orange', linestyle='dashed')
     plt.plot(compare_frame_range, mocap_angle_df['L_Hip_FlEx'].loc[compare_frame_range], label='Mocap L', color='tab:blue', linestyle='dashed')
-    
-    plt.ylim([-40, 50])
     for gc in vit_gait_cycles_r:
         axs.axvspan(gc[0]-0.5, gc[0]+0.5, color='tab:orange', linestyle='dotted', alpha=0.5)
     axs.axvspan(vit_gait_cycles_r[-1][-1]-0.5, vit_gait_cycles_r[-1][-1]+0.5, color='tab:orange', linestyle='dashed', alpha=0.3, label='IC R(vit)') # 最後の歩行周期終端
@@ -71,10 +70,10 @@ def plot_angles_compare(vit_angle_df, mocap_angle_df,vit_gait_cycles_r, vit_gait
     plt.plot(compare_frame_range, mocap_angle_df['L_Ankle_PlDo'].loc[compare_frame_range], label='Mocap L', color='tab:blue', linestyle='dashed')
     for gc in vit_gait_cycles_r:
         axs.axvspan(gc[0]-0.5, gc[0]+0.5, color='tab:orange', linestyle='dotted', alpha=0.5)
-    axs.axvspan(vit_gait_cycles_r[-1][-1]-0.5, vit_gait_cycles_r[-1][-1]+0.5, color='tab:orange', linestyle='dashed', alpha=0.3, label='IC R') # 最後の歩行周期終端
+    axs.axvspan(vit_gait_cycles_r[-1][-1]-0.5, vit_gait_cycles_r[-1][-1]+0.5, color='tab:orange', linestyle='dashed', alpha=0.3, label='IC R(vit)') # 最後の歩行周期終端
     for gc in vit_gait_cycles_l:
         axs.axvspan(gc[0]-0.5, gc[0]+0.5, color='tab:blue', linestyle='dotted', alpha=0.5)
-    axs.axvspan(vit_gait_cycles_l[-1][-1]-0.5, vit_gait_cycles_l[-1][-1]+0.5, color='tab:blue', linestyle='dashed', alpha=0.3, label='IC L') # 最後の歩行周期終端
+    axs.axvspan(vit_gait_cycles_l[-1][-1]-0.5, vit_gait_cycles_l[-1][-1]+0.5, color='tab:blue', linestyle='dashed', alpha=0.3, label='IC L(vit)') # 最後の歩行周期終端
     axs.legend()
     plt.savefig(output_dir / "Ankle_Plantar_Dorsiflexion_Comparison.png")
     plt.close()
@@ -90,10 +89,10 @@ def plot_angles_compare(vit_angle_df, mocap_angle_df,vit_gait_cycles_r, vit_gait
     plt.plot(compare_frame_range, mocap_angle_df['L_Hip_AdAb'].loc[compare_frame_range], label='Mocap L', color='tab:blue', linestyle='dashed')
     for gc in vit_gait_cycles_r:
         axs.axvspan(gc[0]-0.5, gc[0]+0.5, color='tab:orange', linestyle='dotted', alpha=0.5) 
-    axs.axvspan(vit_gait_cycles_r[-1][-1]-0.5, vit_gait_cycles_r[-1][-1]+0.5, color='tab:orange', linestyle='dashed', alpha=0.3, label='IC R') # 最後の歩行周期終端
+    axs.axvspan(vit_gait_cycles_r[-1][-1]-0.5, vit_gait_cycles_r[-1][-1]+0.5, color='tab:orange', linestyle='dashed', alpha=0.3, label='IC R(vit)') # 最後の歩行周期終端
     for gc in vit_gait_cycles_l:
         axs.axvspan(gc[0]-0.5, gc[0]+0.5, color='tab:blue', linestyle='dotted', alpha=0.5)
-    axs.axvspan(vit_gait_cycles_l[-1][-1]-0.5, vit_gait_cycles_l[-1][-1]+0.5, color='tab:blue', linestyle='dashed', alpha=0.3, label='IC L') # 最後の歩行周期終端
+    axs.axvspan(vit_gait_cycles_l[-1][-1]-0.5, vit_gait_cycles_l[-1][-1]+0.5, color='tab:blue', linestyle='dashed', alpha=0.3, label='IC L(vit)') # 最後の歩行周期終端
     axs.legend()
     plt.savefig(output_dir / "Hip_Adduction_Abduction_Comparison.png")
     plt.close()
@@ -102,6 +101,16 @@ def calculate_and_save_angle_mae(vit_angle_df, mocap_angle_df, vit_gait_cycles_r
     """
     関節角度のMAE算出
     """
+    
+    print(f"vit_gait_cycles_r: {vit_gait_cycles_r}")
+    print(f"vit_gait_cycles_l: {vit_gait_cycles_l}")
+    
+    mocap_angle_r_df_path = output_dir.parent.parent / "mocap" / "gait_cycles_r_rel.csv"
+    mocap_angle_l_df_path = output_dir.parent.parent / "mocap" / "gait_cycles_l_rel.csv"
+    mocap_gait_cycles_r = pd.read_csv(mocap_angle_r_df_path)
+    mocap_gait_cycles_l = pd.read_csv(mocap_angle_l_df_path)
+    print(f"mocap_gait_cycles_r: {mocap_gait_cycles_r}")
+    print(f"mocap_gait_cycles_l: {mocap_gait_cycles_l}")
     
     for side, gait_cycles in zip(['R', 'L'], [vit_gait_cycles_r, vit_gait_cycles_l]):
         mae_hip_flex = []
@@ -143,21 +152,36 @@ def calculate_and_save_angle_mae(vit_angle_df, mocap_angle_df, vit_gait_cycles_r
 def calculate_and_save_gaitparam_mae(vit_gaitparam_df, mocap_gaitparam_df, output_dir):
     """
     歩行パラメータのMAEを算出して保存
-    対象パラメータ： 歩行速度, ストライド時間, 遊脚期時間, 歩隔
-    vitのic, toフレームに合わせてmocapも計算しているため, ストライド時間と遊脚期時間はMAEが必ず0になるので意味がないが、一応計算して保存しておく
+    対象パラメータ： 歩行速度, ストライド時間, 遊脚期時間, 歩隔, 遊脚期時間対称性指標
     """
+    ori_results = {}
     mae_results = {}
-    for column in ['gait_speed', 'stride_time', 'swing_duration', 'stride_width']:
+    for column in ['gait_speed', 'stride_time', 'swing_duration', 'stride_width', 'SI_sw']:
         if column in vit_gaitparam_df.columns and column in mocap_gaitparam_df.columns:
             vit_values = vit_gaitparam_df[column].values
             mocap_values = mocap_gaitparam_df[column].values
-            mae = np.mean(np.abs(vit_values - mocap_values))
+            mae = np.nanmean(np.abs(vit_values - mocap_values))
             mae_results[f'MAE_{column}'] = mae
-    
+            ori_results[f'{column}_vit'] = np.nanmean(vit_values)
+            ori_results[f'{column}_mocap'] = np.nanmean(mocap_values)
+            
+    for column in ['hip_max_ext', 'knee_max_flex', 'ankle_max_do', 'hip_max_ab']:
+        if column in vit_gaitparam_df.columns and column in mocap_gaitparam_df.columns:
+            vit_values = vit_gaitparam_df[column].values
+            mocap_values = mocap_gaitparam_df[column].values
+            mae = np.nanmedian(np.abs(vit_values - mocap_values))
+            mae_results[f'MAE_{column}'] = mae
+            ori_results[f'{column}_vit'] = np.nanmedian(vit_values)
+            ori_results[f'{column}_mocap'] = np.nanmedian(mocap_values)
+            
     # 結果の保存
     mae_df = pd.DataFrame([mae_results])
     # print(f"Gait Parameters MAE:\n{mae_df}")
     mae_df.to_csv(output_dir / 'MAE_Gait_Parameters.csv', index=False)
+    
+    ori_df = pd.DataFrame([ori_results])
+    # print(f"Gait Parameters Original Values:\n{ori_df}")
+    ori_df.to_csv(output_dir / 'Mean_Gait_Parameters.csv', index=False)
     
 def process_pairs(vit_dir, mocap_dir):
     """
@@ -177,17 +201,6 @@ def process_pairs(vit_dir, mocap_dir):
     # print(f"vit_gait_cycles: {vit_gait_cycles}")
     vit_gait_cycles_r = vit_gait_cycles['gait_cycle_r']
     vit_gait_cycles_l = vit_gait_cycles['gait_cycle_l']
-    
-    # mocapでの歩行周期の読み取り
-    mocap_gait_cycles_r_df = pd.read_csv(mocap_dir / "gait_cycles_r_rel.csv")
-    mocap_gait_cycles_l_df = pd.read_csv(mocap_dir / "gait_cycles_l_rel.csv")
-    mocap_gait_cycles_r = mocap_gait_cycles_r_df[["IC", "IC_opp", "TO", "IC_next"]].values.tolist()
-    mocap_gait_cycles_l = mocap_gait_cycles_l_df[["IC", "IC_opp", "TO", "IC_next"]].values.tolist()
-    
-    print(f"vit_gait_cycles_r: {vit_gait_cycles_r}")
-    print(f"mocap_gait_cycles_r: {mocap_gait_cycles_r}")
-    print(f"vit_gait_cycles_l: {vit_gait_cycles_l}")
-    print(f"mocap_gait_cycles_l: {mocap_gait_cycles_l}")
     
     # 1.関節角度の比較 ===================================================
     mocap_angle_csv = next(mocap_dir.glob("angle_60Hz_*.csv"), None)
@@ -219,7 +232,6 @@ def process_pairs(vit_dir, mocap_dir):
     vit_gaitparam_df = pd.read_csv(vit_gaitparam_csv)
     
     calculate_and_save_gaitparam_mae(vit_gaitparam_df, mocap_gaitparam_df, output_dir)
-    
 
 def main():
     root_dir = Path(r"G:\gait_pattern\2025_shuron_BR9G")
@@ -283,11 +295,13 @@ def main():
 
     # 2-1) 歩行パラメータMAE（被験者単位）
     gait_rows = []
+    gait_mean_rows = []
     for sub_i in subjects_processed:
         thera_dir = root_dir / f"sub{sub_i}" / f"thera{sub_i}-0"
         vit_dir = thera_dir / "ViTPose_Results"
         res_dir = vit_dir / "compare_mocap_results"
         mae_csv = res_dir / "MAE_Gait_Parameters.csv"
+        mean_csv = res_dir / "Mean_Gait_Parameters.csv"
         if not mae_csv.exists():
             continue
         df = pd.read_csv(mae_csv)
@@ -297,6 +311,17 @@ def main():
         row = {k: pd.to_numeric(v, errors='coerce') for k, v in row.items()}
         row["subject"] = f"sub{sub_i}"
         gait_rows.append(row)
+        
+        # mean gait parametersも保存
+        if not mean_csv.exists():
+            continue
+        df_mean = pd.read_csv(mean_csv)
+        if len(df_mean) == 0:
+            continue
+        row_mean = df_mean.iloc[0].to_dict()
+        row_mean = {f"{k}" if k.endswith("_vit") else f"{k}" if k.endswith("_mocap") else k: pd.to_numeric(v, errors='coerce') for k, v in row_mean.items()}
+        row_mean["subject"] = f"sub{sub_i}"
+        gait_mean_rows.append(row_mean)
 
     if gait_rows:
         gait_sub_df = pd.DataFrame(gait_rows).set_index("subject")
@@ -304,10 +329,16 @@ def main():
         summary_stats(gait_sub_df).to_csv(out_dir / "summary_gaitparam_mae.csv", index=False)
     else:
         print("[INFO] MAE_Gait_Parameters.csv が見つからなかったため，歩行パラメータの全体集計はスキップします")
+        
+    if gait_mean_rows:
+        gait_mean_sub_df = pd.DataFrame(gait_mean_rows).set_index("subject")
+        gait_mean_sub_df.to_csv(out_dir / "subject_level_gaitparam_mean.csv")
+        summary_stats(gait_mean_sub_df).to_csv(out_dir / "summary_gaitparam_mean.csv", index=False)
+    else:
+        print("[INFO] Mean_Gait_Parameters.csv が見つからなかったため，歩行パラメータの平均値全体集計はスキップします")
 
     # 2-2) 角度MAE（存在する場合のみ）
     angle_rows = []
-    pooled_cycle_rows = []
 
     def _read_angle_mae_csv(path: Path):
         """MAE_Angle_*.csv から Mean 行と各周期行（Mean除外）を返す．"""
@@ -342,7 +373,6 @@ def main():
                 tmp = cyc_df[[c for c in cyc_df.columns if str(c).startswith("MAE_")]].copy()
                 tmp.columns = [f"R_{c.replace('MAE_', '')}" for c in tmp.columns]
                 tmp["subject"] = f"sub{sub_i}"
-                pooled_cycle_rows.append(tmp)
 
         if fL.exists():
             mean_row, cyc_df = _read_angle_mae_csv(fL)
@@ -354,7 +384,6 @@ def main():
                 tmp = cyc_df[[c for c in cyc_df.columns if str(c).startswith("MAE_")]].copy()
                 tmp.columns = [f"L_{c.replace('MAE_', '')}" for c in tmp.columns]
                 tmp["subject"] = f"sub{sub_i}"
-                pooled_cycle_rows.append(tmp)
 
         # R/L の平均（両方ある場合のみ）
         for base in [
@@ -374,14 +403,6 @@ def main():
         ang_sub_df = pd.DataFrame(angle_rows).set_index("subject")
         ang_sub_df.to_csv(out_dir / "subject_level_angle_mae.csv")
         summary_stats(ang_sub_df).to_csv(out_dir / "summary_angle_mae.csv", index=False)
-
-        # 参考: 全周期 pooled 平均（被験者・周期数に重みがつく）
-        if pooled_cycle_rows:
-            pooled_df = pd.concat(pooled_cycle_rows, ignore_index=True)
-            num_cols = [c for c in pooled_df.columns if c != "subject"]
-            pooled_mean = pooled_df[num_cols].mean(numeric_only=True)
-            pooled_out = pooled_mean.to_frame(name="pooled_cycle_mean").reset_index().rename(columns={"index": "metric"})
-            pooled_out.to_csv(out_dir / "pooled_cycle_angle_mae.csv", index=False)
     else:
         print("[INFO] MAE_Angle_R/L.csv が見つからなかったため，角度MAEの全体集計はスキップします")
 

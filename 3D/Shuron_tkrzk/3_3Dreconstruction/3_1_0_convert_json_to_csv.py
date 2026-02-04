@@ -38,6 +38,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from scipy.interpolate import CubicSpline
 
 # =========================
 # 設定（ここだけ調整）
@@ -46,7 +47,9 @@ root_dir = Path(r"G:\gait_pattern\2025_shuron_tkrzk")
 directions = ["fl", "fr", "sagi"]
 
 # 採用条件（元のまま）
+CONF_TH = 0.4  # confidence閾値
 AREA_TH = 200 * 300  # bbox面積閾値
+AREA_TH_SAGI = 450 * 200  # sagi方向のみbbox面積閾値ざっくり
 MIN_VALID_KPTS = 5  # 有効キーポイント数閾値
 MIN_DET_RATIO = 0.10  # 検出フレーム割合閾値
 
@@ -106,7 +109,24 @@ def iter_poseestimate_json_dirs(root: Path, directions_list):
 # =========================
 # bbox/代表点
 # =========================
-def person_bbox_area_from_kpts(kpts, p_th=0.0):
+def prefilter_kpts_by_conf(kpts, conf_th: float):
+    """
+    conf_th 未満の点を (0,0,0) にして無効化する（bbox/valid/MidHipの判定に使わせない）
+    """
+    if not kpts or len(kpts) < len(keypoint_names) * 3:
+        return kpts
+
+    k = list(kpts)  # copy
+    for i in range(len(keypoint_names)):
+        p = float(k[i * 3 + 2])
+        if p < conf_th:
+            k[i * 3 + 0] = 0.0
+            k[i * 3 + 1] = 0.0
+            k[i * 3 + 2] = 0.0
+    return k
+
+
+def person_bbox_area_from_kpts(kpts):
     if not kpts or len(kpts) < len(keypoint_names) * 3:
         return 0.0, 0, None  # area, valid, (xmin,ymin,xmax,ymax)
 
@@ -119,8 +139,6 @@ def person_bbox_area_from_kpts(kpts, p_th=0.0):
             continue
         x = float(x); y = float(y); p = float(p)
         if x == 0 or y == 0:
-            continue
-        if p <= p_th:
             continue
         xs.append(x); ys.append(y)
 
@@ -163,9 +181,9 @@ def representative_point(kpts, bbox):
     return np.array([(xmin + xmax) / 2.0, (ymin + ymax) / 2.0], dtype=float)
 
 # =========================
-# 2人トラッキング本体
+# 3人トラッキング本体
 # =========================
-def load_sequence_two_tracks(json_dir: Path):
+def load_sequence_theree_tracks(json_dir: Path):
     json_files = sorted(glob.glob(str(json_dir / "*.json")))
     frame_count = len(json_files)
     if frame_count == 0:
@@ -173,9 +191,9 @@ def load_sequence_two_tracks(json_dir: Path):
 
     # track state
     # last_pos: np.array([x,y]) or None
-    tracks = [{"last_pos": None, "det_frames": 0, "traj": []},
-              {"last_pos": None, "det_frames": 0, "traj": []},
-              {"last_pos": None, "det_frames": 0, "traj": []}]
+    tracks = [{"last_pos": None, "traj": []},
+              {"last_pos": None, "traj": []},
+              {"last_pos": None, "traj": []}]
 
 
     rows_by_track = [[], [], []]
@@ -191,8 +209,9 @@ def load_sequence_two_tracks(json_dir: Path):
         candidates = []
         for person in people:
             kpts = person.get("pose_keypoints_2d", []) or []
-            area, valid, bbox = person_bbox_area_from_kpts(kpts, p_th=0.0)
-            if area < AREA_TH:
+            kpts = prefilter_kpts_by_conf(kpts, conf_th=CONF_TH)
+            area, valid, bbox = person_bbox_area_from_kpts(kpts)
+            if area < (AREA_TH_SAGI if json_dir.parent.parent.name == "sagi" else AREA_TH):
                 continue
             rp = representative_point(kpts, bbox)
             if rp is None:
@@ -231,7 +250,7 @@ def load_sequence_two_tracks(json_dir: Path):
                 assigned[ti] = best_j
                 used.add(best_j)
 
-        # 2) last_pos がないトラック or まだ未割当を、残り候補から面積順で埋める
+        # 2) last_pos がないトラック or まだ未割当を、残り候補から面積順(面積閾値を超えている場合のみ)で埋める
         for ti in [0, 1, 2]:
             if assigned[ti] is not None:
                 continue
@@ -269,7 +288,6 @@ def load_sequence_two_tracks(json_dir: Path):
                         row[f"{name}_p"] = 0
 
                 tracks[ti]["last_pos"] = c["rp"]
-                tracks[ti]["det_frames"] += 1
                 tracks[ti]["traj"].append(c["rp"])
 
             rows_by_track[ti].append(row)
@@ -277,10 +295,6 @@ def load_sequence_two_tracks(json_dir: Path):
     df0 = pd.DataFrame(rows_by_track[0])
     df1 = pd.DataFrame(rows_by_track[1])
     df2 = pd.DataFrame(rows_by_track[2])
-
-    det0 = tracks[0]["det_frames"]
-    det1 = tracks[1]["det_frames"]
-    det2 = tracks[2]["det_frames"]
     
     def spatial_range(traj):
         if len(traj) < 2:
@@ -294,12 +308,87 @@ def load_sequence_two_tracks(json_dir: Path):
     dx1, dy1 = spatial_range(tracks[1]["traj"])
     dx2, dy2 = spatial_range(tracks[2]["traj"])
 
-    return df0, df1, df2, frame_count, any_det_frames, (det0, det1, det2), (dx0, dy0, dx1, dy1, dx2, dy2)
+    return df0, df1, df2, frame_count, any_det_frames, (dx0, dy0, dx1, dy1, dx2, dy2)
 
 # =========================
 # 0→NaN → 3次スプライン補間（×は0由来のみ）
 # =========================
+def _short_nan_runs_mask(is_nan: np.ndarray, max_len: int) -> np.ndarray:
+    """
+    短いNaNのrunをTrueにするマスクを返す
+    """
+    n = len(is_nan)
+    out = np.zeros(n, dtype=bool)
+    i = 0
+    while i < n:
+        if not is_nan[i]:
+            i += 1
+            continue
+        j = i
+        while j < n and is_nan[j]:
+            j += 1
+        run_len = j - i
+        if run_len < max_len:
+            out[i:j] = True
+        i = j
+    return out
+
+def _fill_short_gaps_cubic(y: np.ndarray, short_gap_mask: np.ndarray, neighbor_pts: int) -> np.ndarray:
+    """
+    短い欠損を3次スプライン補間
+    """
+    out = y.copy()
+    n = len(out)
+    i = 0
+    while i < n:
+        if not (np.isnan(out[i]) and short_gap_mask[i]):
+            i += 1
+            continue
+
+        j = i
+        while j < n and np.isnan(out[j]) and short_gap_mask[j]:
+            j += 1
+
+        # runの前後から有効点を集める
+        left_idx = []
+        k = i - 1
+        while k >= 0 and len(left_idx) < neighbor_pts:
+            if np.isfinite(out[k]):
+                left_idx.append(k)
+            k -= 1
+        left_idx = left_idx[::-1]
+
+        right_idx = []
+        k = j
+        while k < n and len(right_idx) < neighbor_pts:
+            if np.isfinite(out[k]):
+                right_idx.append(k)
+            k += 1
+
+        xs = np.array(left_idx + right_idx, dtype=int)
+        ys = out[xs]
+        x_fill = np.arange(i, j, dtype=int)
+
+        if len(xs) >= 4 and np.all(np.diff(xs) > 0):
+            cs = CubicSpline(xs, ys)
+            out[x_fill] = cs(x_fill)
+        elif len(xs) >= 2:
+            # 点が足りないなら線形
+            out[x_fill] = np.interp(x_fill, xs, ys)
+        # それすら無理なら埋めない（NaNのまま）
+
+        i = j
+
+    return out
+
+
 def zero_nan_and_spline(df_raw: pd.DataFrame):
+    """
+    欠損が0.2秒(60Hzだと12フレーム)未満は3次スプライン補間を実行（論文doi：10.1080/10255841003664701）
+    """
+    MAX_SPLINE_GAP = 12  # 補完する最大欠損フレーム
+    NEIGHBOR_PTS   = 2      # 欠損runの前後から何点ずつ使うか（2→合計4点狙い）
+    
     df0 = df_raw.copy()
     mask0_by_kp = {}
 
@@ -320,37 +409,31 @@ def zero_nan_and_spline(df_raw: pd.DataFrame):
 
     df_s = df0.copy()
 
-    # 2) 座標 spline 補間
+    # 2) 座標補間：短い欠損run（< MAX_SPLINE_GAP）だけ局所CubicSplineで埋める
     for k in keypoint_names:
         xcol = f"{k}_x"
         ycol = f"{k}_y"
         pcol = f"{k}_p"
 
-        # --- X ---
-        sx = df_s[xcol].astype(float)
-        if sx.notna().sum() >= 4:
-            sx_i = sx.interpolate(method="spline", order=3, limit_direction="both")
-        else:
-            sx_i = sx
+        x = df_s[xcol].astype(float).to_numpy()
+        y = df_s[ycol].astype(float).to_numpy()
 
-        # --- Y ---
-        sy = df_s[ycol].astype(float)
-        if sy.notna().sum() >= 4:
-            sy_i = sy.interpolate(method="spline", order=3, limit_direction="both")
-        else:
-            sy_i = sy
+        # 0由来欠損（NaN化した場所）だけを対象に、短欠損runマスクを作る
+        m0 = mask0_by_kp[k]  # True = 0由来欠損
+        short_gap_mask = _short_nan_runs_mask(m0, MAX_SPLINE_GAP)
 
-        # spline により新たに埋まった点
-        spline_filled = sx.isna() & sx_i.notna() & sy.isna() & sy_i.notna()
+        # 局所補間（短欠損runのみ）
+        x_filled = _fill_short_gaps_cubic(x, short_gap_mask, NEIGHBOR_PTS)
+        y_filled = _fill_short_gaps_cubic(y, short_gap_mask, NEIGHBOR_PTS)
 
-        df_s[xcol] = sx_i.fillna(0)
-        df_s[ycol] = sy_i.fillna(0)
+        # 「実際に埋まった点」→ p=0.6（XもYもNaN→値になったところ）
+        filled_mask = short_gap_mask & np.isnan(x) & np.isfinite(x_filled) & np.isnan(y) & np.isfinite(y_filled)
 
-        # 3) p 値の補完ルール
-        # spline で補完された点 → p = 0.6
-        df_s.loc[spline_filled, pcol] = 0.6
+        # 仕上げ：残NaNは0
+        df_s[xcol] = np.where(np.isfinite(x_filled), x_filled, 0.0)
+        df_s[ycol] = np.where(np.isfinite(y_filled), y_filled, 0.0)
 
-        # それ以外で p が NaN の場合は 0
+        df_s.loc[filled_mask, pcol] = 0.6  
         df_s[pcol] = df_s[pcol].fillna(0)
 
     return df_s, mask0_by_kp
@@ -469,7 +552,7 @@ def process_one_json_dir(json_dir: Path, direction: str):
         if ok:
             return "skip_exists"
 
-    df_a, df_b, df_c, frame_count, any_det_frames, (det_a, det_b, det_c), (dx0, dy0, dx1, dy1, dx2, dy2) = load_sequence_two_tracks(json_dir)
+    df_a, df_b, df_c, frame_count, any_det_frames, (dx0, dy0, dx1, dy1, dx2, dy2) = load_sequence_theree_tracks(json_dir)
     if df_a is None:
         return "skip"
 

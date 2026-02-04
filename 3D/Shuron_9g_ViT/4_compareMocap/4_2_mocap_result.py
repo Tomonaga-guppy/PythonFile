@@ -1,13 +1,18 @@
+"""
+ViTPoseに対応するようにMocapデータを解析して比較ようデータを作成する。
+歩行イベントはmocapデータから算出し，ViTPoseの歩行周期に対応する範囲で歩行指標を算出．
+"""
+
 import pandas as pd
 from pathlib import Path
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
-import json
-import os
-from scipy.spatial.transform import Rotation as R
 from scipy.signal import butter, filtfilt
-from scipy.signal import resample_poly
+
+import json
+import m_opti as opti
+
 
 # 同期用
 def check_imu_sync_frame_diff(imu_path):
@@ -76,137 +81,6 @@ def ylims_for_angle_key(k: str):
     base = k.split("_", 1)[1]
     return YLIM_BY_ANGLE.get(base, None)
 
-def butter_lowpass_filter(data, order, cutoff_freq, frame_list, sampling_freq=100):  #4次のバターワースローパスフィルタ
-    # sampling_freq を可変にして、60Hz または 100Hz に対応
-    nyquist_freq = sampling_freq / 2
-    normal_cutoff = cutoff_freq / nyquist_freq
-    b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    # print(f"data = {data}")
-    # print(f"data.shape = {data.shape}")
-    y = filtfilt(b, a, data[frame_list])
-    data_fillter = np.copy(data)
-    data_fillter[frame_list] = y
-    return data_fillter
-
-def read_3d_optitrack(csv_path, start_frame_60, end_frame_60, src_fs=100, dst_fs=60):
-    """
-    OptiTrackの3Dデータ(100Hz想定)を読み込み、60Hzへダウンサンプリングして返す。
-    start_frame_60/end_frame_60 は「60Hzの絶対フレーム」を受け取る前提。
-
-    返り値:
-      keypoints_mocap_60: (N60, 16, 3)
-      full_range_60: range(0, N60)
-      abs_start_60, abs_end_60: 60Hzの絶対フレーム
-      abs_frames_60: 60Hzの絶対フレーム配列（連番）
-    """
-    # -------------------------
-    # 1) 60Hzフレーム -> 100Hz行番号へ変換して切り出し
-    # -------------------------
-    start_100 = int(np.floor(start_frame_60 * src_fs / dst_fs))
-    end_100   = int(np.ceil (end_frame_60   * src_fs / dst_fs))
-
-    df = pd.read_csv(csv_path, skiprows=[0, 1, 2, 4], header=[0, 2])
-    df = df.loc[:, df.columns.get_level_values(1).isin(['X', 'Y', 'Z'])]
-
-    start_100 = max(0, start_100)
-    end_100   = min(len(df) - 1, end_100)
-    df = df.loc[start_100:end_100].reset_index(drop=True)
-
-    marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE",
-                  "RKNE2", "LKNE2", "RANK2", "LANK2", "Marker1", "Marker2", "Marker3", "Marker4", "Marker5", "Marker6"]
-    marker_set_df = df[[col for col in df.columns if any(marker in col[0] for marker in marker_set)]].copy()
-
-    if marker_set_df.empty:
-        print("Error: No marker data found")
-        return np.array([]), range(0), None, None, np.array([], dtype=int)
-    
-
-
-    # -------------------------
-    # 2) RigidBody で欠損置換（現行ロジック踏襲）
-    # -------------------------
-    rigidbody_exists = any("RigidBody 01" in col[0] for col in marker_set_df.columns)
-    if rigidbody_exists:
-        print("RigidBodyデータが検出されました。欠損値の置き換え処理を実行します。")
-        marker_mapping = {
-            "MarkerSet 01:LPSI": "RigidBody 01:Marker2",
-            "MarkerSet 01:LASI": "RigidBody 01:Marker1",
-            "MarkerSet 01:RPSI": "RigidBody 01:Marker5",
-            "MarkerSet 01:RASI": "RigidBody 01:Marker4"
-        }
-        for markerset_name, rigidbody_name in marker_mapping.items():
-            markerset_cols = [col for col in marker_set_df.columns if markerset_name in col[0]]
-            rigidbody_cols = [col for col in marker_set_df.columns if rigidbody_name in col[0]]
-            if markerset_cols and rigidbody_cols:
-                for ms_col, rb_col in zip(markerset_cols, rigidbody_cols):
-                    mask = marker_set_df[ms_col].isnull()
-                    marker_set_df.loc[mask, ms_col] = marker_set_df.loc[mask, rb_col]
-            else:
-                print(f"警告: {markerset_name}または{rigidbody_name}が見つかりません")
-
-    final_marker_set = ["RASI", "LASI", "RPSI", "LPSI","RKNE","LKNE", "RANK","LANK","RTOE","LTOE","RHEE","LHEE",
-                        "RKNE2", "LKNE2", "RANK2", "LANK2"]
-    final_df = marker_set_df[[col for col in marker_set_df.columns if any(marker in col[0] for marker in final_marker_set)]].copy()
-
-    # 欠損補間（現行の方針そのまま）
-    final_df = final_df.interpolate(method="linear", limit_direction="both").ffill().bfill()
-    if final_df.isnull().any().any():
-        raise ValueError("NaNs remain after interpolation/fill in final_df")
-
-    # (N100, 16, 3)
-    keypoints_100 = final_df.values.reshape(-1, len(final_marker_set), 3)
-    
-    # あとでViTPoseとアニメーションで比較するようのdfを作成
-    marker_for_vit_df = df.copy()
-    rigidbody_exists_for_vit = any("RigidBody 01" in col[0] for col in df.columns)
-    if rigidbody_exists_for_vit:
-        marker_mapping_for_vit = {
-            "MarkerSet 01:LPSI": "RigidBody 01:Marker2",
-            "MarkerSet 01:LASI": "RigidBody 01:Marker1",
-            "MarkerSet 01:RPSI": "RigidBody 01:Marker5",
-            "MarkerSet 01:RASI": "RigidBody 01:Marker4"
-        }
-        for markerset_name, rigidbody_name in marker_mapping_for_vit.items():
-            markerset_cols = [col for col in marker_for_vit_df.columns if markerset_name in col[0]]
-            rigidbody_cols = [col for col in marker_for_vit_df.columns if rigidbody_name in col[0]]
-            if markerset_cols and rigidbody_cols:
-                for ms_col, rb_col in zip(markerset_cols, rigidbody_cols):
-                    mask = marker_for_vit_df[ms_col].isnull()
-                    marker_for_vit_df.loc[mask, ms_col] = marker_for_vit_df.loc[mask, rb_col]
-            else:
-                print(f"警告: {markerset_name}または{rigidbody_name}が見つかりません")
-
-    # -------------------------
-    # 3) ローパスフィルタ（100Hzでかける）cutoff_hz=6
-    # -------------------------
-    full_100 = range(keypoints_100.shape[0])
-    keypoints_100_f = np.empty_like(keypoints_100)
-    for j in range(keypoints_100.shape[1]):
-        for ax in range(3):
-            keypoints_100_f[:, j, ax] = butter_lowpass_filter(
-                keypoints_100[:, j, ax],
-                order=4, cutoff_freq=6,
-                frame_list=full_100, sampling_freq=src_fs
-            )
-
-    # -------------------------
-    # 4) 100Hz -> 60Hz (3/5) ダウンサンプリング
-    # -------------------------
-    keypoints_60 = resample_poly(keypoints_100_f, up=3, down=5, axis=0, padtype="line")
-
-    # 返す絶対フレームは「60Hzの連番」
-    abs_frames_60 = np.arange(start_frame_60, end_frame_60 + 1, dtype=int)
-
-    # 長さ合わせ（端で1フレずれることがある）
-    n = min(len(abs_frames_60), keypoints_60.shape[0])
-    abs_frames_60 = abs_frames_60[:n]
-    keypoints_60 = keypoints_60[:n]
-
-    full_range_60 = range(n)
-    print(f"元の絶対フレーム範囲(60Hz): {abs_frames_60[0]} から {abs_frames_60[-1]}")
-    print(f"ダウンサンプリング前のデータ長(100Hz): {keypoints_100.shape[0]} フレーム")
-    print(f"ダウンサンプリング後のデータ長(60Hz): {keypoints_60.shape[0]} フレーム")
-    return keypoints_60, full_range_60, int(abs_frames_60[0]), int(abs_frames_60[-1]), abs_frames_60
 
 
 def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
@@ -235,15 +109,16 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
                         int((int(c[3]) + offset))])
         return out
     
-    gait_cycles_r = _cycles_gopro_to_mocap(gopro_gait_cycles_r, frame_diff)
-    gait_cycles_l = _cycles_gopro_to_mocap(gopro_gait_cycles_l, frame_diff)
-    print(f"mocap gait_cycles_r: {gait_cycles_r}")
-    print(f"mocap gait_cycles_l: {gait_cycles_l}")
+    gait_cycles_r_check = _cycles_gopro_to_mocap(gopro_gait_cycles_r, frame_diff)
+    gait_cycles_l_check = _cycles_gopro_to_mocap(gopro_gait_cycles_l, frame_diff)
     
-    all_frames_r = [frame for cycle in gait_cycles_r for frame in cycle if frame is not None]
-    all_frames_l = [frame for cycle in gait_cycles_l for frame in cycle if frame is not None]
-    start_frame = min(all_frames_r + all_frames_l)
-    end_frame = max(all_frames_r + all_frames_l)
+    print(f"mocap gait_cycles_r_check: {gait_cycles_r_check}")
+    print(f"mocap gait_cycles_l_check: {gait_cycles_l_check}")
+    
+    all_frames_r = [frame for cycle in gait_cycles_r_check for frame in cycle if frame is not None]
+    all_frames_l = [frame for cycle in gait_cycles_l_check for frame in cycle if frame is not None]
+    start_frame = min(all_frames_r + all_frames_l) - 30  # 前後に余裕を持たせる
+    end_frame = max(all_frames_r + all_frames_l) + 30
     
     csv_path = next(csv_path_dir.glob("[0-9]*-[0-9]*-[0-9]*.csv"), None)
     if csv_path is None:
@@ -253,80 +128,18 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
     print(f"Processing: {csv_path}")
 
     try:
-        keypoints_mocap, full_range, abs_start, abs_end, abs_frames = read_3d_optitrack(csv_path, start_frame, end_frame)
+        keypoints_mocap, full_range, abs_frames = opti.read_3d_optitrack(csv_path, start_frame, end_frame)
     except Exception as e:
         print(f"Error processing {csv_path}: {e}")
         return
-    
-    print(f"Valid(abs) gait_cycles_r: {gait_cycles_r}")
-    print(f"Valid(abs) gait_cycles_l: {gait_cycles_l}")
+    print(f"abs_frames: {abs_frames[0] - abs_frames[-1]}")
     
     # 絶対フレーム番号から相対フレーム番号への変換対応
     abs_to_rel = {int(a): i for i, a in enumerate(abs_frames)}
-    
-    def cycles_abs_to_rel_with_index(gait_cycles_abs, abs_to_rel, label=""):
-        """
-        絶対フレーム数を相対フレーム数に変換するとともに
-        gopro側とmocap側に共通して存在する周期とその周期のindexのみを抽出する
-        
-        gait_cycles_abs: [[ic, ic_opp, to, ic_end], ...] (abs frame)
-        abs_to_rel: dict(abs_frame -> rel_index)
-
-        Returns
-        -------
-        cycles_rel : list[list[int]]
-            rel cycle list
-        used_src_indices : list[int]
-            元の gait_cycles_abs の何番目(0始まり)を使ったか
-        used_cycles_abs : list[list[int]]
-            使った abs cycle（ログ/保存用）
-        """
-        cycles_rel = []
-        used_src_indices = []
-        used_cycles_abs = []
-
-        for src_i, (ic, ic_opp, to, ic_end) in enumerate(gait_cycles_abs):
-            frames = [ic, ic_opp, to, ic_end]
-            if all(int(f) in abs_to_rel for f in frames):
-                cycles_rel.append([
-                    abs_to_rel[int(ic)],
-                    abs_to_rel[int(ic_opp)],
-                    abs_to_rel[int(to)],
-                    abs_to_rel[int(ic_end)],
-                ])
-                used_src_indices.append(src_i)
-                used_cycles_abs.append([int(ic), int(ic_opp), int(to), int(ic_end)])
-            else:
-                missing = [int(f) for f in frames if int(f) not in abs_to_rel]
-                print(f"[SKIP]{label} src_cycle_idx={src_i} missing abs frames: {missing}")
-
-        return cycles_rel, used_src_indices
-    
-
-
-    # gait_cycles_r/l は “絶対フレーム” なので rel に変換
-    gait_cycles_r_rel, used_cycle_indices_r = cycles_abs_to_rel_with_index(gait_cycles_r, abs_to_rel)
-    gait_cycles_l_rel, used_cycle_indices_l = cycles_abs_to_rel_with_index(gait_cycles_l, abs_to_rel)
-
-    print("Valid(rel) gait_cycles_r:", gait_cycles_r_rel)
-    print("Valid(rel) gait_cycles_l:", gait_cycles_l_rel)
-    
-    print(f"used_cycle_indices_r: {used_cycle_indices_r}")
-    print(f"used_cycle_indices_l: {used_cycle_indices_l}")
-
-    if len(gait_cycles_r_rel) == 0 and len(gait_cycles_l_rel) == 0:
-        print("Skipping: No valid gait cycles after abs->rel mapping")
-        return
 
     if keypoints_mocap.size == 0:
         print(f"Skipping {csv_path}: No valid data")
         return
-    
-    # 有効な周期がない場合は処理を終了
-    if len(gait_cycles_r_rel) == 0 and len(gait_cycles_l_rel) == 0:
-        print(f"Skipping {csv_path}: No valid gait cycles within data range")
-        return
-    
     
     print(f"csv_path = {csv_path}")
     print(f"keypoints_mocap shape: {keypoints_mocap.shape}")
@@ -359,6 +172,7 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
     plot_target = {"RASI": rasi_test, "LASI": lasi_test, "RPSI": rpsi_test, "LPSI": lpsi_test}
 
     fig = plt.figure(figsize=(15, 12))
+    plt.suptitle(f"Pelvis Markers Timeseries: {csv_path.stem}", fontsize=16)
     full_range_abs = [f + start_frame for f in full_range]  #元の絶対フレーム番号に変換
     # print(f"full_range_abs(絶対フレーム番号): {full_range_abs}")
 
@@ -391,7 +205,18 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
     plt.tight_layout()
     plt.savefig(csv_path_dir / f"pelvis_markers_timeseries_{csv_path.stem}.png")
     plt.close()
-    #######################################################
+    ######################################################
+    
+    angle_list = []
+    sac2hee_r_list = []
+    sac2hee_l_list = []
+    sac2toe_r_list = []
+    sac2toe_l_list = []
+    heel_z_list = []
+    toe_z_list = []
+
+
+    full_range_abs = [f + start_frame for f in full_range]  #元の絶対フレーム番号に変換
     
     # full_range = range(1, len(rasi))  #差分取るために0からではなく1フレーム目からにする
     print(f"full_range(開始点は1フレーム後から): {full_range}")
@@ -441,6 +266,8 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
         e_z_pelvis = e_z_pelvis_0
         rot_pelvis = np.array([e_x_pelvis, e_y_pelvis, e_z_pelvis]).T
 
+
+                    
         transformation_matrix = np.array([[e_x_pelvis_0[0], e_y_pelvis_0[0], e_z_pelvis_0[0], hip_0[0]],
                                             [e_x_pelvis_0[1], e_y_pelvis_0[1], e_z_pelvis_0[1], hip_0[1]],
                                             [e_x_pelvis_0[2], e_y_pelvis_0[2], e_z_pelvis_0[2], hip_0[2]],
@@ -450,9 +277,6 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
         rthigh = np.dot(transformation_matrix, np.append(rthigh_pelvis, 1))[:3]
         lthigh = np.dot(transformation_matrix, np.append(lthigh_pelvis, 1))[:3]
         hip = (rthigh + lthigh) / 2
-
-        # 腰椎節原点
-        lumbar = (0.47 * (rasi[frame_num,:] + lasi[frame_num,:]) / 2 + 0.53 * (rpsi[frame_num,:] + lpsi[frame_num,:]) / 2) + 0.02 * k * np.array([0, 1, 0])
 
         hip_list.append(hip)
         hip_array = np.array(hip_list)
@@ -587,7 +411,7 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
                 ax.scatter(lfoot[0], lfoot[1], lfoot[2], label='lfoot')
                 ax.scatter(rshank[0], rshank[1], rshank[2], label='rshank')
                 ax.scatter(lshank[0], lshank[1], lshank[2], label='lshank')
-                ax.scatter(lumbar[0], lumbar[1], lumbar[2], label='lumbar')
+                # ax.scatter(lumbar[0], lumbar[1], lumbar[2], label='lumbar')
                 ax.scatter(hip[0], hip[1], hip[2], label='hip')
                 ax.scatter(rthigh[0], rthigh[1], rthigh[2], label='rthigh')
                 ax.scatter(lthigh[0], lthigh[1], lthigh[2], label='lthigh')
@@ -652,6 +476,23 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
                 
                 plt.legend()
                 plt.show()
+        
+        #仙骨とかかとのベクトル計算
+        sacuram = (rpsi[frame_num, :] + lpsi[frame_num, :]) / 2
+        sac2hee_r = rhee[frame_num, :] - sacuram
+        sac2hee_r_list.append(sac2hee_r)
+        sac2hee_l = lhee[frame_num, :] - sacuram
+        sac2hee_l_list.append(sac2hee_l)
+        
+        #仙骨とつま先のベクトル計算
+        sac2toe_r = rtoe[frame_num, :] - sacuram
+        sac2toe_r_list.append(sac2toe_r)
+        sac2toe_l = ltoe[frame_num, :] - sacuram
+        sac2toe_l_list.append(sac2toe_l)
+        
+        # 踵のZ座標記録
+        heel_z_list.append((rhee[frame_num, 2], lhee[frame_num, 2]))
+        toe_z_list.append((rtoe[frame_num, 2], ltoe[frame_num, 2]))
 
     angle_array = np.array(angle_list)
     angle_df = pd.DataFrame(angle_array, columns=["R_Hip_FlEx", "L_Hip_FlEx", "R_Knee_FlEx", "L_Knee_FlEx", "R_Ankle_PlDo", "L_Ankle_PlDo",
@@ -707,7 +548,15 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
     absolute_frame_indices = absolute_frame_indices[1:]
     # print(f"absolute_frame_indices = {absolute_frame_indices}")
 
-
+    sac2hee_r_array = np.array(sac2hee_r_list)
+    rsac2hee_z = sac2hee_r_array[:, 2]
+    sac2hee_l_array = np.array(sac2hee_l_list)
+    lsac2hee_z = sac2hee_l_array[:, 2]
+    
+    sac2toe_r_array = np.array(sac2toe_r_list)
+    rsac2toe_z = sac2toe_r_array[:, 2]
+    sac2toe_l_array = np.array(sac2toe_l_list)
+    lsac2toe_z = sac2toe_l_array[:, 2]
 
     # =========================
     # 関節角度プロット (60Hz) - 3段（Hip/Knee/Ankle）
@@ -812,6 +661,44 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
 
     angles_dict = {c: angle_df[c].to_numpy() for c in angle_df.columns}
     
+    event_frame_dict = opti.calc_gait_events(rsac2hee_z, lsac2hee_z, rsac2toe_z, lsac2toe_z, start_frame, csv_path_dir)
+    
+    gait_cycles_r_rel, gait_cycles_l_rel = opti.calc_gait_cycles(event_frame_dict)
+    
+    print(f"右足の歩行周期 IC→対IC→TO→次IC (60Hz): {gait_cycles_r_rel}")    
+    print(f"左足の歩行周期  IC→対IC→TO→次IC (60Hz): {gait_cycles_l_rel}")
+    
+    gait_cycles_r_abs = []
+    for ic_rel, ic_l_rel, to_rel, ic_next_rel in gait_cycles_r_rel:
+        ic_abs = ic_rel + start_frame
+        ic_l_abs = ic_l_rel + start_frame
+        to_abs = to_rel + start_frame
+        ic_next_abs = ic_next_rel + start_frame
+        gait_cycles_r_abs.append([ic_abs, ic_l_abs, to_abs, ic_next_abs])
+    gait_cycles_l_abs = []
+    for ic_rel, ic_r_rel, to_rel, ic_next_rel in gait_cycles_l_rel:
+        ic_abs = ic_rel + start_frame
+        ic_r_abs = ic_r_rel + start_frame
+        to_abs = to_rel + start_frame
+        ic_next_abs = ic_next_rel + start_frame
+        gait_cycles_l_abs.append([ic_abs, ic_r_abs, to_abs, ic_next_abs])
+    print(f"右足の歩行周期 (60Hz絶対フレーム): {gait_cycles_r_abs}")
+    print(f"左足の歩行周期 (60Hz絶対フレーム): {gait_cycles_l_abs}")
+    
+    gait_cycles_r_abs = opti.select_valid_gait_cycles(gait_cycles_r_abs, gait_cycles_r_check, tolerance=5)
+    gait_cycles_l_abs = opti.select_valid_gait_cycles(gait_cycles_l_abs, gait_cycles_l_check, tolerance=5)
+
+    print(f"フィルタリング後の右足歩行周期 (60Hz絶対フレーム): {gait_cycles_r_abs}")
+    print(f"フィルタリング後の左足歩行周期 (60Hz絶対フレーム): {gait_cycles_l_abs}")
+    
+    # 最終的に使用した絶対フレーム範囲
+    all_cycles = gait_cycles_r_abs + gait_cycles_l_abs
+    final_start_frame_60hz = min([cycle[0] for cycle in all_cycles])
+    final_start_frame_60hz_abs = final_start_frame_60hz + start_frame
+    final_end_frame_60hz = max([cycle[-1] for cycle in all_cycles])
+    final_end_frame_60hz_abs = final_end_frame_60hz + start_frame
+    print(f"最終的に使用したフレーム範囲 (60Hz絶対フレーム): {final_start_frame_60hz_abs} 〜 {final_end_frame_60hz_abs}")
+    
     # rel のIC（index）
     ic_r_rel = [c[0] for c in gait_cycles_r_rel]
     ic_l_rel = [c[0] for c in gait_cycles_l_rel]
@@ -824,6 +711,22 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
     start_frame_rel = min([c[0] for c in gait_cycles_r_rel] + [c[0] for c in gait_cycles_l_rel])
     end_frame_rel   = max([c[-1] for c in gait_cycles_r_rel] + [c[-1] for c in gait_cycles_l_rel])
 
+    # 絶対フレーム番号を相対フレーム番号に変換
+    gait_cycles_r_rel = [[frame - start_frame for frame in cycle] for cycle in gait_cycles_r_abs]
+    gait_cycles_l_rel = [[frame - start_frame for frame in cycle] for cycle in gait_cycles_l_abs]
+
+    gait_cycles_r_rel_df = pd.DataFrame(gait_cycles_r_rel, columns=["IC", "IC_opp", "TO", "IC_next"])
+    gait_cycles_l_rel_df = pd.DataFrame(gait_cycles_l_rel, columns=["IC", "IC_opp", "TO", "IC_next"])
+    gait_cycles_r_rel_df.to_csv(csv_path.parent / "gait_cycles_r_rel.csv", index=False)
+    gait_cycles_l_rel_df.to_csv(csv_path.parent / "gait_cycles_l_rel.csv", index=False)
+    
+    # 歩行周期をViTPoseの絶対フレーム番号に変換
+    print(f"gait_cycles_r_rel = {gait_cycles_r_rel}")
+    print(f"gait_cycles_l_rel = {gait_cycles_l_rel}")
+    print(f"gait_cycles_r_abs = {gait_cycles_r_abs}")
+    print(f"gait_cycles_l_abs = {gait_cycles_l_abs}")
+    
+    
     used_key = csv_path.stem
     plot_three_timeseries(
         f"Timeseries Flex/Ext (R & L) - mocap ({used_key})",
@@ -962,6 +865,30 @@ def process_one(csv_path_dir: Path, frame_diff, gopro_gait_cycle):
     swing_duration_nonpara = np.array([p['swing_duration'] for p in gait_params_l]).mean()
     symmetry_index_sw = (swing_duration_para - swing_duration_nonpara) / (0.5 * (swing_duration_para + swing_duration_nonpara)) * 100
 
+        
+    # symmetry_index_swも保存　一度の施行で一回算出する値なので各サイクルに同じ値を入れておく
+    for i_cycle, _ in enumerate(gait_cycles_r_rel):
+        gait_params_r[i_cycle]['SI_sw'] = symmetry_index_sw
+        
+        # 最大関節角度をまとめる 右麻痺前提
+    for i_cycle, cycle_frames in enumerate(gait_cycles_r_rel):
+        ic_start = int(cycle_frames[0])
+        ic_end = int(cycle_frames[3])    
+        # cycle_frames: [ic, ic_opp, to, ic_end]
+        print(f"gait cycle {i_cycle}: frames {cycle_frames}")
+        hip_flex = angles_dict["R_Hip_FlEx"][ic_start:ic_end+1]
+        knee_flex = angles_dict["R_Knee_FlEx"][ic_start:ic_end+1]
+        ankle_pl = angles_dict["R_Ankle_PlDo"][ic_start:ic_end+1]
+        hip_abad = angles_dict["R_Hip_AdAb"][ic_start:ic_end+1]
+        hip_max_ext = - np.min(hip_flex) # 股関節最大伸展　伸展は負の値になるので正にするために符号反転
+        knee_max_flex = np.max(knee_flex)  # 膝関節最大屈曲
+        ankle_max_do = np.max(ankle_pl) # 足関節最大背屈
+        hip_max_ab = np.max(hip_abad)  # 股関節最大外転
+        gait_params_r[i_cycle]['hip_max_ext'] = hip_max_ext 
+        gait_params_r[i_cycle]['knee_max_flex'] = knee_max_flex
+        gait_params_r[i_cycle]['ankle_max_do'] = ankle_max_do
+        gait_params_r[i_cycle]['hip_max_ab'] = hip_max_ab
+        
     # 歩行パラメータをCSVに保存
     gait_params_r_df = pd.DataFrame(gait_params_r)
     gait_params_l_df = pd.DataFrame(gait_params_l)
@@ -985,8 +912,8 @@ def main():
 
     # sub1~sub10, thera1-0~thera10-0 を総当たり
     for sub_i in range(1, 11):
-        # 被験者の対象しぼるならここで指定 不要ならコメントアウト
-        # if sub_i != 1:
+        # # 被験者の対象しぼるならここで指定 不要ならコメントアウト
+        # if sub_i not  in [3]:
         #     print(f"[SKIP] not check {sub_i} now")
         #     continue
         sub_dir = root_dir / f"sub{sub_i}"
@@ -1016,6 +943,8 @@ def main():
         
         # goproとmocapのフレーム差(60hz)を計算
         frame_diff = gopro_cut_frame_diff - gopro_mocap_frame_diff
+        frame_diff_df = pd.DataFrame({'frame_diff': [frame_diff],})
+        frame_diff_df.to_csv(csv_path_dir / f"frame_diff.csv", index=False)
         
         print(f"[INFO] gopro_mocap_frame_diff = {gopro_mocap_frame_diff}, gopro_cut_frame_diff = {gopro_cut_frame_diff}, frame_diff = {frame_diff}")
             

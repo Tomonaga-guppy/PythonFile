@@ -12,7 +12,7 @@ def load_json(json_path):
 
 
 def main():
-    root_dir = Path(r"G:\gait_pattern\20250915_synctest")
+    root_dir = Path(r"T:\gait_pattern\20250915_synctest")
     check_id_list = ["3","5","6"]
     for id in check_id_list:
         print(f"\n=== ID: {id} の衝突フレーム情報 ===")
@@ -42,7 +42,6 @@ def main():
         diff_time_imu_gopro = -diff_time_gopro_imu
         diff_time_motive_gopro = -diff_time_gopro_motive
         print(f"-> gopro基準でのIMUとの差: {diff_time_imu_gopro}ms, Motiveとの差: {diff_time_motive_gopro}ms")
-
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ OpenPose / ViTPose の JSON 出力（people[...].pose_keypoints_2d）を
 - 各フレームで最大2人までの人物を抽出
 - MidHip（なければ bbox 中心）を代表点とした簡易トラッキングにより
   フレーム間で人物ID（PA / PT）を安定化
-- bbox 面積・有効キーポイント数に基づく人物フィルタリング
+- bbox 面積・有効キーポイント数・移動量に基づく人物フィルタリング
 - 各人物ごとに BODY_25 キーポイントを CSV 出力
 
 欠損処理・補間:
@@ -50,11 +50,13 @@ AREA_TH = 200 * 300  # bbox面積閾値
 MIN_VALID_KPTS = 5  # 有効キーポイント数閾値
 MIN_DET_RATIO = 0.10  # 検出フレーム割合閾値
 
+# 移動量フィルタの閾値（MIN_RANGE）はprocess_one_method内で個別設定
+
 # 2トラックのタグ
 OUT_PERSON_TAGS = ["PA", "PT"]   # 一人目, 二人目
 
 # トラッキング閾値（画素距離）
-MAX_TRACK_DIST = 200.0
+MAX_TRACK_DIST = 100.0
 
 # 画像座標レンジ
 XLIM = (0, 3840)
@@ -167,14 +169,16 @@ def load_sequence_two_tracks(json_dir: Path):
     json_files = sorted(glob.glob(str(json_dir / "*.json")))
     frame_count = len(json_files)
     if frame_count == 0:
-        return None, None, 0, 0, 0
+        return None, None, None, 0, 0, 0
 
     # track state
     # last_pos: np.array([x,y]) or None
-    tracks = [{"last_pos": None, "det_frames": 0},
-              {"last_pos": None, "det_frames": 0}]
+    tracks = [{"last_pos": None, "det_frames": 0, "traj": []},
+              {"last_pos": None, "det_frames": 0, "traj": []},
+              {"last_pos": None, "det_frames": 0, "traj": []}]
 
-    rows_by_track = [[], []]
+
+    rows_by_track = [[], [], []]
     any_det_frames = 0  # フレームに1人以上入った回数（フォルダskip判定用）
 
     for frame_idx, fp in enumerate(json_files):
@@ -206,12 +210,12 @@ def load_sequence_two_tracks(json_dir: Path):
         # まず面積順で軽く整列（初期化の安定化）
         candidates.sort(key=lambda c: c["area"], reverse=True)
 
-        # 割当（2トラックなので貪欲）
-        assigned = [None, None]  # candidate index or None
+        # 割当 予備で3トラック分
+        assigned = [None, None, None]  # candidate index or None
         used = set()
 
         # 1) last_pos があるトラックを先に割当
-        for ti in [0, 1]:
+        for ti in [0, 1, 2]:
             if tracks[ti]["last_pos"] is None:
                 continue
             best_j = None
@@ -228,7 +232,7 @@ def load_sequence_two_tracks(json_dir: Path):
                 used.add(best_j)
 
         # 2) last_pos がないトラック or まだ未割当を、残り候補から面積順で埋める
-        for ti in [0, 1]:
+        for ti in [0, 1, 2]:
             if assigned[ti] is not None:
                 continue
             # 空いてる候補の先頭
@@ -240,7 +244,7 @@ def load_sequence_two_tracks(json_dir: Path):
                 break
 
         # 行作成
-        for ti in [0, 1]:
+        for ti in [0, 1, 2]:
             row = {"frame": frame_idx}
             j = assigned[ti]
             if j is None:
@@ -266,15 +270,31 @@ def load_sequence_two_tracks(json_dir: Path):
 
                 tracks[ti]["last_pos"] = c["rp"]
                 tracks[ti]["det_frames"] += 1
+                tracks[ti]["traj"].append(c["rp"])
 
             rows_by_track[ti].append(row)
 
     df0 = pd.DataFrame(rows_by_track[0])
     df1 = pd.DataFrame(rows_by_track[1])
+    df2 = pd.DataFrame(rows_by_track[2])
 
     det0 = tracks[0]["det_frames"]
     det1 = tracks[1]["det_frames"]
-    return df0, df1, frame_count, any_det_frames, (det0, det1)
+    det2 = tracks[2]["det_frames"]
+    
+    def spatial_range(traj):
+        if len(traj) < 2:
+            return 0.0, 0.0
+        P = np.vstack(traj)
+        dx = np.nanmax(P[:,0]) - np.nanmin(P[:,0])
+        dy = np.nanmax(P[:,1]) - np.nanmin(P[:,1])
+        return dx, dy
+
+    dx0, dy0 = spatial_range(tracks[0]["traj"])
+    dx1, dy1 = spatial_range(tracks[1]["traj"])
+    dx2, dy2 = spatial_range(tracks[2]["traj"])
+
+    return df0, df1, df2, frame_count, any_det_frames, (det0, det1, det2), (dx0, dy0, dx1, dy1, dx2, dy2)
 
 # =========================
 # 0→NaN → 3次スプライン補間（×は0由来のみ）
@@ -449,16 +469,110 @@ def process_one_json_dir(json_dir: Path, direction: str):
         if ok:
             return "skip_exists"
 
-    df_a, df_b, frame_count, any_det_frames, (det_a, det_b) = load_sequence_two_tracks(json_dir)
+    df_a, df_b, df_c, frame_count, any_det_frames, (det_a, det_b, det_c), (dx0, dy0, dx1, dy1, dx2, dy2) = load_sequence_two_tracks(json_dir)
     if df_a is None:
         return "skip"
 
     # フォルダskip判定：少なくとも「どちらかが検出できたフレーム」が一定割合未満ならskip
     if any_det_frames < max(1, int(np.ceil(frame_count * MIN_DET_RATIO))):
         return "skip_low_detection"
+    
+    # ---- 静止人物フィルタ & PA/PT決定 ----
 
-    # 各トラックごとに spline & save & plot
-    for df_raw, tag in [(df_a, OUT_PERSON_TAGS[0]), (df_b, OUT_PERSON_TAGS[1])]:
+    tracks = [
+        {"df": df_a, "dx": dx0, "dy": dy0},
+        {"df": df_b, "dx": dx1, "dy": dy1},
+        {"df": df_c, "dx": dx2, "dy": dy2},
+    ]
+
+    # 静止判定（共通）
+    def is_static(dx, dy):
+        return (dx < 1000) and (dy < 250)
+
+    active = [tr for tr in tracks if not is_static(tr["dx"], tr["dy"])]
+
+    if len(active) < 2:
+        return "skip_static_person"
+
+    # --- PA/PT 判定用の代表フレーム ---
+    mid_frame = frame_count // 2
+
+    def midhip_x_at(df, frame_idx):
+        row = df[df["frame"] == frame_idx]
+        if row.empty:
+            return None
+        return float(row["MidHip_x"].values[0])
+
+    # MidHip が取得できる2人を探す
+    pairs = []
+    for i in range(len(active)):
+        for j in range(i+1, len(active)):
+            x0 = midhip_x_at(active[i]["df"], mid_frame)
+            x1 = midhip_x_at(active[j]["df"], mid_frame)
+            if x0 is not None and x1 is not None:
+                pairs.append((active[i], active[j], x0, x1))
+
+    if not pairs:
+        return "skip_no_midhip"
+
+    # PAPTの位置関係判定に使うフレーム
+    judge_frames = [mid_frame, mid_frame + 30, mid_frame + 60, mid_frame + 90, mid_frame + 120]
+    judge_frames = [f for f in judge_frames if f < frame_count]
+
+    def midhip_x_at(df, frame_idx):
+        row = df[df["frame"] == frame_idx]
+        if row.empty:
+            return None
+        x = row["MidHip_x"].values[0]
+        if x == 0 or np.isnan(x):
+            return None
+        return float(x)
+
+    print("DEBUG sub_name =", out_root.parent.parent.parent.parent.name,
+        " direction=", direction,
+        " out_root=", out_root)
+
+    def is_pa_first(x0, x1, direction):  #PAPTの位置関係判定
+        if direction == "sagi" and out_root.parent.parent.parent.parent.name != "sub15":  #矢状面右側にカメラ
+            return x0 >= x1   # x 大 → PA
+        elif direction == "sagi" and out_root.parent.parent.parent.parent.name == "sub15":  #矢状面左側にカメラ
+            return x0 <= x1   # x 小 → PA
+        elif direction == "fr":
+            return x0 >= x1   # x 大 → PA
+        elif direction == "fl":
+            return x0 <= x1   # x 小 → PA
+        else:
+            return None
+    
+    # 最初に見つかったペアを使用（1人は自然に捨てられる）
+    tr0, tr1 = pairs[0][0], pairs[0][1]
+
+    votes = []
+
+    for f in judge_frames:
+        x0 = midhip_x_at(tr0["df"], f)
+        x1 = midhip_x_at(tr1["df"], f)
+        if x0 is None or x1 is None:
+            continue
+        vote = is_pa_first(x0, x1, direction)
+        if vote is not None:
+            votes.append(vote)
+
+    if len(votes) == 0:
+        return "skip_no_valid_vote"
+
+    # True が多ければ tr0 が PA
+    if sum(votes) >= (len(votes) / 2):
+        PA_df, PT_df = tr0["df"], tr1["df"]
+    else:
+        PA_df, PT_df = tr1["df"], tr0["df"]
+
+    valid_tracks = [("PA", PA_df), ("PT", PT_df)]
+
+    if len(valid_tracks) == 0:
+        return "skip_static_person"
+    
+    for tag, df_raw in valid_tracks:
         df_orig = df_raw.copy()
         df_spline, mask0_by_kp = zero_nan_and_spline(df_raw)
 

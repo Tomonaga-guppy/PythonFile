@@ -6,7 +6,7 @@ IMUの同期信号から、フレームずれ量を計算
 import pandas as pd
 from pathlib import Path
 
-csv_path = Path(r"G:\gait_pattern\BR9G_shuron\sub5\thera5-0\IMU\mem-TSND151_AP04212533_SYNC-20251127-154620291.csv")
+csv_path = Path(r"G:\gait_pattern\2025_shuron_BR9G\sub1\thera1-0\IMU\mem-TSND151_AP04212533_SYNC-20251121-145147889.csv")
 
 df = pd.read_csv(csv_path, sep=",", header=None)
 

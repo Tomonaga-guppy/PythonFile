@@ -312,7 +312,6 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
                         float(c[2]) + offset,
                         float(c[3]) + offset])
         return out
-    
 
     gait_cycle_r_global = _cycles_local_to_global(gait_cycles_r, valid_start)
     gait_cycle_l_global = _cycles_local_to_global(gait_cycles_l, valid_start)
@@ -448,30 +447,47 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
     gait_params_r = calculate_gait_parameters_3d(gait_cycles_r, midhip, rhee, lhee, side="R", sampling_freq=FS_3D)
     gait_params_l = calculate_gait_parameters_3d(gait_cycles_l, midhip, rhee, lhee, side="L", sampling_freq=FS_3D)
 
-    # 時間的対称性指標（遊脚期比のSI）を算出 右麻痺前提 歩行周期ごとでの算出が難しいため全体平均で算出
+    # 時間的対称性指標（遊脚期比のSI）を算出　今回は全員右麻痺前提 左右の平均を使用
     swing_duration_para = np.array([p['swing_duration'] for p in gait_params_r]).mean()
     swing_duration_nonpara = np.array([p['swing_duration'] for p in gait_params_l]).mean()
-    symmetry_index_sw = (swing_duration_para - swing_duration_nonpara) / (0.5 * (swing_duration_para + swing_duration_nonpara)) * 100
+    symmetry_index_sw = ((swing_duration_para - swing_duration_nonpara) / (0.5 * (swing_duration_para + swing_duration_nonpara)) * 100)
+    
+    # symmetry_index_swも保存　一度の施行で一回算出する値なので各サイクルに同じ値を入れておく
+    for i_cycle, _ in enumerate(gait_cycles_r):
+        gait_params_r[i_cycle]['SI_sw'] = symmetry_index_sw
+        
+    # 最大関節角度をまとめる 右麻痺前提
+    for i_cycle, cycle_frames in enumerate(gait_cycle_r_global):
+        ic_start = int(cycle_frames[0])
+        ic_end = int(cycle_frames[3])    
+        # cycle_frames: [ic, ic_opp, to, ic_end]
+        print(f"gait cycle {i_cycle}: frames {cycle_frames}")
+        hip_flex = angles_dict["R_Hip_FlEx"][ic_start:ic_end+1]
+        knee_flex = angles_dict["R_Knee_FlEx"][ic_start:ic_end+1]
+        ankle_pldo = angles_dict["R_Ankle_PlDo"][ic_start:ic_end+1]
+        hip_abad = angles_dict["R_Hip_AdAb"][ic_start:ic_end+1]
+        hip_max_ext = - np.min(hip_flex) # 股関節最大伸展　伸展は負の値になるので正にするために符号反転
+        knee_max_flex = np.max(knee_flex)  # 膝関節最大屈曲
+        ankle_max_do = np.max(ankle_pldo) # 足関節最大背屈
+        hip_max_ab = np.max(hip_abad)  # 股関節最大外転
+        gait_params_r[i_cycle]['hip_max_ext'] = hip_max_ext 
+        gait_params_r[i_cycle]['knee_max_flex'] = knee_max_flex
+        gait_params_r[i_cycle]['ankle_max_do'] = ankle_max_do
+        gait_params_r[i_cycle]['hip_max_ab'] = hip_max_ab
 
     # 歩行パラメータを保存
     gait_params_r_df = pd.DataFrame(gait_params_r)
     gait_params_l_df = pd.DataFrame(gait_params_l)
-    gait_params_r_df.to_csv(out_root / f"gait_parameters_R_{tag_short}.csv", index=False)
-    gait_params_l_df.to_csv(out_root / f"gait_parameters_L_{tag_short}.csv", index=False)
     
-    symmetry_df = pd.DataFrame({
-        'SI_swing_duration': [symmetry_index_sw]
-    })
-    symmetry_df.to_csv(out_root / f"SI_{tag_short}.csv", index=False)
+    gait_params_r_df.to_csv(out_root / f"gait_parameters_R_{tag_short}.csv", index=False)
+    gait_params_l_df.to_csv(out_root / f"gait_parameters_L_{tag_short}.csv", index=False)    
     
     # 関節角度情報をまとめる (右麻痺前提：あと9号館データではこれいらない)
-    hip_flex = angles_dict["R_Hip_FlEx"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1] if len(gait_cycles_r) > 0 else np.array([])
-    hip_max_flex = np.max(hip_flex) if hip_flex.size > 0 else np.nan
-    hip_max_ext = np.min(hip_flex) if hip_flex.size > 0 else np.nan
-    knee_max_flex = np.max(angles_dict["R_Knee_FlEx"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
-    ankle_max_pl = np.min(angles_dict["R_Ankle_PlDo"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
-    hip_max_ab = np.max(angles_dict["R_Hip_AdAb"][gait_cycles_r[0][0]:gait_cycles_r[0][3]+1]) if len(gait_cycles_r) > 0 else np.nan
-    max_angle_list = [hip_max_flex, hip_max_ext, knee_max_flex, ankle_max_pl, hip_max_ab]
+    hip_max_ext = np.nanmedian([gait_params_r[i_cycle]['hip_max_ext'] for i_cycle in range(len(gait_cycles_r))]) if len(gait_cycles_r) > 0 else np.nan
+    knee_max_flex = np.nanmedian([gait_params_r[i_cycle]['knee_max_flex'] for i_cycle in range(len(gait_cycles_r))]) if len(gait_cycles_r) > 0 else np.nan
+    ankle_max_do = np.nanmedian([gait_params_r[i_cycle]['ankle_max_do'] for i_cycle in range(len(gait_cycles_r))]) if len(gait_cycles_r) > 0 else np.nan
+    hip_max_ab = np.nanmedian([gait_params_r[i_cycle]['hip_max_ab'] for i_cycle in range(len(gait_cycles_r))]) if len(gait_cycles_r) > 0 else np.nan
+    max_angle_list = [hip_max_ext, knee_max_flex, ankle_max_do, hip_max_ab]
     
     # 歩行パラメータのまとめ
     def summarize_gait_parameters(gait_params_r, gait_params_l, symmetry_index_sw, max_angle_list, paralyzed_side):
@@ -491,11 +507,10 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             'symmetry_index_sw': symmetry_index_sw,
             'stride_time': stride_time,
             'stride_width': stride_width,
-            'hip_max_flex': max_angle_list[0],
-            'hip_max_ext': max_angle_list[1],
-            'knee_max_flex': max_angle_list[2],
-            'ankle_max_pl': max_angle_list[3],
-            'hip_max_ab': max_angle_list[4],
+            'hip_max_ext': max_angle_list[0],
+            'knee_max_flex': max_angle_list[1],
+            'ankle_max_do': max_angle_list[2],
+            'hip_max_ab': max_angle_list[3],
         }
         return summary
     

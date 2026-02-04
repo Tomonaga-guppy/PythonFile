@@ -63,7 +63,7 @@ CSV_SUFFIXES = [
 
 TARGET_METHOD = "ViTPose"  # 対象とする手法名（OpenPoseの結果は使用しない）
 
-CONF_TH_3D = 0.5  # 3D信頼度閾値（この値以下の3D点はNaNにする）
+CONF_TH_3D = 0.4  # 3D信頼度閾値（この値以下の3D点はNaNにする）
 VALID_RANGE_Z = (-2000, 2000)  # MidHipのZ座標による有効範囲[mm] およそ+-2mになるように
 
 # 1フレームでの3Dジャンプがこの閾値[mm]を超える点は外れ値としてNaN化
@@ -164,7 +164,7 @@ def calculate_raw_3d_coordinates_multi(kps_seq_list, P_list):
     return raw_3d, conf_3d
 
 
-def confidence_filter_keypoints(data_3d, confidences, conf_threshold=0.5):
+def confidence_filter_keypoints(data_3d, confidences, conf_threshold=0.4):
     filtered = data_3d.copy()
     low = confidences < conf_threshold
     filtered[low] = np.nan

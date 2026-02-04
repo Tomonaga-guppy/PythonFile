@@ -11,9 +11,6 @@ model_path = hf_hub_download(repo_id="AdamCodd/YOLOv11n-face-detection", filenam
 # model = YOLO('yolo11n.pt')
 model = YOLO(model_path)
 
-condition_list = ["thera0-3", "thera1-1", "thera2-1"]
-direction_list = ["sagi", "fr", "fl"]
-
 def apply_black_fill(image, x1, y1, x2, y2):
     # 指定範囲を黒で塗りつぶす関数
     color = [0, 0, 0]  # 黒色のBGR値
@@ -33,37 +30,36 @@ def apply_black_fill(image, x1, y1, x2, y2):
     return image
 
 
-for direction in direction_list:
-    for condition in condition_list:
-        # 2. 画像ファイルを読み込む
-        input_dir = Path(fr"g:\gait_pattern\20250228_ota\data\20250221\sub0\{condition}\{direction}")
-        imgs_folder = input_dir / "Undistort"  # Undistortフォルダ内の画像を対象
-        imgs = sorted(imgs_folder.glob("*.png"))  # PNG画像ファイルを取得
+# 2. 画像ファイルを読み込む
+imgs_folder = Path(fr"G:\gait_pattern\2025_shuron_tkrzk\sub2\thera2\gopro\sagi\undistorted")
+imgs = sorted(imgs_folder.glob("*.png"))  # PNG画像ファイルを取得
+imgs = sorted(imgs_folder.glob("*[00100-00300]*.png"))  # 範囲指定を含むPNG画像ファイルを取得
 
-        # 出力する動画の設定
-        output_video_dir = imgs_folder.with_name(f"face_fill.mp4")
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 動画のエンコーディング方式を指定
-        size = cv2.imread(str(imgs[0])).shape[:2][::-1]  # 画像のサイズを取得 (width, height)
-        fps = 60.0  # フレームレートを指定
-        writer = cv2.VideoWriter(str(output_video_dir), fourcc, fps, size)  # 動画ファイルの作成
+# 出力する動画の設定
+output_video_path = imgs_folder.with_name("face_fill.mp4")
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 動画のエンコーディング方式を指定
+size = cv2.imread(str(imgs[0])).shape[:2][::-1]  # 画像のサイズを取得 (width, height)
+resize = (1280, 720)
+fps = 60.0  # フレームレートを指定
+writer = cv2.VideoWriter(str(output_video_path), fourcc, fps, resize)  # 動画ファイルの作成
+for img_path in tqdm(imgs, desc=f"Processing {imgs_folder.name}"):
+    # 3. モデルで推論を実行
+    img = cv2.imread(str(img_path))
+    img = cv2.resize(img, resize)
+    results = model(img, verbose=False)  # verbose=False で出力を抑制
 
-        for img_path in tqdm(imgs, desc=f"Processing {condition}"):
-            # 3. モデルで推論を実行
-            img = cv2.imread(str(img_path))
-            results = model(img, verbose=False)  # verbose=False で出力を抑制
+    # 4. 検出結果を画像に描画
+    for result in results:  #検出した顔の数だけに塗りつぶし
+        for box in result.boxes:
+            x1, y1, x2, y2 = [int(coord) for coord in box.xyxy[0]]
+            img = apply_black_fill(img, x1, y1, x2, y2)
 
-            # 4. 検出結果を画像に描画
-            for result in results:  #検出した顔の数だけに塗りつぶし
-                for box in result.boxes:
-                    x1, y1, x2, y2 = [int(coord) for coord in box.xyxy[0]]
-                    img = apply_black_fill(img, x1, y1, x2, y2)
+    # save_img_folder = img_path.parent / "Filled"
+    # save_img_folder.mkdir(exist_ok=True)  # フォルダが存在しない場合は作成
+    # save_img_path  = save_img_folder / img_path.name
+    # cv2.imwrite(str(save_img_path), img)
 
-            save_img_folder = img_path.parent / "Filled"
-            save_img_folder.mkdir(exist_ok=True)  # フォルダが存在しない場合は作成
-            save_img_path  = save_img_folder / img_path.name
-            cv2.imwrite(str(save_img_path), img)
-
-            # 5. 動画ファイルに書き込む
-            writer.write(img)
-        # 動画ファイルを閉じる
-        writer.release()
+    # 5. 動画ファイルに書き込む
+    writer.write(img)
+# 動画ファイルを閉じる
+writer.release()

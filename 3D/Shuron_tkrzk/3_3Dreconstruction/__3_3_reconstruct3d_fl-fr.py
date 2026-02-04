@@ -1,7 +1,8 @@
 """
 3_3_reconstruct3d.py (parallel)
 ==============================
-fl, fr の2視点から3D三角測量を行い、補間・フィルタリングして npz 保存
+####################### fl, fr の2視点から ########################
+3D三角測量を行い、補間・フィルタリングして npz 保存
 
 ※「出力に影響する処理」は一切変えず、処理単位（sub/thera/method）を並列化して高速化します。
   - 計算ロジック（triangulation / conf filter / spline / butter / plot / save npz）は同一
