@@ -16,19 +16,18 @@ X_LIST = [
 ]
 
 EXCLUDE_COLS = ["pa_id", "pt_id"]
-
 MARKERS = ["o", "s", "^", "D", "P", "X", "v", "<", ">", "*", "h", "p", "8", "H", "d"]
 
 ASSIST_COLS = [
-    'hip_dist', 
+    'hip_dist',
     'hip_dist_n',
-    'wri_para_s', 
-    'wri_nonpara_s', 
-    'cos_sim', 
-    'hip_cc_x', 
-    'hip_cc_y', 
-    'hip_cc_z', 
-    'hip_cc_3d', 
+    'wri_para_s',
+    'wri_nonpara_s',
+    'cos_sim',
+    'hip_cc_x',
+    'hip_cc_y',
+    'hip_cc_z',
+    'hip_cc_3d',
     'hip_cc_lag'
 ]
 GAIT_PARAM_COLS = [
@@ -43,36 +42,37 @@ GAIT_PARAM_COLS = [
     "hip_ab_max_delta",
 ]
 PA_BASE_COLS = [
-    "pa_age", 
-    "pa_height", 
-    "pa_weight", 
-    "fac", 
-    "brs_lower", 
-    "sias_m_hip", 
-    "sias_m_knee", 
-    "sias_m_ankle", 
-    "sias_m_total", 
-    "sias_sens_sole", 
-    "sias_prop_toe", 
-    "mi_hip", 
-    "mi_knee", 
-    "mi_ankle", 
-    "mi_total", 
-    "days_post_onset", 
-    "fim_walk", 
-    "fim_motor", 
-    "fim_cog", 
+    "pa_age",
+    "pa_height",
+    "pa_weight",
+    "fac",
+    "brs_lower",
+    "sias_m_hip",
+    "sias_m_knee",
+    "sias_m_ankle",
+    "sias_m_total",
+    "sias_sens_sole",
+    "sias_prop_toe",
+    "mi_hip",
+    "mi_knee",
+    "mi_ankle",
+    "mi_total",
+    "days_post_onset",
+    "fim_walk",
+    "fim_motor",
+    "fim_cog",
     "mmse"
 ]
-
 PT_BASE_COLS = [
-    "pt_age", 
-    "pt_height", 
-    "pt_weight", 
-    "grip_power"
+    "pt_age",
+    "pt_height",
+    "pt_weight",
+    "grip_power",
+    "exp"
 ]
 
-
+# デミーン設定
+DEMEAN_GROUP_COL = "pa_id"  # 基本はpa_id内デミーン（必要なら "pt_id" や ["pa_id","pt_id"] に変更）
 
 # =========================
 # CSV 読み込み
@@ -80,7 +80,25 @@ PT_BASE_COLS = [
 df = pd.read_csv(CSV_PATH)
 
 # =========================
+# ★デミーン（処理は追加。既存の処理は削らない）
+#   pa_id内で数値列を平均との差分に変換する
+# =========================
+if DEMEAN_GROUP_COL not in df.columns:
+    raise ValueError(f"DEMEAN_GROUP_COL='{DEMEAN_GROUP_COL}' is not in columns.")
+
+# 数値列のうち、ID系以外をデミーン対象にする
+demean_cols = [
+    c for c in df.columns
+    if c not in EXCLUDE_COLS
+    and pd.api.types.is_numeric_dtype(df[c])
+]
+
+df_dm = df.copy()
+df_dm[demean_cols] = df.groupby(DEMEAN_GROUP_COL)[demean_cols].transform(lambda s: s - s.mean())
+
+# =========================
 # PA / PT マッピング（1回だけ決める）
+# ※凡例や色/形のルールは元dfのIDから作る（見た目はそのまま）
 # =========================
 pa_vals = sorted(df["pa_id"].dropna().unique().tolist())
 pt_vals = sorted(df["pt_id"].dropna().unique().tolist())
@@ -106,25 +124,26 @@ pt_legend_handles = [
 # =========================
 for X_COL in X_LIST:
 
-    if X_COL not in df.columns:
+    if X_COL not in df_dm.columns:
         print(f"[SKIP] X_COL='{X_COL}' not found")
         continue
 
-    # Xごとに保存フォルダを分ける
-    out_dir = CSV_PATH.parent / f"scatter_x_delta"
+    # Xごとに保存フォルダを分ける（あなたの構造を維持）
+    out_dir = CSV_PATH.parent / f"scatter_x_delta_demean_by_{DEMEAN_GROUP_COL}"
     out_dir.mkdir(exist_ok=True)
     OUT_DIR = out_dir / X_COL
     OUT_DIR.mkdir(exist_ok=True)
 
     # Y候補（数値のみ）
+    # ※ここもdf_dmを基準に（デミーン値をプロットするため）
     y_cols = [
-        c for c in df.columns
+        c for c in df_dm.columns
         if c not in EXCLUDE_COLS
         and c != X_COL
-        and pd.api.types.is_numeric_dtype(df[c])
+        and pd.api.types.is_numeric_dtype(df_dm[c])
     ]
 
-    print(f"\n=== X_COL = {X_COL} ===")
+    print(f"\n=== X_COL = {X_COL} (demean by {DEMEAN_GROUP_COL}) ===")
     print("Y columns:", len(y_cols))
 
     for y_col in y_cols:
@@ -138,7 +157,9 @@ for X_COL in X_LIST:
             team_flag = 3
         else:
             team_flag = 4
-        sub = df[["pa_id", "pt_id", X_COL, y_col]].dropna()
+
+        # ★ここが重要：dfではなくdf_dm（デミーン済み）を使う
+        sub = df_dm[["pa_id", "pt_id", X_COL, y_col]].dropna()
         if len(sub) == 0:
             continue
 
@@ -157,8 +178,8 @@ for X_COL in X_LIST:
                 zorder=3
             )
 
-        ax.set_xlabel(X_COL)
-        ax.set_ylabel(y_col)
+        ax.set_xlabel(f"{X_COL} (demeaned within {DEMEAN_GROUP_COL})")
+        ax.set_ylabel(f"{y_col} (demeaned within {DEMEAN_GROUP_COL})")
         ax.grid(True, linestyle="--", alpha=0.5)
 
         # 凡例（PA=色、PT=形）
@@ -177,7 +198,7 @@ for X_COL in X_LIST:
             bbox_to_anchor=(1.02, 0.30)
         )
 
-        ax.set_title(f"{y_col} vs {X_COL}")
+        ax.set_title(f"{y_col} vs {X_COL}  (demean: {DEMEAN_GROUP_COL})")
 
         plt.tight_layout()
         out_path = OUT_DIR / f"{team_flag}_{y_col}.png"

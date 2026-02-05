@@ -29,12 +29,14 @@ theraX-0/
 - m_openpose.py（culc_angle_all_frames を使用）
 """
 
+import os
 import re
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+import json
 import m_openpose as op  # culc_angle_all_frames
 
 # =========================
@@ -502,6 +504,62 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             gait_params_l[i_cycle]['ankle_max_do'] = ankle_max_do
             gait_params_l[i_cycle]['hip_max_ab'] = hip_max_ab
             
+    # def _cycle_max_mean(angle_series: np.ndarray, gait_cycles, mode: str = "max"):
+    #     """
+    #     各歩行周期 [ic..ic_end] ごとに max/min を計算し、その平均を返す
+    #     mode: "max" or "min"
+    #     """
+    #     if angle_series is None:
+    #         return np.nan
+    #     angle_series = np.asarray(angle_series, dtype=float)
+
+    #     vals = []
+    #     n = len(angle_series)
+    #     for cyc in gait_cycles:
+    #         ic = int(np.round(cyc[0]))
+    #         ic_end = int(np.round(cyc[3]))
+    #         if ic_end <= ic:
+    #             continue
+    #         ic = max(0, min(n - 1, ic))
+    #         ic_end = max(0, min(n - 1, ic_end))
+
+    #         seg = angle_series[ic:ic_end + 1]
+    #         if seg.size == 0:
+    #             continue
+
+    #         if mode == "max":
+    #             v = np.nanmax(seg)
+    #         elif mode == "min":
+    #             v =  - np.nanmin(seg) # 元が負の場合は正に変換して扱う
+    #         else:
+    #             raise ValueError("mode must be 'max' or 'min'")
+
+    #         vals.append(v)
+
+    #     return float(np.nanmean(vals)) if len(vals) > 0 else np.nan
+
+
+    # # ---- 関節角度情報をまとめる（各周期→中央値）----
+    # if paralyzed_side == "R":
+    #     cycles = gait_cycles_r
+    #     hip_key   = "R_Hip_FlEx"
+    #     knee_key  = "R_Knee_FlEx"
+    #     ankle_key = "R_Ankle_PlDo"
+    #     hipab_key = "R_Hip_AdAb"
+    # elif paralyzed_side == "L":
+    #     cycles = gait_cycles_l
+    #     hip_key   = "L_Hip_FlEx"
+    #     knee_key  = "L_Knee_FlEx"
+    #     ankle_key = "L_Ankle_PlDo"
+    #     hipab_key = "L_Hip_AdAb"
+
+    # hip_max_flex = _cycle_max_mean(angles_dict[hip_key],   cycles, mode="max")
+    # hip_max_ext  = _cycle_max_mean(angles_dict[hip_key],   cycles, mode="min")  # 伸展は最小値（そもそもが負の値）
+    # knee_max_flex = _cycle_max_mean(angles_dict[knee_key], cycles, mode="max")
+    # ankle_max_do  = _cycle_max_mean(angles_dict[ankle_key], cycles, mode="min")  # 足底屈も最小値(そもそもが負の値)
+    # hip_max_ab    = _cycle_max_mean(angles_dict[hipab_key], cycles, mode="max")
+
+    # max_angle_list = [hip_max_flex, hip_max_ext, knee_max_flex, ankle_max_do, hip_max_ab]
     max_angle_list = [hip_max_ext, knee_max_flex, ankle_max_do, hip_max_ab]
     
     # 歩行パラメータのまとめ
@@ -636,91 +694,6 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
         hip_cc_z_cycle = []
         hip_cc_3d_cycle = []
         hip_cc_lag_cycle = []
-        
-        def _plot_trunk_vectors_and_cossim(
-            pa_midhip_seg, pa_neck_seg, pt_midhip_seg, pt_neck_seg,
-            cos_sim, out_path_png, stride=5
-        ):
-            """
-            体幹ベクトル（midhip->neck）を3D矢印で可視化し、cos_sim時系列も並べて保存する。
-            stride: 矢印を間引く間隔（例:5なら5フレームごとに描画）
-            """
-            pa_midhip_seg = np.asarray(pa_midhip_seg, float)
-            pa_neck_seg   = np.asarray(pa_neck_seg, float)
-            pt_midhip_seg = np.asarray(pt_midhip_seg, float)
-            pt_neck_seg   = np.asarray(pt_neck_seg, float)
-            cos_sim       = np.asarray(cos_sim, float)
-
-            n = min(len(pa_midhip_seg), len(pa_neck_seg), len(pt_midhip_seg), len(pt_neck_seg), len(cos_sim))
-            if n < 3:
-                return
-
-            # 間引きインデックス
-            idx = np.arange(0, n, max(1, int(stride)))
-
-            # 体幹ベクトル（始点=midhip, ベクトル=neck-midhip）
-            trunk_pa = pa_neck_seg[:n] - pa_midhip_seg[:n]
-            trunk_pt = pt_neck_seg[:n] - pt_midhip_seg[:n]
-
-            # 3D描画（矢印）
-            fig = plt.figure(figsize=(14, 6))
-            ax = fig.add_subplot(1, 2, 1, projection="3d")
-
-            # 始点
-            pa_o = pa_midhip_seg[:n][idx]
-            pt_o = pt_midhip_seg[:n][idx]
-            # ベクトル
-            pa_v = trunk_pa[idx]
-            pt_v = trunk_pt[idx]
-
-            # 見た目を揃えるため、矢印の長さを正規化（方向だけ比較）
-            def _normalize_vec(v):
-                vv = np.asarray(v, float)
-                den = np.linalg.norm(vv, axis=1, keepdims=True)
-                den[den < 1e-12] = np.nan
-                return vv / den
-
-            pa_vn = _normalize_vec(pa_v)
-            pt_vn = _normalize_vec(pt_v)
-
-            # NaN除外
-            m_pa = np.all(np.isfinite(pa_o), axis=1) & np.all(np.isfinite(pa_vn), axis=1)
-            m_pt = np.all(np.isfinite(pt_o), axis=1) & np.all(np.isfinite(pt_vn), axis=1)
-
-            # 矢印（長さは一定スケールで表示）
-            scale = 200.0  # mm（見やすいように固定長）
-            if np.any(m_pa):
-                ax.quiver(
-                    pa_o[m_pa, 0], pa_o[m_pa, 1], pa_o[m_pa, 2],
-                    pa_vn[m_pa, 0]*scale, pa_vn[m_pa, 1]*scale, pa_vn[m_pa, 2]*scale,
-                    length=1.0, normalize=False
-                )
-            if np.any(m_pt):
-                ax.quiver(
-                    pt_o[m_pt, 0], pt_o[m_pt, 1], pt_o[m_pt, 2],
-                    pt_vn[m_pt, 0]*scale, pt_vn[m_pt, 1]*scale, pt_vn[m_pt, 2]*scale,
-                    length=1.0, normalize=False
-                )
-
-            ax.set_title("Trunk vectors (midhip→neck) in 3D (direction-only)")
-            ax.set_xlabel("X [mm]")
-            ax.set_ylabel("Y [mm]")
-            ax.set_zlabel("Z [mm]")
-            ax.grid(True)
-
-            # cos_sim時系列
-            ax2 = fig.add_subplot(1, 2, 2)
-            ax2.plot(np.arange(n), cos_sim, linewidth=2)
-            ax2.set_title("cos_sim (trunk_pa · trunk_pt)")
-            ax2.set_xlabel("Frame (within cycle)")
-            ax2.set_ylabel("cos_sim [-]")
-            ax2.set_ylim(0.98, 1.01)
-            ax2.grid(True)
-
-            plt.tight_layout()
-            plt.savefig(out_path_png, dpi=150)
-            plt.close()
-
 
         for ic, _, _, ic_end in gait_cycles:
             if ic_end <= ic:
@@ -772,21 +745,6 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             cos_sim[~np.isfinite(cos_sim)] = np.nan
             cos_sim_cycle.append(np.nanmedian(cos_sim))
             
-            # --- trunk vectors 可視化（デバッグ）---
-            save_trunk_fig = True
-            if save_trunk_fig:
-                cycle_idx = len(hip_dist_cycle)  # いまの周期番号（既存の付け方に合わせる）
-                debug_dir = thera_dir / "ViTPose_results"
-                debug_dir.mkdir(parents=True, exist_ok=True)
-                _plot_trunk_vectors_and_cossim(
-                    pa_midhip_seg, pa_neck_seg,
-                    pt_midhip_seg, pt_neck_seg,
-                    cos_sim,
-                    out_path_png=debug_dir / f"trunk_vec_and_cossim_cycle_{cycle_idx:02d}.png",
-                    stride=5
-                )
-
-
             # --- hip_cc (x,y,z), lag ---
             hip_cc_x_cycle_, hip_cc_y_cycle_, hip_cc_z_cycle_, hip_cc_3d_cycle_, lag = _norm_xcorr_xyz_max(
                 pa_midhip_seg, pt_midhip_seg, max_lag_frames

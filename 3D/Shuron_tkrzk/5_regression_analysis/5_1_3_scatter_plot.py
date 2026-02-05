@@ -10,13 +10,13 @@ from matplotlib.lines import Line2D
 CSV_PATH = Path(r"G:\gait_pattern\2025_shuron_tkrzk\regression\regression_dataset.csv")
 
 # 横軸に使いたい指標（for文で回す）
-# X_LIST = [
-#     "speed_delta", "SI_sw_delta", "stride_time_delta", "stride_width_delta",
-#     "hip_ex_max_delta", "kne_fl_max_delta", "ank_do_max_delta", "hip_ab_max_delta"
-# ]
 X_LIST = [
+    "speed_delta", "SI_sw_delta", "stride_time_delta", "stride_width_delta",
+    "hip_ex_max_delta", "kne_fl_max_delta", "ank_do_max_delta", "hip_ab_max_delta",
+    "speed_ori", "SI_sw_ori", "stride_time_ori", "stride_width_ori",
+    "hip_ex_max_ori", "kne_fl_max_ori", "ank_do_max_ori", "hip_ab_max_ori",
     "speed", "SI_sw", "stride_time", "stride_width",
-    "hip_ex_max", "kne_fl_max", "ank_do_max", "hip_ab_max"
+    "hip_ex_max", "kne_fl_max", "ank_do_max", "hip_ab_max",
 ]
 
 EXCLUDE_COLS = ["pa_id", "pt_id"]
@@ -45,6 +45,24 @@ GAIT_PARAM_COLS = [
     "kne_fl_max_delta",
     "ank_do_max_delta",
     "hip_ab_max_delta",
+    "speed_ori",
+    "SI_sw_ori",
+    "stride_time_ori",
+    "stride_width_ori",
+    "hip_fl_max_ori",
+    "hip_ex_max_ori",
+    "kne_fl_max_ori",
+    "ank_do_max_ori",
+    "hip_ab_max_ori",
+    "speed",
+    "SI_sw",
+    "stride_time",
+    "stride_width",
+    "hip_fl_max",
+    "hip_ex_max",
+    "kne_fl_max",
+    "ank_do_max",
+    "hip_ab_max",
 ]
 PA_BASE_COLS = [
     "pa_age", 
@@ -73,7 +91,8 @@ PT_BASE_COLS = [
     "pt_age", 
     "pt_height", 
     "pt_weight", 
-    "grip_power"
+    "grip_power",
+    "exp"
 ]
 
 

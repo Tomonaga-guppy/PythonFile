@@ -16,7 +16,6 @@ EXCLUDE_COLS = ["pa_id", "pt_id"]
 # ptが多い可能性を考えて、マーカー候補を多めに用意
 MARKERS = ["o", "s", "^", "D", "P", "X", "v", "<", ">", "*", "h", "p", "8", "H", "d"]
 
-
 ASSIST_COLS = [
     'hip_dist', 
     'hip_dist_n',
@@ -27,9 +26,31 @@ ASSIST_COLS = [
     'hip_cc_y', 
     'hip_cc_z', 
     'hip_cc_3d', 
-    'hip_cc_lag'
+    'hip_cc_lag',
+]
+GAIT_PARAM_ORIGINAL_COLS = [
+    "speed_ori",
+    "SI_sw_ori",
+    "stride_time_ori",
+    "stride_width_ori",
+    "hip_fl_max_ori",
+    "hip_ex_max_ori",
+    "kne_fl_max_ori",
+    "ank_do_max_ori",
+    "hip_ab_max_ori",
 ]
 GAIT_PARAM_COLS = [
+    "speed",
+    "SI_sw",
+    "stride_time",
+    "stride_width",
+    "hip_fl_max",
+    "hip_ex_max",
+    "kne_fl_max",
+    "ank_do_max",
+    "hip_ab_max",
+]
+GAIT_PARAM_DELTA_COLS = [
     "speed_delta",
     "SI_sw_delta",
     "stride_time_delta",
@@ -60,14 +81,14 @@ PA_BASE_COLS = [
     "fim_walk", 
     "fim_motor", 
     "fim_cog", 
-    "mmse"
+    "mmse",
 ]
-
 PT_BASE_COLS = [
     "pt_age", 
     "pt_height", 
     "pt_weight", 
-    "grip_power"
+    "grip_power",
+    "exp",
 ]
 
 
@@ -134,14 +155,18 @@ pt_legend_handles = [
 for col in plot_cols:
     if col in ASSIST_COLS:
         team_flag = 0
-    elif col in GAIT_PARAM_COLS:
+    elif col in GAIT_PARAM_DELTA_COLS:
         team_flag = 1
-    elif col in PA_BASE_COLS:
+    elif col in GAIT_PARAM_COLS:
         team_flag = 2
-    elif col in PT_BASE_COLS:
+    elif col in GAIT_PARAM_ORIGINAL_COLS:
         team_flag = 3
-    else:
+    elif col in PA_BASE_COLS:
         team_flag = 4
+    elif col in PT_BASE_COLS:
+        team_flag = 5
+    else:
+        team_flag = 6
             
     sub = df[["pa_id", "pt_id", col]].dropna()  # 行ごとに揃えて落とす
     if len(sub) == 0:

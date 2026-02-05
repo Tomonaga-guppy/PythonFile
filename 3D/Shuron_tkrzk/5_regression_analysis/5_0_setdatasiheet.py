@@ -35,13 +35,15 @@ for sub_dir in sorted(ROOT_DIR.glob("sub*")):
             "hip_max_ab",
         ]
 
+        # 介助による各指標の変化量を保存
         for col in delta_cols:
             pa_gait_params[f"{col}_delta"] = (
                 pa_gait_params.loc[0, col]- min_assi_pa_gait_params.loc[0, col]
             )
-    
-        # # 介助による歩行速度の変化量を算出
-        # speed_delta = pa_gait_params.loc[0, "gait_speed"] - min_assi_pa_gait_params.loc[0, "gait_speed"]
+        
+        # 最小介助時のデータも保存
+        for col in delta_cols:
+            pa_gait_params[f"{col}_ori"] = (min_assi_pa_gait_params.loc[0, col])
         
         pa_gait_header = pa_gait_params.columns.tolist()
         # # データシートに歩行速度変化量やpa_id, pt_idの列を追加
