@@ -655,67 +655,100 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             if n < 3:
                 return
 
-            # 間引きインデックス
             idx = np.arange(0, n, max(1, int(stride)))
 
-            # 体幹ベクトル（始点=midhip, ベクトル=neck-midhip）
+            # trunk vectors (midhip -> neck)
             trunk_pa = pa_neck_seg[:n] - pa_midhip_seg[:n]
             trunk_pt = pt_neck_seg[:n] - pt_midhip_seg[:n]
 
-            # 3D描画（矢印）
-            fig = plt.figure(figsize=(14, 6))
-            ax = fig.add_subplot(1, 2, 1, projection="3d")
-
-            # 始点
+            # pick sampled points
             pa_o = pa_midhip_seg[:n][idx]
             pt_o = pt_midhip_seg[:n][idx]
-            # ベクトル
             pa_v = trunk_pa[idx]
             pt_v = trunk_pt[idx]
 
-            # 見た目を揃えるため、矢印の長さを正規化（方向だけ比較）
-            def _normalize_vec(v):
-                vv = np.asarray(v, float)
-                den = np.linalg.norm(vv, axis=1, keepdims=True)
-                den[den < 1e-12] = np.nan
-                return vv / den
+            # finite masks
+            m_pa = np.all(np.isfinite(pa_o), axis=1) & np.all(np.isfinite(pa_v), axis=1)
+            m_pt = np.all(np.isfinite(pt_o), axis=1) & np.all(np.isfinite(pt_v), axis=1)
 
-            pa_vn = _normalize_vec(pa_v)
-            pt_vn = _normalize_vec(pt_v)
 
-            # NaN除外
-            m_pa = np.all(np.isfinite(pa_o), axis=1) & np.all(np.isfinite(pa_vn), axis=1)
-            m_pt = np.all(np.isfinite(pt_o), axis=1) & np.all(np.isfinite(pt_vn), axis=1)
+            # 2D quiver helper
+            def _quiver2d(ax, pa_v, m_pa, pt_v, m_pt, a, b, title):
+                # 原点
+                ax.scatter([0], [0], c="k", s=20, zorder=3)
 
-            # 矢印（長さは一定スケールで表示）
-            scale = 200.0  # mm（見やすいように固定長）
-            if np.any(m_pa):
-                ax.quiver(
-                    pa_o[m_pa, 0], pa_o[m_pa, 1], pa_o[m_pa, 2],
-                    pa_vn[m_pa, 0]*scale, pa_vn[m_pa, 1]*scale, pa_vn[m_pa, 2]*scale,
-                    length=1.0, normalize=False
-                )
-            if np.any(m_pt):
-                ax.quiver(
-                    pt_o[m_pt, 0], pt_o[m_pt, 1], pt_o[m_pt, 2],
-                    pt_vn[m_pt, 0]*scale, pt_vn[m_pt, 1]*scale, pt_vn[m_pt, 2]*scale,
-                    length=1.0, normalize=False
-                )
+                # PA（赤）
+                if np.any(m_pa):
+                    oa = np.zeros(np.sum(m_pa))
+                    ob = np.zeros(np.sum(m_pa))
+                    va = pa_v[m_pa, a]
+                    vb = pa_v[m_pa, b]
+                    ax.quiver(
+                        oa, ob, va, vb,
+                        angles="xy", scale_units="xy", scale=1.0,
+                        width=0.004, color="red", alpha=0.7, label="PA"
+                    )
 
-            ax.set_title("Trunk vectors (midhip→neck) in 3D (direction-only)")
-            ax.set_xlabel("X [mm]")
-            ax.set_ylabel("Y [mm]")
-            ax.set_zlabel("Z [mm]")
-            ax.grid(True)
+                # PT（青）
+                if np.any(m_pt):
+                    oa = np.zeros(np.sum(m_pt))
+                    ob = np.zeros(np.sum(m_pt))
+                    va = pt_v[m_pt, a]  
+                    vb = pt_v[m_pt, b]
+                    ax.quiver(
+                        oa, ob, va, vb,
+                        angles="xy", scale_units="xy", scale=1.0,
+                        width=0.004, color="blue", alpha=0.7, label="PT"
+                    )
 
-            # cos_sim時系列
-            ax2 = fig.add_subplot(1, 2, 2)
-            ax2.plot(np.arange(n), cos_sim, linewidth=2)
-            ax2.set_title("cos_sim (trunk_pa · trunk_pt)")
-            ax2.set_xlabel("Frame (within cycle)")
-            ax2.set_ylabel("cos_sim [-]")
-            ax2.set_ylim(0.98, 1.01)
-            ax2.grid(True)
+                ax.set_title(title)
+                ax.set_xlabel(["X", "Y", "Z"][a] + " [mm]")
+                ax.set_ylabel(["X", "Y", "Z"][b] + " [mm]")
+                ax.grid(True)
+                ax.axis("equal")
+                
+                # ---- axis limit: auto from data (mm or whatever unit) ----
+                vals = []
+                if np.any(m_pa):
+                    vals.append(np.abs(pa_v[m_pa][:, [a, b]]))
+                if np.any(m_pt):
+                    vals.append(np.abs(pt_v[m_pt][:, [a, b]]))
+
+                if len(vals) == 0:
+                    lim = 100.0
+                else:
+                    mx = float(np.nanmax(np.vstack(vals)))
+                    lim = max(50.0, mx * 1.2)   # 最低50、データに合わせて拡張
+
+                ax.set_xlim(-lim, lim)
+                ax.set_ylim(-lim, lim)
+
+                # 凡例は1回だけ出るように
+                handles, labels = ax.get_legend_handles_labels()
+                if labels:
+                    ax.legend(loc="upper right", frameon=False)
+            # -------------------------
+            # Figure layout:
+            #   row1: PA (XY, YZ, ZX) + cos_sim
+            #   row2: PT (XY, YZ, ZX) + cos_sim
+            # -------------------------
+            fig = plt.figure(figsize=(18, 4.5))
+
+            ax_xy = fig.add_subplot(1, 4, 1)
+            ax_yz = fig.add_subplot(1, 4, 2)
+            ax_zx = fig.add_subplot(1, 4, 3)
+            ax_cs = fig.add_subplot(1, 4, 4)
+
+            _quiver2d(ax_xy, pa_v, m_pa, pt_v, m_pt, 0, 1, "Trunk (XY)")
+            _quiver2d(ax_yz, pa_v, m_pa, pt_v, m_pt, 1, 2, "Trunk (YZ)")
+            _quiver2d(ax_zx, pa_v, m_pa, pt_v, m_pt, 2, 0, "Trunk (ZX)")
+
+            ax_cs.plot(np.arange(n), cos_sim, linewidth=2)
+            ax_cs.set_title("cos_sim (PA·PT) within cycle")
+            ax_cs.set_xlabel("Frame (within cycle)")
+            ax_cs.set_ylabel("cos_sim [-]")
+            ax_cs.set_ylim(0.965, 1.001)
+            ax_cs.grid(True)
 
             plt.tight_layout()
             plt.savefig(out_path_png, dpi=150)
