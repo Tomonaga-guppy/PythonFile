@@ -36,7 +36,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import m_openpose as op  # culc_angle_all_frames
-import matplotlib.animation as animation
 
 # =========================
 # 設定（ここだけ調整）
@@ -577,7 +576,7 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
     def _norm_xcorr_xyz_max(pa_xyz, pt_xyz, max_lag: int, min_valid: int = 5):
         """
         3軸(x,y,z)の相互相関を計算し，
-        C3D(lag)=sqrt(Cx(lag)^2 + Cy(lag)^2 + Cz(lag)^2) を最大化する lag を返す（方法B）
+        C3D(lag)=sqrt(Cx(lag)^2 + Cy(lag)^2 + Cz(lag)^2) を最大化する lag を返す（方法B）．
 
         Returns:
             ccx, ccy, ccz, c3d, best_lag
@@ -637,147 +636,6 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
         hip_cc_z_cycle = []
         hip_cc_3d_cycle = []
         hip_cc_lag_cycle = []
-        
-        def _save_trunk_anim_2d_and_cossim(
-            pa_midhip_seg, pa_neck_seg,
-            pt_midhip_seg, pt_neck_seg,
-            cos_sim,
-            out_path_mp4: Path,
-            fps: int = 30,
-            dpi: int = 150,
-        ):
-            """
-            4パネル（XY, YZ, ZX, cos_sim）をフレームごとに更新して動画保存。
-            各フレームで矢印は「その瞬間の1本」だけ描画（PA=赤, PT=青）。
-            """
-            pa_midhip_seg = np.asarray(pa_midhip_seg, float)
-            pa_neck_seg   = np.asarray(pa_neck_seg, float)
-            pt_midhip_seg = np.asarray(pt_midhip_seg, float)
-            pt_neck_seg   = np.asarray(pt_neck_seg, float)
-            cos_sim       = np.asarray(cos_sim, float)
-
-            n = min(len(pa_midhip_seg), len(pa_neck_seg), len(pt_midhip_seg), len(pt_neck_seg), len(cos_sim))
-            if n < 3:
-                return
-
-            trunk_pa = pa_neck_seg[:n] - pa_midhip_seg[:n]
-            trunk_pt = pt_neck_seg[:n] - pt_midhip_seg[:n]
-
-            # limit を全フレームから自動決定
-            def _auto_lim(v, a, b):
-                v = np.asarray(v, float)
-                m = np.all(np.isfinite(v[:, [a, b]]), axis=1)
-                if not np.any(m):
-                    return 100.0
-                mx = float(np.nanmax(np.abs(v[m][:, [a, b]])))
-                return max(50.0, mx * 1.2)
-
-            lim_xy = max(_auto_lim(trunk_pa, 0, 1), _auto_lim(trunk_pt, 0, 1))
-            lim_yz = max(_auto_lim(trunk_pa, 1, 2), _auto_lim(trunk_pt, 1, 2))
-            lim_zx = max(_auto_lim(trunk_pa, 2, 0), _auto_lim(trunk_pt, 2, 0))
-
-            fig = plt.figure(figsize=(18, 4.5))
-            ax_xy = fig.add_subplot(1, 4, 1)
-            ax_yz = fig.add_subplot(1, 4, 2)
-            ax_zx = fig.add_subplot(1, 4, 3)
-            ax_cs = fig.add_subplot(1, 4, 4)
-
-            # axes setup
-            def _setup_ax(ax, title, xlabel, ylabel, lim):
-                ax.set_title(title)
-                ax.set_xlabel(xlabel)
-                ax.set_ylabel(ylabel)
-                ax.grid(True)
-                ax.set_xlim(-lim, lim)
-                ax.set_ylim(-lim, lim)
-                ax.axis("equal")
-                ax.scatter([0], [0], c="k", s=20, zorder=3)
-
-            _setup_ax(ax_xy, "Trunk (XY)", "X [mm]", "Y [mm]", lim_xy)
-            _setup_ax(ax_yz, "Trunk (YZ)", "Y [mm]", "Z [mm]", lim_yz)
-            _setup_ax(ax_zx, "Trunk (ZX)", "Z [mm]", "X [mm]", lim_zx)
-
-            ax_cs.set_title("cos_sim (PA·PT) within cycle")
-            ax_cs.set_xlabel("Frame (within cycle)")
-            ax_cs.set_ylabel("cos_sim [-]")
-            ax_cs.set_ylim(0.965, 1.001)
-            ax_cs.grid(True)
-            line_cs, = ax_cs.plot([], [], linewidth=2)
-
-            # “現在フレーム”縦線
-            vline = ax_cs.axvline(0, linestyle="--", linewidth=1.5)
-
-            # quiver（初期はゼロ矢印）
-            q_pa_xy = ax_xy.quiver([0], [0], [0], [0], angles="xy", scale_units="xy", scale=1.0,
-                                width=0.01, color="red", alpha=0.8, label="PA")
-            q_pt_xy = ax_xy.quiver([0], [0], [0], [0], angles="xy", scale_units="xy", scale=1.0,
-                                width=0.01, color="blue", alpha=0.8, label="PT")
-            ax_xy.legend(loc="upper right", frameon=False)
-
-            q_pa_yz = ax_yz.quiver([0], [0], [0], [0], angles="xy", scale_units="xy", scale=1.0,
-                                width=0.01, color="red", alpha=0.8, label="PA")
-            q_pt_yz = ax_yz.quiver([0], [0], [0], [0], angles="xy", scale_units="xy", scale=1.0,
-                                width=0.01, color="blue", alpha=0.8, label="PT")
-            ax_yz.legend(loc="upper right", frameon=False)
-
-            q_pa_zx = ax_zx.quiver([0], [0], [0], [0], angles="xy", scale_units="xy", scale=1.0,
-                                width=0.01, color="red", alpha=0.8, label="PA")
-            q_pt_zx = ax_zx.quiver([0], [0], [0], [0], angles="xy", scale_units="xy", scale=1.0,
-                                width=0.01, color="blue", alpha=0.8, label="PT")
-            ax_zx.legend(loc="upper right", frameon=False)
-
-            x_all = np.arange(n)
-            line_cs.set_data(x_all, cos_sim[:n])
-
-            def _safe_vec(v):
-                return v if np.all(np.isfinite(v)) else np.array([np.nan, np.nan, np.nan], float)
-
-            def init():
-                # 何もしなくてもOK（lineは固定で張ってる）
-                vline.set_xdata([0, 0])
-                return (q_pa_xy, q_pt_xy, q_pa_yz, q_pt_yz, q_pa_zx, q_pt_zx, line_cs, vline)
-
-            def update(t):
-                vpa = _safe_vec(trunk_pa[t])
-                vpt = _safe_vec(trunk_pt[t])
-
-                # NaNなら矢印を消す（長さ0扱い）
-                if not np.all(np.isfinite(vpa)):
-                    vpa = np.array([0.0, 0.0, 0.0])
-                if not np.all(np.isfinite(vpt)):
-                    vpt = np.array([0.0, 0.0, 0.0])
-
-                # quiverの更新：set_UVC(U, V)
-                q_pa_xy.set_UVC(vpa[0], vpa[1])
-                q_pt_xy.set_UVC(vpt[0], vpt[1])
-
-                q_pa_yz.set_UVC(vpa[1], vpa[2])
-                q_pt_yz.set_UVC(vpt[1], vpt[2])
-
-                q_pa_zx.set_UVC(vpa[2], vpa[0])
-                q_pt_zx.set_UVC(vpt[2], vpt[0])
-
-                vline.set_xdata([t, t])
-                return (q_pa_xy, q_pt_xy, q_pa_yz, q_pt_yz, q_pa_zx, q_pt_zx, line_cs, vline)
-
-            ani = animation.FuncAnimation(fig, update, frames=n, init_func=init, interval=1000/fps, blit=False)
-
-            out_path_mp4 = Path(out_path_mp4)
-            out_path_mp4.parent.mkdir(parents=True, exist_ok=True)
-
-            # MP4（ffmpegがあれば）
-            try:
-                writer = animation.FFMpegWriter(fps=fps)
-                ani.save(str(out_path_mp4), writer=writer, dpi=dpi)
-            except Exception as e:
-                # GIF（pillowがあれば）
-                out_gif = out_path_mp4.with_suffix(".gif")
-                try:
-                    ani.save(str(out_gif), writer=animation.PillowWriter(fps=fps), dpi=dpi)
-                except Exception as e2:
-                    print(f"[WARN] animation save failed. mp4_err={e} gif_err={e2}")
-
-            plt.close(fig)
         
         def _plot_trunk_vectors_and_cossim(
             pa_midhip_seg, pa_neck_seg, pt_midhip_seg, pt_neck_seg,
@@ -895,7 +753,7 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             plt.savefig(out_path_png, dpi=150)
             plt.close()
             
-        def _axis_angles_deg_from_vec(v_xyz: np.ndarray, unwrap: bool = True) -> dict:
+        def _axis_angles_deg_from_vec(v_xyz: np.ndarray, ref_deg: dict | None = None) -> dict:
             """
             v_xyz: (N,3)
             returns: dict(ax_deg, ay_deg, az_deg)
@@ -910,14 +768,36 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             ay = np.arctan2(x, z)
             az = np.arctan2(y, x)
             
-            ax_deg = np.degrees(ax)
-            ay_deg = np.degrees(ay)
-            az_deg = np.degrees(az)
-            
-            if unwrap:
-                ax_deg = np.unwrap(ax_deg)
-                ay_deg = np.unwrap(ay_deg)
-                az_deg = np.unwrap(az_deg)
+            def _unwrap_nan_safe(rad):
+                rad = np.asarray(rad, float)
+                out = np.full_like(rad, np.nan)
+                m = np.isfinite(rad)
+                if np.sum(m) >= 2:
+                    out[m] = np.unwrap(rad[m])
+                elif np.sum(m) == 1:
+                    out[m] = rad[m]
+                return out
+            ax_deg = np.degrees(_unwrap_nan_safe(ax))
+            ay_deg = np.degrees(_unwrap_nan_safe(ay))
+            az_deg = np.degrees(_unwrap_nan_safe(az))
+
+            # 360°の周回ずれを参照に合わせる（PT側で効く）
+            def _align_to_ref(a_deg, ref0_deg):
+                a_deg = np.asarray(a_deg, float)
+                if not np.isfinite(ref0_deg):
+                    return a_deg
+                # aの最初のfiniteを見つける
+                m = np.isfinite(a_deg)
+                if not np.any(m):
+                    return a_deg
+                a0 = a_deg[np.argmax(m)]
+                k = np.round((a0 - ref0_deg) / 360.0)  # 何周ずれてるか
+                return a_deg - 360.0 * k
+
+            if ref_deg is not None:
+                ax_deg = _align_to_ref(ax_deg, ref_deg["ax_deg"][0])
+                ay_deg = _align_to_ref(ay_deg, ref_deg["ay_deg"][0])
+                az_deg = _align_to_ref(az_deg, ref_deg["az_deg"][0])
     
             return {"ax_deg": ax_deg, "ay_deg": ay_deg, "az_deg": az_deg}
         
@@ -947,8 +827,8 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             pa2[~m] = np.nan
             pt2[~m] = np.nan
 
-            pa_ang = _axis_angles_deg_from_vec(pa2, unwrap=True)
-            pt_ang = _axis_angles_deg_from_vec(pt2, unwrap=True)
+            pa_ang = _axis_angles_deg_from_vec(pa2, ref_deg=None)
+            pt_ang = _axis_angles_deg_from_vec(pt2, ref_deg=pa_ang)
 
             frames = np.arange(n)
 
@@ -980,6 +860,8 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             plt.tight_layout()
             plt.savefig(out_path_png, dpi=150)
             plt.close()
+
+
 
         for ic, _, _, ic_end in gait_cycles:
             if ic_end <= ic:
@@ -1042,20 +924,7 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
                     out_path_png=debug_dir / f"trunk_axis_angles_cycle_{cycle_idx:02d}.png",
                     title=f"Trunk axis angles (Cycle {cycle_idx:02d})",
                 )
-                
-            # save_trunk_anim = True
-            # if save_trunk_anim:
-            #     cycle_idx = len(hip_dist_cycle)
-            #     debug_dir = thera_dir / "ViTPose_results"
-            #     debug_dir.mkdir(parents=True, exist_ok=True)
-            #     _save_trunk_anim_2d_and_cossim(
-            #         pa_midhip_seg, pa_neck_seg,
-            #         pt_midhip_seg, pt_neck_seg,
-            #         cos_sim,
-            #         out_path_mp4=debug_dir / f"trunk_vec_and_cossim_cycle_{cycle_idx:02d}.mp4",
-            #         fps=30
-            #     )
-                
+    
             
             # --- trunk vectors 可視化（デバッグ）---
             save_trunk_fig = True
