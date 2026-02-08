@@ -1031,7 +1031,7 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
             cos_sim[~np.isfinite(cos_sim)] = np.nan
             cos_sim_cycle.append(np.nanmedian(cos_sim))
             
-            save_trunk_angle_fig = True
+            save_trunk_angle_fig = False
             if save_trunk_angle_fig:
                 cycle_idx = len(hip_dist_cycle)  # 既存の命名と合わせる
                 debug_dir = thera_dir / "ViTPose_results"
@@ -1043,22 +1043,22 @@ def process_one_method(thera_dir: Path, npz_3d_path: Path):
                     title=f"Trunk axis angles (Cycle {cycle_idx:02d})",
                 )
                 
-            # save_trunk_anim = True
-            # if save_trunk_anim:
-            #     cycle_idx = len(hip_dist_cycle)
-            #     debug_dir = thera_dir / "ViTPose_results"
-            #     debug_dir.mkdir(parents=True, exist_ok=True)
-            #     _save_trunk_anim_2d_and_cossim(
-            #         pa_midhip_seg, pa_neck_seg,
-            #         pt_midhip_seg, pt_neck_seg,
-            #         cos_sim,
-            #         out_path_mp4=debug_dir / f"trunk_vec_and_cossim_cycle_{cycle_idx:02d}.mp4",
-            #         fps=30
-            #     )
+            save_trunk_anim = False
+            if save_trunk_anim:
+                cycle_idx = len(hip_dist_cycle)
+                debug_dir = thera_dir / "ViTPose_results"
+                debug_dir.mkdir(parents=True, exist_ok=True)
+                _save_trunk_anim_2d_and_cossim(
+                    pa_midhip_seg, pa_neck_seg,
+                    pt_midhip_seg, pt_neck_seg,
+                    cos_sim,
+                    out_path_mp4=debug_dir / f"trunk_vec_and_cossim_cycle_{cycle_idx:02d}.mp4",
+                    fps=30
+                )
                 
             
             # --- trunk vectors 可視化（デバッグ）---
-            save_trunk_fig = True
+            save_trunk_fig = False
             if save_trunk_fig:
                 cycle_idx = len(hip_dist_cycle)  # いまの周期番号（既存の付け方に合わせる）
                 debug_dir = thera_dir / "ViTPose_results"

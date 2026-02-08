@@ -10,6 +10,20 @@ import numpy as np
 from matplotlib import pyplot as plt
 import pandas as pd
 
+# =========================
+# フォント・見た目（全体設定）
+# =========================
+plt.rcParams.update({
+    "font.family": "Arial",
+    "font.size": 20,          # 全体
+    "axes.titlesize": 20,    # タイトル
+    "axes.labelsize": 20,     # 軸ラベル
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 12,
+    "legend.title_fontsize": 12,
+})
+
 def plot_angles_compare(vit_angle_df, mocap_angle_df,vit_gait_cycles_r, vit_gait_cycles_l, output_dir):
     """
     関節角度csvを読み込み、Mocap結果と比較プロット

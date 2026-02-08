@@ -102,6 +102,9 @@ PT_BASE_COLS = [
 # =========================
 df = pd.read_csv(CSV_PATH)
 
+# pt_id==15を除外
+df = df[df["pt_id"] != 15]
+
 # =========================
 # PA / PT マッピング（1回だけ決める）
 # =========================
@@ -134,7 +137,7 @@ for X_COL in X_LIST:
         continue
 
     # Xごとに保存フォルダを分ける
-    out_dir = CSV_PATH.parent / f"scatter_x"
+    out_dir = CSV_PATH.parent / f"scatter_x_outPA16PT15"
     out_dir.mkdir(exist_ok=True)
     OUT_DIR = out_dir / X_COL
     OUT_DIR.mkdir(exist_ok=True)

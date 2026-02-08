@@ -5,6 +5,20 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 # =========================
+# フォント・見た目（全体設定）
+# =========================
+plt.rcParams.update({
+    "font.family": "Arial",
+    "font.size": 20,          # 全体
+    "axes.titlesize": 20,    # タイトル
+    "axes.labelsize": 20,     # 軸ラベル
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 12,
+    "legend.title_fontsize": 12,
+})
+
+# =========================
 # 設定
 # =========================
 CSV_PATH = Path(r"G:\gait_pattern\2025_shuron_tkrzk\regression\regression_dataset.csv")

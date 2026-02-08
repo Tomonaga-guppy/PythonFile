@@ -74,7 +74,7 @@ def rank_biserial_r_from_u(u_stat: float, n1: int, n2: int) -> tuple[float, floa
 
 
 def add_bracket(ax, x1, x2, y, h, text):
-    ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], linewidth=1.2)
+    ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], linewidth=1.2, color="k")
     ax.text((x1 + x2) / 2, y + h, text, ha="center", va="bottom")
 
 
@@ -143,8 +143,6 @@ for col in ASSIST_COLS + PT_COLS:
 
     sub_all = df[["pa_id", "pt_id", "speed_group", col]].dropna()
     
-    
-    
     g_hi = sub_all.loc[sub_all["speed_group"] == f">={THRESHOLD}", col]
     g_lo = sub_all.loc[sub_all["speed_group"] == f"<{THRESHOLD}", col]
 
@@ -152,8 +150,6 @@ for col in ASSIST_COLS + PT_COLS:
     if n_hi < MIN_N_PER_GROUP or n_lo < MIN_N_PER_GROUP:
         print(f"[SKIP] {col}: sample too small (>=:{n_hi}, <:{n_lo})")
         continue
-    
-    
 
     # U検定（両側）
     u_stat, p_val = mannwhitneyu(g_hi, g_lo, alternative="two-sided")
@@ -172,6 +168,7 @@ for col in ASSIST_COLS + PT_COLS:
         labels=labels,
         widths=0.55,
         showfliers=True,
+        medianprops=dict(color="k", linewidth=1.0),
     )
 
     # 生データ点（PA=色、PT=形） + jitter

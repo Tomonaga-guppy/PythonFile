@@ -5,6 +5,20 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 # =========================
+# フォント・見た目（全体設定）
+# =========================
+plt.rcParams.update({
+    "font.family": "Arial",
+    "font.size": 20,          # 全体
+    "axes.titlesize": 20,    # タイトル
+    "axes.labelsize": 20,     # 軸ラベル
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 12,
+    "legend.title_fontsize": 12,
+})
+
+# =========================
 # 設定
 # =========================
 CSV_PATH = Path(r"G:\gait_pattern\2025_shuron_tkrzk\regression\regression_dataset.csv")
@@ -17,15 +31,15 @@ EXCLUDE_COLS = ["pa_id", "pt_id"]
 MARKERS = ["o", "s", "^", "D", "P", "X", "v", "<", ">", "*", "h", "p", "8", "H", "d"]
 
 ASSIST_COLS = [
-    'hip_dist', 
+    'hip_dist',
     'hip_dist_n',
-    'wri_para_s', 
-    'wri_nonpara_s', 
-    'cos_sim', 
-    'hip_cc_x', 
-    'hip_cc_y', 
-    'hip_cc_z', 
-    'hip_cc_3d', 
+    'wri_para_s',
+    'wri_nonpara_s',
+    'cos_sim',
+    'hip_cc_x',
+    'hip_cc_y',
+    'hip_cc_z',
+    'hip_cc_3d',
     'hip_cc_lag',
 ]
 GAIT_PARAM_ORIGINAL_COLS = [
@@ -62,34 +76,112 @@ GAIT_PARAM_DELTA_COLS = [
     "hip_ab_max_delta",
 ]
 PA_BASE_COLS = [
-    "pa_age", 
-    "pa_height", 
-    "pa_weight", 
-    "fac", 
-    "brs_lower", 
-    "sias_m_hip", 
-    "sias_m_knee", 
-    "sias_m_ankle", 
-    "sias_m_total", 
-    "sias_sens_sole", 
-    "sias_prop_toe", 
-    "mi_hip", 
-    "mi_knee", 
-    "mi_ankle", 
-    "mi_total", 
-    "days_post_onset", 
-    "fim_walk", 
-    "fim_motor", 
-    "fim_cog", 
+    "pa_age",
+    "pa_height",
+    "pa_weight",
+    "fac",
+    "brs_lower",
+    "sias_m_hip",
+    "sias_m_knee",
+    "sias_m_ankle",
+    "sias_m_total",
+    "sias_sens_sole",
+    "sias_prop_toe",
+    "mi_hip",
+    "mi_knee",
+    "mi_ankle",
+    "mi_total",
+    "days_post_onset",
+    "fim_walk",
+    "fim_motor",
+    "fim_cog",
     "mmse",
 ]
 PT_BASE_COLS = [
-    "pt_age", 
-    "pt_height", 
-    "pt_weight", 
+    "pt_age",
+    "pt_height",
+    "pt_weight",
     "grip_power",
     "exp",
 ]
+
+# =========================
+# 単位マップ（必要に応じて増やしてOK）
+# =========================
+UNITS = {
+    # ---- assist系（あなたの定義に合わせて微調整してOK）----
+    "hip_dist": "m",          # もしmmで保存してるなら "mm" に変更
+    "hip_dist_n": "-",        # 正規化なら無次元
+    "wri_para_s": "m",        # 距離/位置なら m（あなたの定義次第）
+    "wri_nonpara_s": "m",
+    "cos_sim": "-",           # cos類似度
+    "hip_cc_x": "-",          # 相関係数
+    "hip_cc_y": "-",
+    "hip_cc_z": "-",
+    "hip_cc_3d": "-",
+    "hip_cc_lag": "s",        # もしフレームなら "frames"
+
+    # ---- gait系（一般的な想定：必要なら変更）----
+    "speed_ori": "m/s",
+    "speed": "m/s",
+    "speed_delta": "m/s",
+
+    "SI_sw_ori": "-",
+    "SI_sw": "-",
+    "SI_sw_delta": "-",
+
+    "stride_time_ori": "s",
+    "stride_time": "s",
+    "stride_time_delta": "s",
+
+    "stride_width_ori": "m",
+    "stride_width": "m",
+    "stride_width_delta": "m",
+
+    "hip_fl_max_ori": "deg",
+    "hip_ex_max_ori": "deg",
+    "kne_fl_max_ori": "deg",
+    "ank_do_max_ori": "deg",
+    "hip_ab_max_ori": "deg",
+
+    "hip_fl_max": "deg",
+    "hip_ex_max": "deg",
+    "kne_fl_max": "deg",
+    "ank_do_max": "deg",
+    "hip_ab_max": "deg",
+
+    "hip_fl_max_delta": "deg",
+    "hip_ex_max_delta": "deg",
+    "kne_fl_max_delta": "deg",
+    "ank_do_max_delta": "deg",
+    "hip_ab_max_delta": "deg",
+
+    # ---- base系 ----
+    "pa_age": "yr",
+    "pt_age": "yr",
+    "pa_height": "cm",  # もしmなら "m"
+    "pt_height": "cm",
+    "pa_weight": "kg",
+    "pt_weight": "kg",
+    "grip_power": "kgf",  # Nで記録してるなら "N"
+    "exp": "yr",
+
+    "days_post_onset": "day",
+    "fac": "-", "brs_lower": "-",
+    "fim_walk": "-", "fim_motor": "-", "fim_cog": "-", "mmse": "-",
+
+    "sias_m_hip": "-", "sias_m_knee": "-", "sias_m_ankle": "-", "sias_m_total": "-",
+    "sias_sens_sole": "-", "sias_prop_toe": "-",
+    "mi_hip": "-", "mi_knee": "-", "mi_ankle": "-", "mi_total": "-",
+}
+
+def label_with_unit(col: str) -> str:
+    u = UNITS.get(col, None)
+    if u is None:
+        return f"{col} [unit?]"   # 未登録を見つけやすくする
+    if u == "-" or u == "":
+        return f"{col} [-]"
+    return f"{col} [{u}]"
 
 # =========================
 # CSV 読み込み
@@ -124,15 +216,15 @@ for pt in pt_vals:
 
 # 凡例用ハンドル（毎回作ると重い＆ブレるので固定で作る）
 pa_legend_handles = [
-    Line2D([0], [0], marker="o", linestyle="", markersize=7,
+    Line2D([0], [0], marker="o", linestyle="", markersize=8,
            markerfacecolor=pa_to_color[pa], markeredgecolor="k",
-           label=f"pa_id={pa}")
+           label=f"PA {pa}")
     for pa in pa_vals
 ]
 pt_legend_handles = [
-    Line2D([0], [0], marker=pt_to_marker[pt], linestyle="", markersize=7,
+    Line2D([0], [0], marker=pt_to_marker[pt], linestyle="", markersize=8,
            markerfacecolor="white", markeredgecolor="k",
-           label=f"pt_id={pt}")
+           label=f"PT {pt}")
     for pt in pt_vals
 ]
 
@@ -154,7 +246,7 @@ for col in plot_cols:
         team_flag = 5
     else:
         team_flag = 6
-            
+
     sub = df[["pa_id", "pt_id", col]].dropna()  # 行ごとに揃えて落とす
     if len(sub) == 0:
         print(f"[SKIP] {col} (no data)")
@@ -162,7 +254,7 @@ for col in plot_cols:
 
     x_all = sub[col].values
 
-    fig, ax = plt.subplots(figsize=(8, 3.5))
+    fig, ax = plt.subplots(figsize=(9.5, 4.4))  # ちょい大きめ
 
     # boxplot（横向き）
     bp = ax.boxplot(
@@ -170,16 +262,15 @@ for col in plot_cols:
         vert=False,
         patch_artist=False,
         showfliers=False,
-        boxprops=dict(color="black", linewidth=1.2),
-        medianprops=dict(color="black", linewidth=1.5),
-        whiskerprops=dict(color="black", linewidth=1.2),
-        capprops=dict(color="black", linewidth=1.2),
+        boxprops=dict(color="black", linewidth=1.4),
+        medianprops=dict(color="black", linewidth=1.8),
+        whiskerprops=dict(color="black", linewidth=1.4),
+        capprops=dict(color="black", linewidth=1.4),
     )
     for box in bp["boxes"]:
         box.set_alpha(0.6)
 
     # --- 点プロット：行ごとに「固定マッピング」を参照して描画 ---
-    # （点数が少ない想定ならこれが一番確実）
     y_base = 1.0
     jitter = np.random.uniform(-0.06, 0.06, size=len(sub))
     y = y_base + jitter
@@ -191,23 +282,23 @@ for col in plot_cols:
 
         ax.scatter(
             x, y[i],
-            s=45,
+            s=60,
             alpha=0.85,
             marker=pt_to_marker[pt],
             facecolors=pa_to_color[pa],   # paで色固定
             edgecolors="k",
-            linewidths=0.4
+            linewidths=0.5
         )
 
     # 軸等
     ax.set_yticks([])
-    ax.set_xlabel(col)
+    ax.set_xlabel(label_with_unit(col))
     ax.grid(axis="x", linestyle="--", alpha=0.5)
 
     # 凡例：PA（色）とPT（形）を別々に表示（右側に2段）
     leg1 = ax.legend(
         handles=pa_legend_handles,
-        title="pa_id (color)",
+        title="Patient (color)       ",
         loc="upper left",
         bbox_to_anchor=(1.02, 1.00),
         borderaxespad=0.0,
@@ -217,7 +308,7 @@ for col in plot_cols:
 
     ax.legend(
         handles=pt_legend_handles,
-        title="pt_id (marker)",
+        title="Therapist (marker)",
         loc="lower left",
         bbox_to_anchor=(1.02, 0),
         borderaxespad=0.0,
